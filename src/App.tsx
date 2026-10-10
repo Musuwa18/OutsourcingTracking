@@ -718,7 +718,7 @@ export default function App() {
         )}
 
         {/* Content Viewport */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 pb-28 md:pb-8">
           {/* ================= OUTSOURCING STAFF VIEW (MOBILE ERGONOMIC) ================= */}
           {currentRole === 'outsourcing' && (
             <div>
@@ -888,14 +888,21 @@ export default function App() {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Rendered on mobile for Outsourcing role) */}
-      {currentRole === 'outsourcing' && (
-        <MobileNavBar
-          activeTab={mobileTab}
-          onTabChange={(t) => setMobileTab(t)}
-          glassMode={glassMode}
-        />
-      )}
+      {/* Mobile Bottom Navigation Bar (Rendered on mobile for ALL roles) */}
+      <MobileNavBar
+        currentRole={currentRole}
+        activeTab={currentRole === 'outsourcing' ? mobileTab : adminTab}
+        onTabChange={(tab) => {
+          if (currentRole === 'outsourcing') {
+            setMobileTab(tab);
+          } else {
+            setAdminTab(tab);
+          }
+        }}
+        pendingReportsCount={pendingReportsCount}
+        geofenceBreachCount={geofenceBreachCount}
+        glassMode={glassMode}
+      />
 
       {/* Printable PDF Modal */}
       <PrintReportModal

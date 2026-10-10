@@ -11,6 +11,7 @@ import {
   Eye,
   Lock,
   Sparkles,
+  MoreVertical,
 } from 'lucide-react';
 import { UserRole, NotificationItem } from '../types';
 
@@ -44,6 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSecurityModal,
 }) => {
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -193,77 +195,80 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Material Glass Aesthetic Toggle Button */}
-          {onToggleGlassMode && (
+          {/* Desktop-only secondary utility buttons */}
+          <div className="hidden sm:flex items-center gap-1 sm:gap-1.5">
+            {/* Material Glass Aesthetic Toggle Button */}
+            {onToggleGlassMode && (
+              <button
+                type="button"
+                onClick={onToggleGlassMode}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  glassMode
+                    ? 'bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-cyan-500/20 text-indigo-700 dark:text-cyan-300 border border-indigo-400/35 dark:border-cyan-400/30 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60'
+                }`}
+                title="Aktifkan / Nonaktifkan Tampilan Material Glass & Ambient Glow"
+                aria-label="Toggle Tampilan Material Glass"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${glassMode ? 'text-indigo-500 dark:text-cyan-400 animate-pulse' : 'text-slate-400'}`} />
+                <span className="hidden lg:inline text-[11px]">Material Glass</span>
+              </button>
+            )}
+
+            {/* Cloud Sync Button */}
             <button
               type="button"
-              onClick={onToggleGlassMode}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                glassMode
-                  ? 'bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-cyan-500/20 text-indigo-700 dark:text-cyan-300 border border-indigo-400/35 dark:border-cyan-400/30 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-              title="Aktifkan / Nonaktifkan Tampilan Material Glass & Ambient Glow"
-              aria-label="Toggle Tampilan Material Glass"
+              onClick={onOpenCloudSync}
+              className="p-2 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
+              title="Sinkronisasi Google Drive Cloud"
+              aria-label="Google Drive Cloud Sync"
             >
-              <Sparkles className={`w-3.5 h-3.5 ${glassMode ? 'text-indigo-500 dark:text-cyan-400 animate-pulse' : 'text-slate-400'}`} />
-              <span className="hidden lg:inline text-[11px]">Material Glass</span>
+              <Cloud className="w-4 h-4" />
             </button>
-          )}
 
-          {/* Cloud Sync Button */}
-          <button
-            type="button"
-            onClick={onOpenCloudSync}
-            className="p-2 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
-            title="Sinkronisasi Google Drive Cloud"
-            aria-label="Google Drive Cloud Sync"
-          >
-            <Cloud className="w-4 h-4" />
-          </button>
+            {/* Security & MFA Settings Modal Trigger */}
+            <button
+              type="button"
+              onClick={onOpenSecurityModal}
+              className="p-2 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
+              title="Autentikasi Google & Pengaturan Keamanan MFA"
+              aria-label="Pengaturan Keamanan dan MFA"
+            >
+              <Lock className="w-4 h-4" />
+            </button>
 
-          {/* Security & MFA Settings Modal Trigger */}
-          <button
-            type="button"
-            onClick={onOpenSecurityModal}
-            className="p-2 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
-            title="Autentikasi Google & Pengaturan Keamanan MFA"
-            aria-label="Pengaturan Keamanan dan MFA"
-          >
-            <Lock className="w-4 h-4" />
-          </button>
+            {/* Accessibility High Contrast Mode */}
+            <button
+              type="button"
+              onClick={onToggleHighContrast}
+              className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                highContrast
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60'
+              }`}
+              title="Mode Kontras Tinggi (Aksesibilitas)"
+              aria-label="Toggle Mode Kontras Tinggi"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+          </div>
 
-          {/* Accessibility High Contrast Mode */}
-          <button
-            type="button"
-            onClick={onToggleHighContrast}
-            className={`p-2 rounded-xl transition-colors cursor-pointer ${
-              highContrast
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60'
-            }`}
-            title="Mode Kontras Tinggi (Aksesibilitas)"
-            aria-label="Toggle Mode Kontras Tinggi"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-
-          {/* Dark Mode Toggle */}
+          {/* Dark Mode Toggle (Always Visible) */}
           <button
             type="button"
             onClick={onToggleDarkMode}
-            className="p-2 text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
+            className="p-2 text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-800/80 rounded-xl transition-colors cursor-pointer"
             title="Ganti Mode Gelap / Terang"
             aria-label="Toggle Tema Gelap"
           >
-            {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+            {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
           </button>
 
-          {/* Notification Button */}
+          {/* Notification Button (Always Visible) */}
           <button
             type="button"
             onClick={onOpenNotifications}
-            className="relative p-2 text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
+            className="relative p-2 text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-800/80 rounded-xl transition-colors cursor-pointer"
             title="Notifikasi Sistem"
             aria-label="Buka Notifikasi"
           >
@@ -272,6 +277,87 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />
             )}
           </button>
+
+          {/* Mobile More Options Dropdown Button (sm:hidden) */}
+          <div className="relative sm:hidden">
+            <button
+              type="button"
+              onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+              className="p-2 text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-800/80 rounded-xl transition-colors cursor-pointer"
+              title="Menu Pengaturan Cepat"
+              aria-label="Buka Menu Lainnya"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {moreMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 glass-dock rounded-2xl shadow-2xl border border-white/60 dark:border-white/10 p-2 z-50 animate-in fade-in zoom-in-95 duration-100 space-y-1">
+                <div className="px-3 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Pengaturan Cepat
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenCloudSync();
+                    setMoreMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 hover:bg-white/70 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 cursor-pointer font-medium"
+                >
+                  <Cloud className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span>Google Drive Sync</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenSecurityModal();
+                    setMoreMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 hover:bg-white/70 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 cursor-pointer font-medium"
+                >
+                  <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Keamanan & MFA</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggleHighContrast();
+                    setMoreMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between hover:bg-white/70 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 cursor-pointer font-medium"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Eye className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>Kontras Tinggi</span>
+                  </div>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${highContrast ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                    {highContrast ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+
+                {onToggleGlassMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onToggleGlassMode();
+                      setMoreMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between hover:bg-white/70 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 cursor-pointer font-medium"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
+                      <span>Material Glass</span>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${glassMode ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                      {glassMode ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

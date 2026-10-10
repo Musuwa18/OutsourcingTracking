@@ -231,18 +231,23 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
       
       {/* Staff Switcher for Multi-Personnel Testing */}
       {staffList.length > 0 && onSwitchStaff && (
-        <div className="p-3.5 glass-card space-y-2.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              Pilih Profil Staf Outsourcing (Simulasi Multi-Personel):
-            </span>
-            <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
-              {staffList.length} Personel
+        <div className="p-3.5 glass-card space-y-2.5 border border-white/60 dark:border-white/10 shadow-sm">
+          <div className="flex items-center justify-between text-xs px-0.5">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="font-bold text-slate-800 dark:text-slate-100 text-xs">
+                Simulasi Personel Aktif
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold text-indigo-600 dark:text-cyan-400 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-full border border-indigo-200/50 dark:border-indigo-800/50">
+              {staffList.length} Profil Staf
             </span>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+          <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar scroll-smooth py-1 px-0.5">
             {staffList.map((st) => {
               const isActive = (activeStaffId || staff.id) === st.id;
               return (
@@ -250,22 +255,37 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                   key={st.id}
                   type="button"
                   onClick={() => onSwitchStaff(st.id)}
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
+                  className={`group px-3 py-2 rounded-2xl text-xs font-semibold flex items-center gap-2.5 shrink-0 transition-all duration-200 cursor-pointer ${
                     isActive
-                      ? 'bg-indigo-600 text-white border-indigo-700 shadow-md shadow-indigo-500/25 scale-[1.02]'
-                      : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:border-indigo-500 hover:text-indigo-600'
+                      ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-400/80 ring-offset-2 dark:ring-offset-slate-900 scale-[1.02]'
+                      : 'bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200/90 dark:border-slate-700/80 shadow-xs hover:border-indigo-400/50'
                   }`}
                 >
-                  <span
-                    className="w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                    style={{ backgroundColor: st.avatarColor }}
-                  >
-                    {st.initials}
-                  </span>
-                  <span className="whitespace-nowrap">{st.name.split(' ')[0]}</span>
-                  <span className={`text-[10px] font-normal ${isActive ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'}`}>
-                    ({st.division.split(' ')[0]})
-                  </span>
+                  <div className="relative shrink-0">
+                    <span
+                      className="w-7 h-7 rounded-xl flex items-center justify-center text-[11px] font-bold text-white shadow-xs"
+                      style={{ backgroundColor: st.avatarColor }}
+                    >
+                      {st.initials}
+                    </span>
+                    {isActive && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 border-2 border-white dark:border-slate-900 rounded-full" />
+                    )}
+                  </div>
+                  <div className="text-left flex flex-col">
+                    <span className="whitespace-nowrap font-bold text-xs leading-tight">
+                      {st.name.split(' ')[0]}
+                    </span>
+                    <span
+                      className={`text-[10px] leading-tight font-medium ${
+                        isActive
+                          ? 'text-indigo-100'
+                          : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300'
+                      }`}
+                    >
+                      {st.division.split(' ')[0]}
+                    </span>
+                  </div>
                 </button>
               );
             })}

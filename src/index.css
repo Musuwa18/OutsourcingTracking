@@ -148,6 +148,15 @@
   animation: float-delayed 18s ease-in-out infinite;
 }
 
+/* Hide scrollbar for smooth carousel */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 @media print {
   body {
     background: white !important;
