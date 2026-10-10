@@ -388,6 +388,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             <span>Peran & RBAC</span>
           </button>
         </div>
+        </div>
       </div>
 
       {/* ========================================================================= */}
