@@ -84,19 +84,64 @@ export default function App() {
   const [notificationDrawerOpen, setNotificationDrawerOpen] = useState(false);
   const [securityModalOpen, setSecurityModalOpen] = useState(false);
 
-  // Core Data State (Stored in React State for interactive demonstration)
-  const [staffList, setStaffList] = useState<StaffProfile[]>(MOCK_STAFF);
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() =>
-    generateInitialAttendance()
-  );
-  const [dailyReports, setDailyReports] = useState<DailyWorkReport[]>(() =>
-    generateInitialReports()
-  );
-  const [weeklyEvaluations, setWeeklyEvaluations] = useState<WeeklyEvaluation[]>(() =>
-    generateInitialEvaluations()
-  );
-  const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(INITIAL_AUDIT_LOGS);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  // Core Data State (Stored in LocalStorage & React State for full interactive persistence)
+  const [activeStaffId, setActiveStaffId] = useState<string>(() => {
+    return localStorage.getItem('ot_active_staff_id') || 'staff-1';
+  });
+  const [staffList, setStaffList] = useState<StaffProfile[]>(() => {
+    const saved = localStorage.getItem('ot_staff_list');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return MOCK_STAFF;
+  });
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => {
+    const saved = localStorage.getItem('ot_attendance_records');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return generateInitialAttendance();
+  });
+  const [dailyReports, setDailyReports] = useState<DailyWorkReport[]>(() => {
+    const saved = localStorage.getItem('ot_daily_reports');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return generateInitialReports();
+  });
+  const [weeklyEvaluations, setWeeklyEvaluations] = useState<WeeklyEvaluation[]>(() => {
+    const saved = localStorage.getItem('ot_weekly_evaluations');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return generateInitialEvaluations();
+  });
+  const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(() => {
+    const saved = localStorage.getItem('ot_audit_logs');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return INITIAL_AUDIT_LOGS;
+  });
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+    const saved = localStorage.getItem('ot_notifications');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return INITIAL_NOTIFICATIONS;
+  });
 
   // ================= PUSAT PENGATURAN SISTEM (PERSISTENT STATE) =================
   const [locations, setLocations] = useState<OfficeLocation[]>(() => {
@@ -241,15 +286,81 @@ export default function App() {
     addAuditLog('Pembaruan Kebijakan Keamanan', `Konfigurasi SSO/2FA/Biometrik diperbarui.`, 'Pengaturan');
   };
 
-  // Active outsourcing staff profile for staff role (Budi Santoso)
-  const currentStaff = staffList[0];
+  // Auto-sync Core Data to LocalStorage
+  useEffect(() => {
+    localStorage.setItem('ot_active_staff_id', activeStaffId);
+  }, [activeStaffId]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_staff_list', JSON.stringify(staffList));
+  }, [staffList]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_attendance_records', JSON.stringify(attendanceRecords));
+  }, [attendanceRecords]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_daily_reports', JSON.stringify(dailyReports));
+  }, [dailyReports]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_weekly_evaluations', JSON.stringify(weeklyEvaluations));
+  }, [weeklyEvaluations]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_audit_logs', JSON.stringify(auditLogs));
+  }, [auditLogs]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_notifications', JSON.stringify(notifications));
+  }, [notifications]);
+
+  // Active outsourcing staff profile for staff role (Dynamic via Active Staff Switcher)
+  const currentStaff = staffList.find((s) => s.id === activeStaffId) || staffList[0];
+
+  const handleSwitchStaff = (staffId: string) => {
+    setActiveStaffId(staffId);
+    const target = staffList.find((s) => s.id === staffId);
+    if (target) {
+      showToast(`Beralih profil ke: ${target.name} (${target.roleTitle})`, 'info');
+      addAuditLog(
+        'Alih Profil Staf Operasional',
+        `Sesi pengujian beralih ke staf ${target.name} (${target.nip}) - ${target.division}.`,
+        'Autentikasi'
+      );
+    }
+  };
+
+  const handleResetDemoData = () => {
+    const initialAtt = generateInitialAttendance();
+    const initialRep = generateInitialReports();
+    const initialEval = generateInitialEvaluations();
+
+    setStaffList(MOCK_STAFF);
+    setAttendanceRecords(initialAtt);
+    setDailyReports(initialRep);
+    setWeeklyEvaluations(initialEval);
+    setAuditLogs(INITIAL_AUDIT_LOGS);
+    setNotifications(INITIAL_NOTIFICATIONS);
+    setActiveStaffId('staff-1');
+
+    localStorage.setItem('ot_staff_list', JSON.stringify(MOCK_STAFF));
+    localStorage.setItem('ot_attendance_records', JSON.stringify(initialAtt));
+    localStorage.setItem('ot_daily_reports', JSON.stringify(initialRep));
+    localStorage.setItem('ot_weekly_evaluations', JSON.stringify(initialEval));
+    localStorage.setItem('ot_audit_logs', JSON.stringify(INITIAL_AUDIT_LOGS));
+    localStorage.setItem('ot_notifications', JSON.stringify(INITIAL_NOTIFICATIONS));
+    localStorage.setItem('ot_active_staff_id', 'staff-1');
+
+    showToast('Seluruh data operasional berhasil di-reset ke nilai default demo.', 'success');
+  };
 
   // Derived Monthly Aggregates
   const monthlyAggregates = useMemo(() => {
     return computeMonthlyAggregates(staffList, weeklyEvaluations, '2026-10');
   }, [staffList, weeklyEvaluations]);
 
-  // Today's attendance for Budi Santoso
+  // Today's attendance for active staff
   const todayDateStr = '2026-10-09';
   const staffTodayAttendance = attendanceRecords.find(
     (a) => a.staffId === currentStaff.id && a.date === todayDateStr
@@ -617,6 +728,9 @@ export default function App() {
                   todayAttendance={staffTodayAttendance}
                   todayReports={staffTodayReports}
                   allReports={dailyReports}
+                  staffList={staffList}
+                  activeStaffId={activeStaffId}
+                  onSwitchStaff={handleSwitchStaff}
                   onClockIn={handleClockIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
@@ -629,6 +743,9 @@ export default function App() {
                   todayAttendance={staffTodayAttendance}
                   todayReports={staffTodayReports}
                   allReports={dailyReports}
+                  staffList={staffList}
+                  activeStaffId={activeStaffId}
+                  onSwitchStaff={handleSwitchStaff}
                   onClockIn={handleClockIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
@@ -762,6 +879,7 @@ export default function App() {
                   onUpdateSupervisorMappings={handleUpdateSupervisorMappings}
                   securityConfig={securityConfig}
                   onUpdateSecurityConfig={handleUpdateSecurityConfig}
+                  onResetDemoData={handleResetDemoData}
                   onShowToast={showToast}
                 />
               )}

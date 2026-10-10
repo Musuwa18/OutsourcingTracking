@@ -129,7 +129,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Dropdown Menu */}
             {roleDropdownOpen && (
               <div className="absolute right-0 mt-2 w-64 glass-dock rounded-2xl shadow-2xl border border-white/50 dark:border-white/10 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="px-3 py-1.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                   Ganti Akun & Hak Akses
                 </div>
 
@@ -141,14 +141,14 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
                     currentRole === 'outsourcing'
-                      ? 'bg-indigo-500/15 dark:bg-indigo-500/25 text-indigo-900 dark:text-indigo-200 font-semibold border border-indigo-500/20'
-                      : 'hover:bg-white/40 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300'
+                      ? 'bg-indigo-500/15 dark:bg-indigo-500/25 text-indigo-950 dark:text-indigo-200 font-bold border border-indigo-500/20'
+                      : 'hover:bg-slate-100/70 dark:hover:bg-white/5 text-slate-800 dark:text-slate-200'
                   }`}
                 >
-                  <User className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <User className="w-4 h-4 text-indigo-600 shrink-0" />
                   <div>
-                    <div>Budi Santoso</div>
-                    <div className="text-[10px] text-slate-400 font-normal">Tenaga Outsourcing (Mobile View)</div>
+                    <div className="font-bold text-slate-900 dark:text-white">Budi Santoso</div>
+                    <div className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">Tenaga Outsourcing (Mobile View)</div>
                   </div>
                 </button>
 
@@ -160,14 +160,14 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
                     currentRole === 'supervisor'
-                      ? 'bg-indigo-500/15 dark:bg-indigo-500/25 text-indigo-900 dark:text-indigo-200 font-semibold border border-indigo-500/20'
-                      : 'hover:bg-white/40 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300'
+                      ? 'bg-indigo-500/15 dark:bg-indigo-500/25 text-indigo-950 dark:text-indigo-200 font-bold border border-indigo-500/20'
+                      : 'hover:bg-slate-100/70 dark:hover:bg-white/5 text-slate-800 dark:text-slate-200'
                   }`}
                 >
-                  <Users className="w-4 h-4 text-amber-500 shrink-0" />
+                  <Users className="w-4 h-4 text-amber-600 shrink-0" />
                   <div>
-                    <div>Hendra Wijaya, S.T.</div>
-                    <div className="text-[10px] text-slate-400 font-normal">Atasan / Supervisor Operasional</div>
+                    <div className="font-bold text-slate-900 dark:text-white">Hendra Wijaya, S.T.</div>
+                    <div className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">Atasan / Supervisor Operasional</div>
                   </div>
                 </button>
 
@@ -179,14 +179,14 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
                     currentRole === 'admin'
-                      ? 'bg-indigo-500/15 dark:bg-indigo-500/25 text-indigo-900 dark:text-indigo-200 font-semibold border border-indigo-500/20'
-                      : 'hover:bg-white/40 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300'
+                      ? 'bg-indigo-500/15 dark:bg-indigo-500/25 text-indigo-950 dark:text-indigo-200 font-bold border border-indigo-500/20'
+                      : 'hover:bg-slate-100/70 dark:hover:bg-white/5 text-slate-800 dark:text-slate-200'
                   }`}
                 >
-                  <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                   <div>
-                    <div>Dian Paramita, S.Kom.</div>
-                    <div className="text-[10px] text-slate-400 font-normal">Admin Utama & HR Governance</div>
+                    <div className="font-bold text-slate-900 dark:text-white">Dian Paramita, S.Kom.</div>
+                    <div className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">Admin Utama & HR Governance</div>
                   </div>
                 </button>
               </div>

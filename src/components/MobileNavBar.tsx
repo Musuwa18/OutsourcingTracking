@@ -40,8 +40,8 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({
               onClick={() => onTabChange(tab.id)}
               className={`flex flex-col items-center justify-center h-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
                 isActive
-                  ? 'text-indigo-600 dark:text-cyan-400 font-bold'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? 'text-indigo-700 dark:text-cyan-400 font-bold'
+                  : 'text-slate-700 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-200 font-semibold'
               }`}
             >
               <div className="relative">

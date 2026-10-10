@@ -191,7 +191,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
               placeholder="Cari nama staf, NIP, atau mitra vendor..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
@@ -200,7 +200,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
             <select
               value={selectedDivision}
               onChange={(e) => setSelectedDivision(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             >
               {divisions.map((div) => (
                 <option key={div} value={div}>
@@ -215,7 +215,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             >
               <option value="ALL">Semua Status Kehadiran</option>
               <option value="BREACH">⚠️ Hanya Pelanggaran Geofence (Luar Radius)</option>
@@ -228,18 +228,18 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
         </div>
 
         {/* Date Selector Row */}
-        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800 text-xs">
-          <div className="flex items-center gap-2 text-slate-500">
-            <Calendar className="w-3.5 h-3.5" />
+        <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-800 text-xs">
+          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-medium">
+            <Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
             <span>Tanggal Operasional:</span>
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-slate-800 dark:text-slate-200 text-xs"
+              className="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono text-slate-900 dark:text-slate-200 text-xs font-semibold"
             />
           </div>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
             Ditemukan {filteredRecords.length} catatan kehadiran
           </span>
         </div>
@@ -250,21 +250,21 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-white/40 dark:border-white/10 bg-white/40 dark:bg-slate-800/40 backdrop-blur-md text-slate-600 dark:text-slate-300 font-semibold">
-                <th className="py-3 px-4">Tenaga Outsourcing</th>
-                <th className="py-3 px-4">Divisi & Vendor</th>
-                <th className="py-3 px-4">Jam Masuk</th>
-                <th className="py-3 px-4">Jam Pulang</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Lokasi & Geofence</th>
-                <th className="py-3 px-4">Laporan Harian</th>
-                <th className="py-3 px-4 text-right">Aksi</th>
+              <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-100/90 dark:bg-slate-800/60 backdrop-blur-md text-slate-900 dark:text-slate-200 font-bold">
+                <th className="py-3.5 px-4">Tenaga Outsourcing</th>
+                <th className="py-3.5 px-4">Divisi & Vendor</th>
+                <th className="py-3.5 px-4">Jam Masuk</th>
+                <th className="py-3.5 px-4">Jam Pulang</th>
+                <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4">Lokasi & Geofence</th>
+                <th className="py-3.5 px-4">Laporan Harian</th>
+                <th className="py-3.5 px-4 text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/30 dark:divide-white/5">
+            <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={8} className="py-8 text-center text-slate-500 dark:text-slate-400 text-xs font-medium">
                     Tidak ditemukan data presensi yang sesuai kriteria pencarian.
                   </td>
                 </tr>
@@ -280,12 +280,12 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
                     <tr
                       key={rec.id}
                       onClick={() => handleRowClick(rec)}
-                      className={`hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors cursor-pointer group ${
-                        isOutsideRadius ? 'bg-rose-50/20 dark:bg-rose-950/10' : ''
+                      className={`hover:bg-slate-100/70 dark:hover:bg-slate-800/40 transition-colors cursor-pointer group ${
+                        isOutsideRadius ? 'bg-rose-50/40 dark:bg-rose-950/20' : ''
                       }`}
                     >
                       {/* Staff Identity */}
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <div
                             className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white text-xs shrink-0 shadow-xs"
@@ -294,7 +294,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
                             {staff?.initials}
                           </div>
                           <div>
-                            <div className="font-semibold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex items-center gap-1.5">
+                            <div className="font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex items-center gap-1.5">
                               <span>{staff?.name}</span>
                               {isOutsideRadius && (
                                 <span title="Presensi di Luar Radius!">
@@ -302,7 +302,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
                                 </span>
                               )}
                             </div>
-                            <div className="text-[10px] font-mono text-slate-400">
+                            <div className="text-[10px] font-mono text-slate-600 dark:text-slate-400 font-medium">
                               {staff?.nip}
                             </div>
                           </div>
@@ -310,22 +310,22 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
                       </td>
 
                       {/* Division & Vendor */}
-                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                        <div className="font-medium text-slate-800 dark:text-slate-200">
+                      <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300">
+                        <div className="font-semibold text-slate-900 dark:text-slate-100">
                           {staff?.division}
                         </div>
-                        <div className="text-[10px] text-slate-400 truncate max-w-[140px]">
+                        <div className="text-[10px] text-slate-600 dark:text-slate-400 font-medium truncate max-w-[140px]">
                           {staff?.vendorName}
                         </div>
                       </td>
 
                       {/* Clock In */}
-                      <td className="py-3 px-4 font-mono tabular-nums font-semibold text-slate-800 dark:text-slate-100">
+                      <td className="py-3.5 px-4 font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100">
                         {rec.clockInTime}
                       </td>
 
                       {/* Clock Out */}
-                      <td className="py-3 px-4 font-mono tabular-nums text-slate-600 dark:text-slate-400">
+                      <td className="py-3.5 px-4 font-mono tabular-nums font-semibold text-slate-700 dark:text-slate-300">
                         {rec.clockOutTime || '-'}
                       </td>
 

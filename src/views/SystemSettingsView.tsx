@@ -53,6 +53,7 @@ interface SystemSettingsViewProps {
   onUpdateSupervisorMappings: (mappings: SupervisorMapping[]) => void;
   securityConfig: EnterpriseSecurityConfig;
   onUpdateSecurityConfig: (cfg: EnterpriseSecurityConfig) => void;
+  onResetDemoData?: () => void;
   onShowToast: (message: string, type?: 'success' | 'warning' | 'info') => void;
 }
 
@@ -72,6 +73,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   onUpdateSupervisorMappings,
   securityConfig,
   onUpdateSecurityConfig,
+  onResetDemoData,
   onShowToast,
 }) => {
   const [activeTab, setActiveTab] = useState<'geofence' | 'users' | 'rbac'>('geofence');
@@ -328,8 +330,25 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           </p>
         </div>
 
-        {/* 3 Main Configuration Tabs */}
-        <div className="flex items-center gap-1.5 p-1 glass-pill rounded-xl text-xs font-semibold">
+        <div className="flex flex-wrap items-center gap-3">
+          {onResetDemoData && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Apakah Anda yakin ingin mereset seluruh data kehadiran, laporan, evaluasi, dan log sistem kembali ke default demo?')) {
+                  onResetDemoData();
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-900 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900 text-rose-800 dark:text-rose-300 text-xs font-bold cursor-pointer transition-colors shadow-2xs"
+              title="Reset data demo ke kondisi awal"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+              <span>Reset Data Demo</span>
+            </button>
+          )}
+
+          {/* 3 Main Configuration Tabs */}
+          <div className="flex items-center gap-1.5 p-1 glass-pill rounded-xl text-xs font-semibold">
           <button
             type="button"
             onClick={() => setActiveTab('geofence')}

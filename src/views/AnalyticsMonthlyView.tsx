@@ -124,18 +124,18 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
               onClick={() => setSelectedStaffId(st.id)}
               className={`px-3.5 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
                 isSelected
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-xs font-semibold'
-                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-xs font-bold'
+                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-800 hover:border-indigo-400 font-semibold'
               }`}
             >
               <div
-                className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold text-white"
+                className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold text-white shadow-2xs"
                 style={{ backgroundColor: st.avatarColor }}
               >
                 {st.initials}
               </div>
               <span>{st.name}</span>
-              <span className="font-mono text-[11px] opacity-80 tabular-nums">
+              <span className="font-mono text-[11px] opacity-90 tabular-nums font-bold">
                 ({agg?.averageScore.toFixed(2)}★)
               </span>
             </button>
@@ -242,32 +242,32 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
             </div>
 
             {/* 4 Pillars Breakdown */}
-            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-              <div className="font-semibold text-slate-700 dark:text-slate-300">
+            <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+              <div className="font-bold text-slate-900 dark:text-slate-100">
                 Rata-rata 4 Pilar Kompetensi:
               </div>
               <div className="space-y-1.5">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Pilar 1: Kualitas & Produktivitas</span>
-                  <strong className="font-mono tabular-nums text-slate-800 dark:text-slate-200">
+                  <span className="text-slate-700 dark:text-slate-300 font-medium">Pilar 1: Kualitas & Produktivitas</span>
+                  <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
                     {currentAggregate?.pillarScores.quality.toFixed(2)}★
                   </strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Pilar 2: Sikap & Profesionalisme</span>
-                  <strong className="font-mono tabular-nums text-slate-800 dark:text-slate-200">
+                  <span className="text-slate-700 dark:text-slate-300 font-medium">Pilar 2: Sikap & Profesionalisme</span>
+                  <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
                     {currentAggregate?.pillarScores.professionalism.toFixed(2)}★
                   </strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Pilar 3: Kompetensi Interpersonal</span>
-                  <strong className="font-mono tabular-nums text-slate-800 dark:text-slate-200">
+                  <span className="text-slate-700 dark:text-slate-300 font-medium">Pilar 3: Kompetensi Interpersonal</span>
+                  <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
                     {currentAggregate?.pillarScores.interpersonal.toFixed(2)}★
                   </strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Pilar 4: Adaptabilitas & Masalah</span>
-                  <strong className="font-mono tabular-nums text-slate-800 dark:text-slate-200">
+                  <span className="text-slate-700 dark:text-slate-300 font-medium">Pilar 4: Adaptabilitas & Masalah</span>
+                  <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
                     {currentAggregate?.pillarScores.adaptability.toFixed(2)}★
                   </strong>
                 </div>

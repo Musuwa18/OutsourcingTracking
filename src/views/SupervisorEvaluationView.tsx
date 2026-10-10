@@ -212,13 +212,13 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
               <div className="p-5 glass-card space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block font-bold text-slate-900 dark:text-slate-200 mb-1">
                       Pilih Staf Outsourcing
                     </label>
                     <select
                       value={selectedStaffId}
                       onChange={(e) => setSelectedStaffId(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-medium"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-medium"
                     >
                       {staffList.map((st) => (
                         <option key={st.id} value={st.id}>
@@ -229,13 +229,13 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block font-bold text-slate-900 dark:text-slate-200 mb-1">
                       Siklus Penilaian
                     </label>
                     <select
                       value={selectedWeek}
                       onChange={(e) => setSelectedWeek(Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-medium"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-medium"
                     >
                       <option value={1}>Minggu ke-1 (Jumat, 02 Okt 2026)</option>
                       <option value={2}>Minggu ke-2 (Jumat, 09 Okt 2026)</option>
@@ -245,22 +245,22 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block font-bold text-slate-900 dark:text-slate-200 mb-1">
                       Tanggal Evaluasi
                     </label>
                     <input
                       type="date"
                       value={evaluationDate}
                       onChange={(e) => setEvaluationDate(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-medium"
                     />
                   </div>
                 </div>
 
                 {selectedStaff && (
-                  <div className="pt-2 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 dark:border-slate-800">
-                    <span>Vendor: <strong>{selectedStaff.vendorName}</strong></span>
-                    <span>Lokasi Penugasan: <strong>{selectedStaff.assignedLocation.name}</strong></span>
+                  <div className="pt-2 flex items-center justify-between text-xs text-slate-700 dark:text-slate-300 border-t border-slate-200 dark:border-slate-800 font-medium">
+                    <span>Vendor: <strong className="text-slate-900 dark:text-white">{selectedStaff.vendorName}</strong></span>
+                    <span>Lokasi Penugasan: <strong className="text-slate-900 dark:text-white">{selectedStaff.assignedLocation.name}</strong></span>
                   </div>
                 )}
               </div>
@@ -406,21 +406,21 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                   placeholder="Berikan apresiasi pencapaian dan rekomendasi hal yang perlu ditingkatkan minggu berikutnya..."
                   value={qualitativeNotes}
                   onChange={(e) => setQualitativeNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               {/* Submit CTA */}
               <div className="flex items-center justify-between">
                 {evalSubmittedSuccess && (
-                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 animate-in fade-in">
+                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 animate-in fade-in">
                     <CheckCircle2 className="w-4 h-4" />
                     Evaluasi berhasil disimpan dan diagregasi ke nilai bulanan!
                   </span>
                 )}
                 <button
                   type="submit"
-                  className="ml-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-colors"
+                  className="ml-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-colors"
                 >
                   <Send className="w-4 h-4" />
                   <span>Simpan & Kunci Evaluasi Mingguan</span>
@@ -433,21 +433,21 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
           <div className="space-y-4">
             <div className="p-5 glass-card space-y-5 sticky top-20">
               <div>
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                   Ringkasan Skor Mingguan
                 </h3>
                 <div className="flex items-baseline gap-2 mt-2">
-                  <span className="text-4xl font-extrabold font-mono text-indigo-600 dark:text-cyan-400 tabular-nums">
+                  <span className="text-4xl font-extrabold font-mono text-indigo-700 dark:text-cyan-400 tabular-nums">
                     {currentAverage}
                   </span>
-                  <span className="text-xs text-slate-400">/ 5.00 Bintang</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-400 font-semibold">/ 5.00 Bintang</span>
                 </div>
               </div>
 
               {/* Predicate status */}
-              <div className="p-3 rounded-xl bg-white/40 dark:bg-slate-800/40 border border-white/40 dark:border-white/10 text-xs space-y-1">
-                <div className="text-slate-500">Predikat Kinerja Minggu Ini:</div>
-                <div className="font-bold text-slate-900 dark:text-white">
+              <div className="p-3 rounded-xl bg-slate-100/80 dark:bg-slate-800/40 border border-slate-200 dark:border-white/10 text-xs space-y-1">
+                <div className="text-slate-700 dark:text-slate-300 font-medium">Predikat Kinerja Minggu Ini:</div>
+                <div className="font-bold text-slate-950 dark:text-white">
                   {currentAverage >= 4.5
                     ? 'Sangat Baik / Unggul'
                     : currentAverage >= 3.5
@@ -460,36 +460,36 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
               {/* Pillar Score Breakdown */}
               <div className="space-y-2.5 text-xs">
-                <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                <div className="flex justify-between text-slate-800 dark:text-slate-200 font-medium">
                   <span>Pilar Kualitas & Produktivitas:</span>
-                  <strong className="font-mono tabular-nums">
+                  <strong className="font-mono tabular-nums text-slate-900 dark:text-white font-bold">
                     {((ratings.qualityOfWork + ratings.quantityOfWork + ratings.timeManagement) / 3).toFixed(2)}★
                   </strong>
                 </div>
 
-                <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                <div className="flex justify-between text-slate-800 dark:text-slate-200 font-medium">
                   <span>Pilar Sikap & Profesionalisme:</span>
-                  <strong className="font-mono tabular-nums">
+                  <strong className="font-mono tabular-nums text-slate-900 dark:text-white font-bold">
                     {((ratings.initiative + ratings.accountability + ratings.punctuality) / 3).toFixed(2)}★
                   </strong>
                 </div>
 
-                <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                <div className="flex justify-between text-slate-800 dark:text-slate-200 font-medium">
                   <span>Pilar Kompetensi Interpersonal:</span>
-                  <strong className="font-mono tabular-nums">
+                  <strong className="font-mono tabular-nums text-slate-900 dark:text-white font-bold">
                     {((ratings.teamwork + ratings.communication + ratings.customerOrientation) / 3).toFixed(2)}★
                   </strong>
                 </div>
 
-                <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                <div className="flex justify-between text-slate-800 dark:text-slate-200 font-medium">
                   <span>Pilar Adaptabilitas:</span>
-                  <strong className="font-mono tabular-nums">
+                  <strong className="font-mono tabular-nums text-slate-900 dark:text-white font-bold">
                     {((ratings.adaptability + ratings.problemSolving) / 2).toFixed(2)}★
                   </strong>
                 </div>
               </div>
 
-              <div className="text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-3 leading-relaxed">
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-800 pt-3 leading-relaxed font-medium">
                 Skor mingguan akan digabungkan secara otomatis dari Minggu 1 s.d. Minggu 4 menjadi Nilai Akhir Bulanan untuk dasar rekomendasi perpanjangan kontrak.
               </div>
             </div>
@@ -567,20 +567,20 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
                     {/* Title & Summary */}
                     <div>
-                      <div className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase">
+                      <div className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
                         {report.category}
                       </div>
                       <h4 className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">
                         {report.title}
                       </h4>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                      <p className="text-xs text-slate-800 dark:text-slate-200 mt-1 leading-relaxed font-normal">
                         {report.summary}
                       </p>
                     </div>
 
                     {/* Photo with Watermark */}
                     {report.documentationPhotoUrl && (
-                      <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-black">
+                      <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-slate-300 dark:border-slate-800 bg-black">
                         <img
                           src={report.documentationPhotoUrl}
                           alt={report.title}
@@ -601,11 +601,11 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
                     {/* Justification Note from Staff if Duplicate */}
                     {report.aiDuplicateFlag?.justificationNote && (
-                      <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-[11px] text-amber-900 dark:text-amber-200 space-y-0.5">
-                        <div className="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1 text-[10px]">
+                      <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-900/50 text-[11px] text-amber-950 dark:text-amber-200 space-y-0.5">
+                        <div className="font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1 text-[10px]">
                           <Sparkles className="w-3 h-3" /> Justifikasi Duplikasi Staf:
                         </div>
-                        <p className="italic text-slate-700 dark:text-slate-300">
+                        <p className="italic text-slate-800 dark:text-slate-200 font-medium">
                           "{report.aiDuplicateFlag.justificationNote}"
                         </p>
                       </div>
@@ -613,7 +613,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                   </div>
 
                   {/* Supervisor Action Bar */}
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 text-xs">
+                  <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2 text-xs">
                     <input
                       type="text"
                       placeholder="Tulis catatan masukan / instruksi perbaikan..."
@@ -621,7 +621,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                       onChange={(e) =>
                         setReportNoteInputs((prev) => ({ ...prev, [report.id]: e.target.value }))
                       }
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs placeholder:text-slate-400 focus:outline-none"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
 
                     <div className="flex items-center gap-2 justify-end">
