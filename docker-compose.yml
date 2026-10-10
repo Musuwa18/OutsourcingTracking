@@ -1,0 +1,19 @@
+services:
+  outsource-track:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: outsource-track-kpi
+    restart: unless-stopped
+    ports:
+      # Terikat ke localhost (127.0.0.1) port 3005 agar aman & diakses via Cloudflare Tunnel
+      - "127.0.0.1:3005:80"
+    environment:
+      - NODE_ENV=production
+      - VITE_APP_URL=https://outsourcing.renlapdisdikhst.pro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
