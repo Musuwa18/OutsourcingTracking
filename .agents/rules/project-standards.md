@@ -44,3 +44,20 @@ Agregasi bulanan menghitung rata-rata Minggu 1-4, menghasilkan predikat otomatis
 ## 4. HTTPS & Sensor Requirements (Mobile PWA)
 - Fitur `navigator.mediaDevices.getUserMedia` dan `navigator.geolocation` **wajib** dijalankan di atas protokol **HTTPS** (Secure Context) agar dapat beroperasi di smartphone Android/iOS.
 - Di lingkungan VPS, aplikasi disajikan di belakang Cloudflare Tunnel (`https://outsourcing.renlapdisdikhst.pro`) yang menyediakan SSL/TLS otomatis.
+
+### E. Sistem Autentikasi Produksi & Hierarki Divisi
+- **Registrasi & Login Mandiri**: Form pendaftaran terpisah untuk Tenaga Outsourcing dan Atasan Langsung dengan pemilihan Divisi/Sub Bagian penugasan.
+- **Sesi Terkunci**: Pengguna yang berhasil login terkunci pada profilnya; pergantian akun hanya dilakukan melalui proses Logout resmi.
+- **Isolasi Divisi**: Supervisor/Atasan Langsung secara otomatis difilter hanya mengakses data staf di divisinya masing-masing.
+- **Penguncian Perangkat (Device Binding)**: Mendeteksi fingerprint perangkat saat login pertama untuk mencegah titip absensi.
+- **Biometrik WebAuthn**: Opsi login cepat menggunakan sensor sidik jari atau Face ID perangkat seluler.
+
+### F. Backend API & Penyimpanan Berkas Foto
+- **Database Engine**: SQLite terintegrasi pada Express backend (Port 3010) untuk menampung tabel pengguna, presensi, laporan tugas harian, dan evaluasi berkala.
+- **Penyimpanan Berkas Foto**: Foto selfie dan dokumentasi kerja disimpan dalam folder `/uploads/attendance/` dan `/uploads/reports/` dengan sanitasi nama berkas unik berbasis timestamp dan ID staf.
+
+### G. Standar Tata Naskah & Cetak PDF Resmi
+- **Kop Surat Kedinasan**: Menggunakan kop surat resmi Dinas Pendidikan Kabupaten Hulu Sungai Tengah lengkap dengan garis ganda pemisah.
+- **Opsi Cetak Fleksibel**: Menyediakan opsi cetak Rekapitulasi Divisi Bulanan dan Kartu Hasil Evaluasi Kinerja Individu per Personel (Rapor Kinerja).
+- **CSS @media print**: Memastikan tabel, gambar dokumentasi kerja, dan blok tanda tangan pejabat penilai tidak terpotong (page-break-inside avoid) pada kertas A4 standar.
+

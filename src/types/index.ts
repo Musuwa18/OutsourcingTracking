@@ -1,5 +1,30 @@
 export type UserRole = 'outsourcing' | 'supervisor' | 'admin';
 
+export interface Division {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  supervisorName?: string;
+}
+
+export interface AuthUser {
+  id: string;
+  nip: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  divisionId: string;
+  divisionName: string;
+  roleTitle: string;
+  phone?: string;
+  vendorName?: string;
+  avatarColor?: string;
+  initials?: string;
+  deviceId?: string | null;
+  biometricKey?: string | null;
+}
+
 export interface OfficeLocation {
   id: string;
   name: string;

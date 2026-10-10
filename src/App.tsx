@@ -51,9 +51,56 @@ import { SystemSettingsView } from './views/SystemSettingsView';
 import { AuditLogView } from './views/AuditLogView';
 import { PrintReportModal } from './components/PrintReportModal';
 import { GoogleDriveSyncModal } from './components/GoogleDriveSyncModal';
-import { NotificationDrawer } from './components/NotificationDrawer';
 import { SecurityMfaModal } from './components/SecurityMfaModal';
+import { NotificationDrawer } from './components/NotificationDrawer';
+import { AuthView } from './views/AuthView';
+import { AuthUser, Division } from './types';
+import {
+  apiFetchDivisions,
+  apiSubmitAttendance,
+  apiSubmitReport,
+  apiApproveReport,
+  apiSubmitEvaluation,
+} from './services/api';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
+
+const FALLBACK_DIVISIONS: Division[] = [
+  {
+    id: 'div-it',
+    name: 'Sub Bagian Teknologi Informasi & Jaringan',
+    code: 'TI-NET',
+    description: 'Pemeliharaan perangkat keras, jaringan LAN/WLAN, server data, dan dukungan teknis aplikasi dinas.',
+    supervisorName: 'Hendra Wijaya, S.T.'
+  },
+  {
+    id: 'div-sec',
+    name: 'Sub Bagian Pengamanan & Ketertiban',
+    code: 'SEC-OPS',
+    description: 'Keamanan fisik gedung dinas, pos jaga, patroli berkala 24/7, dan penerimaan tamu dinas.',
+    supervisorName: 'Agus Suryanto, S.Sos.'
+  },
+  {
+    id: 'div-cln',
+    name: 'Sub Bagian Kebersihan Lingkungan & Fasilitas',
+    code: 'CLN-ENV',
+    description: 'Sanitasi gedung perkantoran, sterilisasi ruang rapat utama, penataan taman dan koridor dinas.',
+    supervisorName: 'Hj. Ratna Sari, S.E.'
+  },
+  {
+    id: 'div-drv',
+    name: 'Sub Bagian Transportasi & Operasional Kendaraan',
+    code: 'TRN-LOG',
+    description: 'Operasional armada kendaraan dinas pimpinan, ekspedisi dokumen penting, dan antar jemput tamu dinas.',
+    supervisorName: 'Bambang Hermawan, S.AP.'
+  },
+  {
+    id: 'div-adm',
+    name: 'Sub Bagian Administrasi Umum & Pelayanan Tamu',
+    code: 'ADM-GEN',
+    description: 'Front office pelayanan umum, pengarsipan berkas surat masuk/keluar, dan registrasi tamu kedinasan.',
+    supervisorName: 'Dian Paramita, S.Kom.'
+  }
+];
 
 export default function App() {
   // Theme & Accessibility State
@@ -73,10 +120,57 @@ export default function App() {
     });
   };
 
-  // Active Role & Navigation
-  const [currentRole, setCurrentRole] = useState<UserRole>('outsourcing');
+  // Authenticated User State & Master Divisions
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    const saved = localStorage.getItem('ot_session_user');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  });
+
+  const [divisions, setDivisions] = useState<Division[]>(FALLBACK_DIVISIONS);
+
+  useEffect(() => {
+    apiFetchDivisions().then((divs) => {
+      if (divs && divs.length > 0) setDivisions(divs);
+    });
+  }, []);
+
+  // Active Role & Navigation (Derived from Authenticated User)
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
+    const saved = localStorage.getItem('ot_session_user');
+    if (saved) {
+      try {
+        return JSON.parse(saved).role || 'outsourcing';
+      } catch (e) {}
+    }
+    return 'outsourcing';
+  });
   const [mobileTab, setMobileTab] = useState<string>('beranda');
   const [adminTab, setAdminTab] = useState<string>('monitoring-presensi');
+
+  const handleLoginSuccess = (user: AuthUser, token: string) => {
+    setCurrentUser(user);
+    setCurrentRole(user.role);
+    localStorage.setItem('ot_session_user', JSON.stringify(user));
+    localStorage.setItem('ot_session_token', token);
+    if (user.role === 'outsourcing') {
+      setActiveStaffId(user.id);
+      setMobileTab('beranda');
+    } else {
+      setAdminTab('persetujuan-laporan');
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('ot_session_user');
+    localStorage.removeItem('ot_session_token');
+    showToast('Anda telah keluar dari akun.', 'info');
+  };
 
   // Modals state
   const [printModalOpen, setPrintModalOpen] = useState(false);
@@ -315,21 +409,48 @@ export default function App() {
     localStorage.setItem('ot_notifications', JSON.stringify(notifications));
   }, [notifications]);
 
-  // Active outsourcing staff profile for staff role (Dynamic via Active Staff Switcher)
-  const currentStaff = staffList.find((s) => s.id === activeStaffId) || staffList[0];
-
-  const handleSwitchStaff = (staffId: string) => {
-    setActiveStaffId(staffId);
-    const target = staffList.find((s) => s.id === staffId);
-    if (target) {
-      showToast(`Beralih profil ke: ${target.name} (${target.roleTitle})`, 'info');
-      addAuditLog(
-        'Alih Profil Staf Operasional',
-        `Sesi pengujian beralih ke staf ${target.name} (${target.nip}) - ${target.division}.`,
-        'Autentikasi'
+  // Active outsourcing staff profile for staff role (Locked to authenticated user)
+  const currentStaff = useMemo<StaffProfile>(() => {
+    if (currentUser && currentUser.role === 'outsourcing') {
+      const match = staffList.find(
+        (s) => s.id === currentUser.id || s.nip === currentUser.nip || s.email === currentUser.email
       );
+      if (match) return match;
+      return {
+        id: currentUser.id,
+        nip: currentUser.nip,
+        name: currentUser.name,
+        email: currentUser.email,
+        phone: currentUser.phone || '',
+        division: currentUser.divisionName,
+        vendorName: currentUser.vendorName || 'PT Indo Tekno Prima',
+        roleTitle: currentUser.roleTitle,
+        assignedLocation: PRIMARY_OFFICES[0],
+        avatarColor: currentUser.avatarColor || '#4f46e5',
+        initials: currentUser.initials || 'OT',
+        joinDate: '2024-01-01',
+        status: 'Aktif' as const,
+      };
     }
-  };
+    return staffList.find((s) => s.id === activeStaffId) || staffList[0];
+  }, [currentUser, staffList, activeStaffId]);
+
+  // Filtered staff list for Supervisor (strictly shows staff in their division)
+  const filteredStaffList = useMemo<StaffProfile[]>(() => {
+    if (currentUser?.role === 'supervisor') {
+      const match = staffList.filter((s) => {
+        if (currentUser.divisionId === 'div-all') return true;
+        if (currentUser.divisionId === 'div-it' && s.id === 'usr-os-001') return true;
+        if (currentUser.divisionId === 'div-sec' && s.id === 'usr-os-002') return true;
+        if (currentUser.divisionId === 'div-cln' && s.id === 'usr-os-003') return true;
+        if (currentUser.divisionId === 'div-drv' && s.id === 'usr-os-004') return true;
+        if (currentUser.divisionId === 'div-adm' && s.id === 'usr-os-005') return true;
+        return s.division.toLowerCase().includes(currentUser.divisionName.toLowerCase());
+      });
+      return match.length > 0 ? match : staffList;
+    }
+    return staffList;
+  }, [currentUser, staffList]);
 
   const handleResetDemoData = () => {
     const initialAtt = generateInitialAttendance();
@@ -449,6 +570,17 @@ export default function App() {
       return [newRecord, ...filtered];
     });
 
+    // Background sync to SQLite server
+    apiSubmitAttendance({
+      staffId: currentStaff.id,
+      date: todayDateStr,
+      clockInTime: timeStr,
+      selfieUrl: selfieBase64,
+      locationCoords: locationData,
+      status: 'Hadir',
+      verifiedBy: 'Sistem Geofence WebRTC',
+    }).catch((err) => console.warn('Sync attendance failed:', err));
+
     if (!locationData.withinRadius) {
       addAuditLog(
         'Pelanggaran Geofence: Presensi di Luar Radius',
@@ -493,6 +625,17 @@ export default function App() {
       })
     );
 
+    // Background sync to SQLite server
+    apiSubmitAttendance({
+      staffId: currentStaff.id,
+      date: todayDateStr,
+      clockOutTime: timeStr,
+      selfieUrl: selfieBase64,
+      locationCoords: locationData,
+      status: 'Hadir',
+      verifiedBy: 'Sistem Geofence WebRTC',
+    }).catch((err) => console.warn('Sync clock-out failed:', err));
+
     addAuditLog(
       'Presensi Pulang (Clock Out)',
       `Berhasil clock-out pada ${timeStr} WIB. Jam kerja harian terkunci.`,
@@ -518,6 +661,17 @@ export default function App() {
     };
 
     setDailyReports((prev) => [newReport, ...prev]);
+
+    // Background sync to SQLite server
+    apiSubmitReport({
+      staffId: newReport.staffId,
+      title: newReport.title,
+      description: newReport.description,
+      category: newReport.category,
+      photoUrl: newReport.photoUrl,
+      locationCoords: newReport.locationCoords,
+      aiDuplicateFlag: newReport.aiDuplicateFlag,
+    }).catch((err) => console.warn('Sync report failed:', err));
 
     if (newReport.aiDuplicateFlag?.isDuplicate) {
       addAuditLog(
@@ -565,6 +719,11 @@ export default function App() {
       })
     );
 
+    // Background sync to SQLite server
+    apiApproveReport(reportId, 'Disetujui', notes).catch((err) =>
+      console.warn('Sync approval failed:', err)
+    );
+
     const report = dailyReports.find((r) => r.id === reportId);
     addAuditLog(
       'Persetujuan Laporan Kinerja',
@@ -594,6 +753,11 @@ export default function App() {
         }
         return r;
       })
+    );
+
+    // Background sync to SQLite server
+    apiApproveReport(reportId, 'Revisi', notes).catch((err) =>
+      console.warn('Sync revision request failed:', err)
     );
 
     const report = dailyReports.find((r) => r.id === reportId);
@@ -638,6 +802,11 @@ export default function App() {
       return [newEval, ...filtered];
     });
 
+    // Background sync to SQLite server
+    apiSubmitEvaluation(newEval).catch((err) =>
+      console.warn('Sync evaluation failed:', err)
+    );
+
     const evaluatedStaff = staffList.find((s) => s.id === evalData.staffId);
     addAuditLog(
       'Pemberian Evaluasi Mingguan (4 Pilar)',
@@ -662,6 +831,55 @@ export default function App() {
       'geofence_alert'
     );
   };
+
+  // If user is not logged in, render the secure Auth View
+  if (!currentUser) {
+    return (
+      <div className={`min-h-screen ${darkMode ? 'dark' : ''}`}>
+        <AuthView onLoginSuccess={handleLoginSuccess} darkMode={darkMode} />
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 max-w-sm sm:max-w-md animate-in slide-in-from-bottom-5 fade-in duration-200">
+            <div
+              className={`p-3.5 rounded-2xl shadow-xl border backdrop-blur-md flex items-center justify-between gap-3 text-xs ${
+                toast.type === 'success'
+                  ? 'bg-slate-900/95 text-white border-slate-700/80 shadow-emerald-950/20'
+                  : toast.type === 'warning'
+                  ? 'bg-amber-950/95 text-amber-100 border-amber-800 shadow-amber-950/30'
+                  : 'bg-slate-900/95 text-slate-100 border-slate-700 shadow-slate-950/30'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                {toast.type === 'success' && (
+                  <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                )}
+                {toast.type === 'warning' && (
+                  <div className="p-1 rounded-lg bg-amber-500/20 text-amber-400">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                )}
+                {toast.type === 'info' && (
+                  <div className="p-1 rounded-lg bg-indigo-500/20 text-indigo-400">
+                    <Info className="w-4 h-4" />
+                  </div>
+                )}
+                <span className="font-medium leading-snug">{toast.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setToast(null)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer shrink-0"
+                aria-label="Tutup notifikasi"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -689,6 +907,8 @@ export default function App() {
       {/* Top Header */}
       <Header
         currentRole={currentRole}
+        currentUser={currentUser}
+        onLogout={handleLogout}
         onRoleChange={(role) => setCurrentRole(role)}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
@@ -729,8 +949,7 @@ export default function App() {
                   todayReports={staffTodayReports}
                   allReports={dailyReports}
                   staffList={staffList}
-                  activeStaffId={activeStaffId}
-                  onSwitchStaff={handleSwitchStaff}
+                  activeStaffId={currentStaff.id}
                   onClockIn={handleClockIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
@@ -744,8 +963,7 @@ export default function App() {
                   todayReports={staffTodayReports}
                   allReports={dailyReports}
                   staffList={staffList}
-                  activeStaffId={activeStaffId}
-                  onSwitchStaff={handleSwitchStaff}
+                  activeStaffId={currentStaff.id}
                   onClockIn={handleClockIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
@@ -826,7 +1044,7 @@ export default function App() {
 
               {adminTab === 'persetujuan-laporan' && (
                 <SupervisorEvaluationView
-                  staffList={staffList}
+                  staffList={filteredStaffList}
                   dailyReports={dailyReports}
                   weeklyEvaluations={weeklyEvaluations}
                   attendanceRecords={attendanceRecords}
@@ -838,7 +1056,7 @@ export default function App() {
 
               {adminTab === 'evaluasi-mingguan' && (
                 <SupervisorEvaluationView
-                  staffList={staffList}
+                  staffList={filteredStaffList}
                   dailyReports={dailyReports}
                   weeklyEvaluations={weeklyEvaluations}
                   attendanceRecords={attendanceRecords}
@@ -850,7 +1068,7 @@ export default function App() {
 
               {adminTab === 'analitik-bulanan' && (
                 <AnalyticsMonthlyView
-                  staffList={staffList}
+                  staffList={filteredStaffList}
                   monthlyAggregates={monthlyAggregates}
                   weeklyEvaluations={weeklyEvaluations}
                   attendanceRecords={attendanceRecords}
@@ -908,9 +1126,13 @@ export default function App() {
       <PrintReportModal
         isOpen={printModalOpen}
         onClose={() => setPrintModalOpen(false)}
-        staffList={staffList}
+        staffList={filteredStaffList}
         attendanceRecords={attendanceRecords}
         monthlyAggregates={monthlyAggregates}
+        dailyReports={dailyReports}
+        weeklyEvaluations={weeklyEvaluations}
+        divisions={divisions}
+        currentDivisionId={currentUser?.divisionId}
       />
 
       {/* Google Drive Cloud Sync Modal */}

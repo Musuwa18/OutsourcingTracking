@@ -229,69 +229,31 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-24 md:pb-8">
       
-      {/* Staff Switcher for Multi-Personnel Testing */}
-      {staffList.length > 0 && onSwitchStaff && (
-        <div className="p-3.5 glass-card space-y-2.5 border border-white/60 dark:border-white/10 shadow-sm">
-          <div className="flex items-center justify-between text-xs px-0.5">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="font-bold text-slate-800 dark:text-slate-100 text-xs">
-                Simulasi Personel Aktif
-              </span>
+      {/* Active Staff Identity Banner */}
+      <div className="p-3.5 glass-card border border-white/60 dark:border-white/10 shadow-xs flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span
+            className="w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-bold text-white shadow-md shadow-indigo-500/20 shrink-0"
+            style={{ backgroundColor: staff.avatarColor }}
+          >
+            {staff.initials}
+          </span>
+          <div>
+            <div className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">
+              {staff.name}
             </div>
-            <span className="text-[11px] font-semibold text-indigo-600 dark:text-cyan-400 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-full border border-indigo-200/50 dark:border-indigo-800/50">
-              {staffList.length} Profil Staf
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar scroll-smooth py-1 px-0.5">
-            {staffList.map((st) => {
-              const isActive = (activeStaffId || staff.id) === st.id;
-              return (
-                <button
-                  key={st.id}
-                  type="button"
-                  onClick={() => onSwitchStaff(st.id)}
-                  className={`group px-3 py-2 rounded-2xl text-xs font-semibold flex items-center gap-2.5 shrink-0 transition-all duration-200 cursor-pointer ${
-                    isActive
-                      ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-400/80 ring-offset-2 dark:ring-offset-slate-900 scale-[1.02]'
-                      : 'bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200/90 dark:border-slate-700/80 shadow-xs hover:border-indigo-400/50'
-                  }`}
-                >
-                  <div className="relative shrink-0">
-                    <span
-                      className="w-7 h-7 rounded-xl flex items-center justify-center text-[11px] font-bold text-white shadow-xs"
-                      style={{ backgroundColor: st.avatarColor }}
-                    >
-                      {st.initials}
-                    </span>
-                    {isActive && (
-                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 border-2 border-white dark:border-slate-900 rounded-full" />
-                    )}
-                  </div>
-                  <div className="text-left flex flex-col">
-                    <span className="whitespace-nowrap font-bold text-xs leading-tight">
-                      {st.name.split(' ')[0]}
-                    </span>
-                    <span
-                      className={`text-[10px] leading-tight font-medium ${
-                        isActive
-                          ? 'text-indigo-100'
-                          : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300'
-                      }`}
-                    >
-                      {st.division.split(' ')[0]}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+            <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+              {staff.roleTitle} · <span className="font-mono text-indigo-600 dark:text-cyan-400 font-bold">{staff.nip}</span>
+            </div>
           </div>
         </div>
-      )}
+        <div className="text-right shrink-0">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800/60">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            {staff.division.split(' ')[0]}
+          </span>
+        </div>
+      </div>
 
       {/* Friendly Reminder Banner before 17:00 */}
       {(!hasClockedIn || todayReports.length === 0) && (
