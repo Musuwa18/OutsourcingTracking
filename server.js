@@ -66,7 +66,8 @@ app.get('/health', (req, res) => {
 // 2. Auth: Login
 app.post('/api/auth/login', (req, res) => {
   try {
-    const { usernameOrEmail, password, deviceId, biometricKey } = req.body;
+    const usernameOrEmail = req.body.usernameOrEmail || req.body.identifier || req.body.email || req.body.nip;
+    const { password, deviceId, biometricKey } = req.body;
     if (!usernameOrEmail) {
       return res.status(400).json({ error: 'Username, Email, atau NIP wajib diisi.' });
     }
