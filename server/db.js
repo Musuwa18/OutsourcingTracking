@@ -682,6 +682,23 @@ export function saveAttendance(attData) {
   const now = new Date().toISOString();
   const selfieUrl = saveBase64Image(attData.selfieUrl, 'attendance');
 
+  let staffName = attData.staffName;
+  let divisionId = attData.divisionId;
+  if (!staffName || !divisionId) {
+    const user = getUserById(attData.staffId);
+    if (user) {
+      staffName = staffName || user.name;
+      divisionId = divisionId || user.divisionId;
+    }
+  }
+
+  const lat = attData.locationCoords?.latitude ?? attData.latitude ?? null;
+  const lon = attData.locationCoords?.longitude ?? attData.longitude ?? null;
+  const acc = attData.locationCoords?.accuracy ?? attData.accuracy ?? null;
+  const locName = attData.locationCoords?.locationName ?? attData.locationName ?? 'Lokasi Terdaftar';
+  const isGeoValid = (attData.locationCoords?.withinRadius ?? attData.isGeofenceValid ?? true) ? 1 : 0;
+  const dist = attData.locationCoords?.distanceMeters ?? attData.distanceMeters ?? 0;
+
   if (isNodeSqlite && dbEngine) {
     dbEngine.prepare(
       `INSERT INTO attendance (
@@ -689,10 +706,23 @@ export function saveAttendance(attData) {
         selfie_url, latitude, longitude, accuracy, location_name, is_geofence_valid, distance_meters, device_fingerprint, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
-      id, attData.staffId, attData.staffName, attData.divisionId, attData.date, attData.clockInTime,
-      attData.clockOutTime || '-', attData.status, selfieUrl, attData.latitude, attData.longitude,
-      attData.accuracy, attData.locationName, attData.isGeofenceValid ? 1 : 0, attData.distanceMeters || 0,
-      attData.deviceFingerprint || '', now
+      id,
+      attData.staffId || null,
+      staffName || 'Tenaga Outsourcing',
+      divisionId || 'div-it',
+      attData.date || new Date().toISOString().slice(0, 10),
+      attData.clockInTime || null,
+      attData.clockOutTime || null,
+      attData.status || 'Hadir',
+      selfieUrl || null,
+      lat,
+      lon,
+      acc,
+      locName,
+      isGeoValid,
+      dist,
+      attData.deviceFingerprint || '',
+      now
     );
   } else {
     fallbackStore.attendance.push({
@@ -704,7 +734,7 @@ export function saveAttendance(attData) {
     persistFallback();
   }
 
-  return { ...attData, id, selfieUrl };
+  return { ...attData, id, selfieUrl, staffName, divisionId };
 }
 
 export function listAttendance(filters = {}) {
@@ -760,7 +790,31 @@ export function listAttendance(filters = {}) {
 export function saveDailyReport(repData) {
   const id = repData.id || `rep-${Date.now()}`;
   const now = new Date().toISOString();
-  const photoUrl = saveBase64Image(repData.documentationPhotoUrl, 'reports');
+  const rawPhoto = repData.photoUrl || repData.documentationPhotoUrl;
+  const photoUrl = saveBase64Image(rawPhoto, 'reports');
+
+  let staffName = repData.staffName;
+  let divisionId = repData.divisionId;
+  if (!staffName || !divisionId) {
+    const user = getUserById(repData.staffId);
+    if (user) {
+      staffName = staffName || user.name;
+      divisionId = divisionId || user.divisionId;
+    }
+  }
+
+  const title = repData.title || 'Laporan Pekerjaan';
+  const category = repData.category || 'Pemeliharaan';
+  const date = repData.date || new Date().toISOString().slice(0, 10);
+  const startTime = repData.startTime || '08:00';
+  const endTime = repData.endTime || '16:00';
+  const summary = repData.description || repData.summary || '';
+  const status = repData.status || 'Selesai';
+  const imageHash = repData.imageHash || '';
+  const aiDuplicateJson = JSON.stringify(repData.aiDuplicateFlag || {});
+  const locCoordsJson = JSON.stringify(repData.locationCoords || {});
+  const supervisorApproval = repData.supervisorApproval || 'Pending';
+  const supervisorNotes = repData.supervisorNotes || null;
 
   if (isNodeSqlite && dbEngine) {
     dbEngine.prepare(
@@ -770,11 +824,25 @@ export function saveDailyReport(repData) {
         supervisor_approval, supervisor_notes, approved_at, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
-      id, repData.staffId, repData.staffName, repData.divisionId, repData.date, repData.title,
-      repData.category, repData.startTime, repData.endTime, repData.summary, repData.status,
-      photoUrl, repData.imageHash || '', JSON.stringify(repData.aiDuplicateFlag || {}),
-      JSON.stringify(repData.locationCoords || {}), repData.supervisorApproval || 'Pending',
-      repData.supervisorNotes || null, null, now
+      id,
+      repData.staffId || null,
+      staffName || 'Tenaga Outsourcing',
+      divisionId || 'div-it',
+      date,
+      title,
+      category,
+      startTime,
+      endTime,
+      summary,
+      status,
+      photoUrl,
+      imageHash,
+      aiDuplicateJson,
+      locCoordsJson,
+      supervisorApproval,
+      supervisorNotes,
+      null,
+      now
     );
   } else {
     fallbackStore.daily_reports.push({
@@ -786,7 +854,7 @@ export function saveDailyReport(repData) {
     persistFallback();
   }
 
-  return { ...repData, id, documentationPhotoUrl: photoUrl };
+  return { ...repData, id, documentationPhotoUrl: photoUrl, staffName, divisionId };
 }
 
 export function listDailyReports(filters = {}) {
@@ -857,6 +925,25 @@ export function saveEvaluation(evalData) {
   const id = evalData.id || `eval-${Date.now()}`;
   const now = new Date().toISOString();
 
+  let staffName = evalData.staffName;
+  let divisionId = evalData.divisionId;
+  if (!staffName || !divisionId) {
+    const user = getUserById(evalData.staffId);
+    if (user) {
+      staffName = staffName || user.name;
+      divisionId = divisionId || user.divisionId;
+    }
+  }
+
+  const supervisorId = evalData.supervisorId || 'usr-spv-101';
+  const weekNumber = Number(evalData.weekNumber) || 1;
+  const monthYear = evalData.monthYear || evalData.month || '2026-10';
+  const averageScore = Number(evalData.averageScore || evalData.overallWeeklyScore) || 5;
+  const predicate = evalData.predicate || 'Sangat Baik (A)';
+  const recommendation = evalData.recommendation || '';
+  const notes = evalData.notes || evalData.supervisorNotes || '';
+  const scoresJson = JSON.stringify(evalData.scores || evalData.pillarScores || {});
+
   if (isNodeSqlite && dbEngine) {
     dbEngine.prepare(
       `INSERT INTO evaluations (
@@ -864,10 +951,20 @@ export function saveEvaluation(evalData) {
         scores_json, average_score, predicate, recommendation, notes, evaluated_at, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
-      id, evalData.staffId, evalData.staffName, evalData.supervisorId, evalData.divisionId,
-      evalData.weekNumber, evalData.monthYear, JSON.stringify(evalData.scores || {}),
-      evalData.averageScore, evalData.predicate, evalData.recommendation || '',
-      evalData.notes || '', now, now
+      id,
+      evalData.staffId || null,
+      staffName || 'Tenaga Outsourcing',
+      supervisorId,
+      divisionId || 'div-it',
+      weekNumber,
+      monthYear,
+      scoresJson,
+      averageScore,
+      predicate,
+      recommendation,
+      notes,
+      now,
+      now
     );
   } else {
     fallbackStore.evaluations.push({
