@@ -2,14 +2,14 @@
 **Aplikasi: OutsourceTrack & KPI Pro**  
 **Domain Utama: `renlapdisdikhst.pro`**  
 **Subdomain Target: `https://outsourcing.renlapdisdikhst.pro`** (atau `https://kpi.renlapdisdikhst.pro`)  
-**Port Internal VPS: `3005`**
+**Port Internal VPS: `3010`**
 
 ---
 
 ## 1. Mengapa Menggunakan Cloudflare Tunnel?
 Pada domain Anda (`renlapdisdikhst.pro`), Cloudflare Tunnel telah aktif dan melayani aplikasi SPJ serta SAMPAN-HST. Dengan memanfaatkan tunnel yang sama untuk aplikasi ini:
 1. **Kamera WebRTC & GPS Langsung Aktif di HP**: Browser modern (Chrome/Safari) mewajibkan koneksi **HTTPS** untuk membuka akses kamera selfie dan GPS. Cloudflare Tunnel otomatis menyediakan sertifikat SSL tanpa perlu konfigurasi Certbot.
-2. **Tanpa Buka Port Publik**: Port internal `3005` hanya mendengarkan di `127.0.0.1` VPS. Tidak ada port yang terbuka bebas ke internet.
+2. **Tanpa Buka Port Publik**: Port internal `3010` hanya mendengarkan di `127.0.0.1` VPS. Tidak ada port yang terbuka bebas ke internet.
 3. **PWA Terisolasi**: Subdomain `outsourcing.renlapdisdikhst.pro` memiliki penyimpanan `localStorage` dan ikon PWA mandiri sehingga tidak bercampur dengan SPJ atau SAMPAN.
 
 ---
@@ -28,7 +28,7 @@ Pilih salah satu metode sesuai cara Anda mengelola Cloudflare Tunnel:
    * **Domain**: `renlapdisdikhst.pro`
    * **Path**: *(kosongkan)*
    * **Type**: `HTTP`
-   * **URL**: `localhost:3005` (atau `127.0.0.1:3005`)
+   * **URL**: `localhost:3010` (atau `127.0.0.1:3010`)
 6. Klik **Save hostname** di pojok kanan bawah. Selesai! Subdomain langsung aktif secara global dalam beberapa detik.
 
 ---
@@ -44,7 +44,7 @@ Jika tunnel Anda dijalankan menggunakan file konfigurasi lokal di VPS (biasanya 
    ingress:
      # Routing baru untuk OutsourceTrack & KPI Pro
      - hostname: outsourcing.renlapdisdikhst.pro
-       service: http://localhost:3005
+       service: http://localhost:3010
 
      # Routing yang sudah ada sebelumnya (contoh):
      - hostname: spj.renlapdisdikhst.pro
@@ -88,14 +88,14 @@ docker compose up -d --build
 *Periksa status kontainer:*
 ```bash
 docker ps
-curl http://127.0.0.1:3005/health
+curl http://127.0.0.1:3010/health
 ```
 
 #### B. Menggunakan Node.js & PM2 (Tanpa Docker):
 ```bash
 npm install
 npm run build
-pm2 start server.js --name outsource-track --env PORT=3005
+pm2 start server.js --name outsource-track --env PORT=3010
 pm2 save
 ```
 

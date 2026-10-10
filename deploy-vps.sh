@@ -6,7 +6,7 @@
 
 set -e
 
-PORT=3005
+PORT=3010
 APP_NAME="outsource-track-kpi"
 
 echo "========================================================"

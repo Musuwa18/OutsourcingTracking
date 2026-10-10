@@ -9,7 +9,7 @@ OutsourceTrack & KPI Pro adalah aplikasi web modern (PWA-ready) terintegrasi unt
 - **Design System**: Material Glass Acrylic (Frosted Glass with backdrop blur, specular borders, dynamic ambient glowing mesh lights)
 - **Icons**: Lucide React (`lucide-react`)
 - **State Management**: React Hooks + LocalStorage Persistence
-- **Production Server**: Docker Nginx Alpine / Express Node.js (Port default: `3005`)
+- **Production Server**: Docker Nginx Alpine / Express Node.js (Port default: `3010`)
 - **Deployment & Gateway**: Cloudflare Tunnel (`*.renlapdisdikhst.pro`) with full HTTPS/SSL
 
 ## 3. Key Modules & Business Logic

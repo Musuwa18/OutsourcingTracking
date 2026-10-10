@@ -16,7 +16,7 @@ export default defineConfig(() => {
       host: '0.0.0.0',
     },
     preview: {
-      port: 3005,
+      port: 3010,
       host: '0.0.0.0',
     },
   };
