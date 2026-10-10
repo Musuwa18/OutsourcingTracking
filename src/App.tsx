@@ -836,7 +836,13 @@ export default function App() {
   if (!currentUser) {
     return (
       <div className={`min-h-screen ${darkMode ? 'dark' : ''}`}>
-        <AuthView onLoginSuccess={handleLoginSuccess} darkMode={darkMode} />
+        <AuthView
+          divisions={divisions}
+          onLoginSuccess={handleLoginSuccess}
+          onShowToast={showToast}
+          darkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode(!darkMode)}
+        />
         {toast && (
           <div className="fixed bottom-6 right-6 z-50 max-w-sm sm:max-w-md animate-in slide-in-from-bottom-5 fade-in duration-200">
             <div

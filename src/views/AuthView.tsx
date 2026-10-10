@@ -22,21 +22,60 @@ import {
 import { AuthUser, Division } from '../types';
 import { apiLogin, apiRegister, apiBindDevice } from '../services/api';
 
+const DEFAULT_DIVISIONS: Division[] = [
+  {
+    id: 'div-it',
+    name: 'Sub Bagian Teknologi Informasi & Jaringan',
+    code: 'TI-NET',
+    description: 'Pemeliharaan perangkat keras, jaringan LAN/WLAN, server data, dan dukungan teknis aplikasi dinas.',
+    supervisorName: 'Hendra Wijaya, S.T.'
+  },
+  {
+    id: 'div-sec',
+    name: 'Sub Bagian Pengamanan & Ketertiban',
+    code: 'SEC-OPS',
+    description: 'Keamanan fisik gedung dinas, pos jaga, patroli berkala 24/7, dan penerimaan tamu dinas.',
+    supervisorName: 'Agus Suryanto, S.Sos.'
+  },
+  {
+    id: 'div-cln',
+    name: 'Sub Bagian Kebersihan Lingkungan & Fasilitas',
+    code: 'CLN-ENV',
+    description: 'Sanitasi gedung perkantoran, sterilisasi ruang rapat utama, penataan taman dan koridor dinas.',
+    supervisorName: 'Hj. Ratna Sari, S.E.'
+  },
+  {
+    id: 'div-drv',
+    name: 'Sub Bagian Transportasi & Operasional Kendaraan',
+    code: 'TRN-LOG',
+    description: 'Operasional armada kendaraan dinas pimpinan, ekspedisi dokumen penting, dan antar jemput tamu dinas.',
+    supervisorName: 'Bambang Hermawan, S.AP.'
+  },
+  {
+    id: 'div-adm',
+    name: 'Sub Bagian Administrasi Umum & Pelayanan Tamu',
+    code: 'ADM-GEN',
+    description: 'Front office pelayanan umum, pengarsipan berkas surat masuk/keluar, dan registrasi tamu kedinasan.',
+    supervisorName: 'Dian Paramita, S.Kom.'
+  }
+];
+
 interface AuthViewProps {
-  divisions: Division[];
+  divisions?: Division[];
   onLoginSuccess: (user: AuthUser, token: string) => void;
-  onShowToast: (message: string, type: 'success' | 'warning' | 'info') => void;
-  darkMode: boolean;
-  onToggleDarkMode: () => void;
+  onShowToast?: (message: string, type: 'success' | 'warning' | 'info') => void;
+  darkMode?: boolean;
+  onToggleDarkMode?: () => void;
 }
 
 export const AuthView: React.FC<AuthViewProps> = ({
   divisions,
   onLoginSuccess,
-  onShowToast,
-  darkMode,
-  onToggleDarkMode,
+  onShowToast = () => {},
+  darkMode = false,
+  onToggleDarkMode = () => {},
 }) => {
+  const activeDivisions = divisions && divisions.length > 0 ? divisions : DEFAULT_DIVISIONS;
   const [activeTab, setActiveTab] = useState<'login' | 'register-os' | 'register-spv'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -52,7 +91,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [osEmail, setOsEmail] = useState('');
   const [osPassword, setOsPassword] = useState('');
   const [osPhone, setOsPhone] = useState('');
-  const [osDivisionId, setOsDivisionId] = useState(divisions[0]?.id || 'div-it');
+  const [osDivisionId, setOsDivisionId] = useState(activeDivisions[0]?.id || 'div-it');
   const [osVendor, setOsVendor] = useState('PT Indo Tekno Prima');
 
   // Register Supervisor Form States
@@ -61,7 +100,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [spvEmail, setSpvEmail] = useState('');
   const [spvPassword, setSpvPassword] = useState('');
   const [spvPhone, setSpvPhone] = useState('');
-  const [spvDivisionId, setSpvDivisionId] = useState(divisions[0]?.id || 'div-it');
+  const [spvDivisionId, setSpvDivisionId] = useState(activeDivisions[0]?.id || 'div-it');
   const [spvTitle, setSpvTitle] = useState('Kepala Sub Bagian Operasional');
 
   // Device Fingerprint generator
@@ -164,7 +203,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     try {
       setLoading(true);
-      const selectedDiv = divisions.find((d) => d.id === osDivisionId);
+      const selectedDiv = activeDivisions.find((d) => d.id === osDivisionId);
       const deviceId = localStorage.getItem('ot_device_id') || getDeviceFingerprint();
       localStorage.setItem('ot_device_id', deviceId);
 
@@ -203,7 +242,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     try {
       setLoading(true);
-      const selectedDiv = divisions.find((d) => d.id === spvDivisionId);
+      const selectedDiv = activeDivisions.find((d) => d.id === spvDivisionId);
       const deviceId = localStorage.getItem('ot_device_id') || getDeviceFingerprint();
       localStorage.setItem('ot_device_id', deviceId);
 
@@ -538,7 +577,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
                   required
                 >
-                  {divisions.map((d) => (
+                  {activeDivisions.map((d) => (
                     <option key={d.id} value={d.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       {d.name} ({d.code})
                     </option>
@@ -659,7 +698,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
                   required
                 >
-                  {divisions.map((d) => (
+                  {activeDivisions.map((d) => (
                     <option key={d.id} value={d.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       {d.name} ({d.code})
                     </option>
