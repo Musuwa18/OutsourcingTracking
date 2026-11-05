@@ -56,10 +56,10 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
       attributionControl: false,
     });
 
-    // CartoDB Voyager Tile (Modern, Bersih, Resolusi Tinggi, Bebas Kuota API)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    // OpenStreetMap Standar Resmi (Bebas Token/API Key, Beresolusi Tinggi & Lengkap di Barabai Kab. HST)
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      subdomains: 'abcd',
+      attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
 
     // Zoom control di pojok kanan bawah agar tidak bertumpukan dengan status badge
@@ -68,11 +68,27 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
     mapInstanceRef.current = map;
     setMapReady(true);
 
+    // Invalidate size untuk memastikan tile ter-render penuh tanpa area kosong
+    const resizeTimer = setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+
     return () => {
+      clearTimeout(resizeTimer);
       map.remove();
       mapInstanceRef.current = null;
     };
   }, []);
+
+  // Update ukuran peta saat ekspansi atau perubahan ukuran container
+  useEffect(() => {
+    if (mapInstanceRef.current) {
+      const t = setTimeout(() => {
+        mapInstanceRef.current?.invalidateSize();
+      }, 150);
+      return () => clearTimeout(t);
+    }
+  }, [isExpanded, height]);
 
   // Update elemen grafis peta (Geofence Circle, User Pulsing Marker, Office Pin, Garis Jarak)
   useEffect(() => {

@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Camera, X, RefreshCw, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { StaffProfile } from '../types';
 import { stampWatermarkOnPhoto } from '../utils/watermark';
@@ -197,8 +198,8 @@ export const WatermarkCameraModal: React.FC<WatermarkCameraModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-200">
+  const modalContent = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
       <div className="relative w-full max-w-lg glass-surface rounded-3xl shadow-2xl border border-white/50 dark:border-white/10 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-white/40 dark:border-white/10">
@@ -264,4 +265,6 @@ export const WatermarkCameraModal: React.FC<WatermarkCameraModalProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
