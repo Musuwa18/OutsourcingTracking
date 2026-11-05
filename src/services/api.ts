@@ -329,12 +329,14 @@ export async function apiFetchAttendance(filters: {
   staffId?: string;
   divisionId?: string;
   date?: string;
+  todayDateStr?: string;
 } = {}): Promise<any[]> {
   try {
     const params = new URLSearchParams();
     if (filters.staffId) params.append('staffId', filters.staffId);
     if (filters.divisionId && filters.divisionId !== 'div-all') params.append('divisionId', filters.divisionId);
     if (filters.date) params.append('date', filters.date);
+    if (filters.todayDateStr) params.append('todayDateStr', filters.todayDateStr);
 
     const res = await fetch(`${API_BASE}/attendance?${params.toString()}`);
     const data = await res.json();
@@ -466,4 +468,30 @@ export async function apiAskAiAnalytics(message: string): Promise<{
     model: data.model,
     timestamp: data.timestamp,
   };
+}
+
+// 13. Attendance Schedule & Work Hours Settings
+export async function apiGetAttendanceSettings(): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}/settings/attendance`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.settings || null;
+  } catch (err) {
+    console.warn('apiGetAttendanceSettings warning:', err);
+    return null;
+  }
+}
+
+export async function apiSaveAttendanceSettings(settings: any): Promise<any> {
+  const res = await fetch(`${API_BASE}/settings/attendance`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ settings }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Gagal menyimpan pengaturan jadwal kerja ke server.');
+  }
+  return data.settings;
 }

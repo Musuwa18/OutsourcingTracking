@@ -88,6 +88,8 @@ export interface AttendanceRecord {
   staffId: string;
   date: string; // YYYY-MM-DD
   clockInTime: string; // HH:mm:ss
+  breakOutTime?: string; // HH:mm:ss (Istirahat Keluar)
+  breakInTime?: string; // HH:mm:ss (Istirahat Masuk Kembali)
   clockOutTime?: string; // HH:mm:ss
   selfieUrl: string; // Data URL or styled SVG capture
   locationCoords: {
@@ -99,6 +101,9 @@ export interface AttendanceRecord {
     locationName: string;
   };
   status: 'Hadir' | 'Terlambat' | 'Izin' | 'Alpha';
+  isFieldDuty?: boolean;
+  fieldDutyNotes?: string;
+  autoClosed?: boolean;
   notes?: string;
   verifiedBy?: string;
 }
@@ -308,4 +313,133 @@ export interface EnterpriseSecurityConfig {
   aiNarrativeSummaryEnabled: boolean;
   scheduled1630Reminder: boolean;
 }
+
+export interface DayWorkSchedule {
+  enabled: boolean;          // Apakah hari kerja aktif
+  dayName: string;           // 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'
+  clockInStart: string;      // Contoh: '07:00'
+  clockInEnd: string;        // Batas toleransi masuk, contoh: '08:30'
+  clockOutStart: string;     // Contoh: '16:30' (Senin-Kamis), '11:00' (Jumat)
+  clockOutEnd: string;       // Batas akhir clock out, contoh: '21:00'
+  enableBreak: boolean;      // Mengaktifkan sesi istirahat (Senin-Kamis: true, Jumat: false)
+  breakStart: string;        // Contoh: '12:00'
+  breakEnd: string;          // Contoh: '13:00'
+}
+
+export interface AttendanceGlobalSettings {
+  workSchedule: Record<string, DayWorkSchedule>;
+  breakSettings: {
+    enabled: boolean;
+    mandatory: boolean;
+    toleranceMinutes: number;
+  };
+  fieldDutySettings: {
+    allowSelfAssignment: boolean;       // Staf boleh lapor dinas luar mandiri
+    requireSupervisorApproval: boolean;  // Membutuhkan verifikasi atasan
+    bypassGeofenceOnFieldDuty: boolean; // Menghilangkan status pelanggaran merah jika dinas luar
+    allowedPurposes: string[];          // Jenis penugasan resmi
+  };
+  autoCloseMissingClockOut: boolean;
+}
+
+export const DEFAULT_ATTENDANCE_SETTINGS: AttendanceGlobalSettings = {
+  workSchedule: {
+    monday: {
+      enabled: true,
+      dayName: 'Senin',
+      clockInStart: '07:00',
+      clockInEnd: '08:30',
+      clockOutStart: '16:30',
+      clockOutEnd: '21:00',
+      enableBreak: true,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+    tuesday: {
+      enabled: true,
+      dayName: 'Selasa',
+      clockInStart: '07:00',
+      clockInEnd: '08:30',
+      clockOutStart: '16:30',
+      clockOutEnd: '21:00',
+      enableBreak: true,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+    wednesday: {
+      enabled: true,
+      dayName: 'Rabu',
+      clockInStart: '07:00',
+      clockInEnd: '08:30',
+      clockOutStart: '16:30',
+      clockOutEnd: '21:00',
+      enableBreak: true,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+    thursday: {
+      enabled: true,
+      dayName: 'Kamis',
+      clockInStart: '07:00',
+      clockInEnd: '08:30',
+      clockOutStart: '16:30',
+      clockOutEnd: '21:00',
+      enableBreak: true,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+    friday: {
+      enabled: true,
+      dayName: 'Jumat',
+      clockInStart: '07:00',
+      clockInEnd: '08:30',
+      clockOutStart: '11:00',
+      clockOutEnd: '20:00',
+      enableBreak: false,
+      breakStart: '11:30',
+      breakEnd: '13:30',
+    },
+    saturday: {
+      enabled: false,
+      dayName: 'Sabtu',
+      clockInStart: '08:00',
+      clockInEnd: '09:00',
+      clockOutStart: '13:00',
+      clockOutEnd: '17:00',
+      enableBreak: false,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+    sunday: {
+      enabled: false,
+      dayName: 'Minggu',
+      clockInStart: '08:00',
+      clockInEnd: '09:00',
+      clockOutStart: '13:00',
+      clockOutEnd: '17:00',
+      enableBreak: false,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+  },
+  breakSettings: {
+    enabled: true,
+    mandatory: false,
+    toleranceMinutes: 15,
+  },
+  fieldDutySettings: {
+    allowSelfAssignment: true,
+    requireSupervisorApproval: false,
+    bypassGeofenceOnFieldDuty: true,
+    allowedPurposes: [
+      'Monitoring & Pengawasan Sekolah',
+      'Inspeksi & Pemeliharaan Sarpras',
+      'Pelayanan Operasional Korwil',
+      'Pendampingan Acara Kedinasan',
+      'Pengantaran Berkas & Logistik Dinas',
+    ],
+  },
+  autoCloseMissingClockOut: true,
+};
+
 

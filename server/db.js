@@ -154,6 +154,12 @@ if (isNodeSqlite && dbEngine) {
       radius_meters REAL NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Migrasi aman untuk kolom baru users jika database sudah ada sebelumnya
@@ -168,6 +174,23 @@ if (isNodeSqlite && dbEngine) {
   } catch (e) {}
   try {
     dbEngine.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'Aktif';`);
+  } catch (e) {}
+
+  // Migrasi aman untuk kolom baru tabel attendance (Sesi istirahat & tugas lapangan)
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN break_out_time TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN break_in_time TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN is_field_duty INTEGER DEFAULT 0;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN field_duty_notes TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN auto_closed INTEGER DEFAULT 0;`);
   } catch (e) {}
 }
 
@@ -1343,24 +1366,34 @@ export function saveAttendance(attData) {
   const lon = attData.locationCoords?.longitude ?? attData.longitude ?? null;
   const acc = attData.locationCoords?.accuracy ?? attData.accuracy ?? null;
   const locName = attData.locationCoords?.locationName ?? attData.locationName ?? 'Lokasi Terdaftar';
-  const isGeoValid = (attData.locationCoords?.withinRadius ?? attData.isGeofenceValid ?? true) ? 1 : 0;
+  const isFieldDuty = (attData.isFieldDuty || attData.locationCoords?.isFieldDuty) ? 1 : 0;
+  const fieldDutyNotes = attData.fieldDutyNotes || attData.locationCoords?.fieldDutyNotes || null;
+  // Jika tugas lapangan, otomatis lolos validasi geofence
+  const isGeoValid = isFieldDuty ? 1 : ((attData.locationCoords?.withinRadius ?? attData.isGeofenceValid ?? true) ? 1 : 0);
   const dist = attData.locationCoords?.distanceMeters ?? attData.distanceMeters ?? 0;
+  const breakOut = attData.breakOutTime || null;
+  const breakIn = attData.breakInTime || null;
+  const autoClosed = attData.autoClosed ? 1 : 0;
 
   if (isNodeSqlite && dbEngine) {
     // Periksa apakah sudah ada presensi staf pada tanggal yang sama
     const existing = staffId
-      ? dbEngine.prepare('SELECT id, clock_in_time, clock_out_time, selfie_url FROM attendance WHERE staff_id = ? AND date = ?').get(staffId, recordDate)
+      ? dbEngine.prepare('SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url FROM attendance WHERE staff_id = ? AND date = ?').get(staffId, recordDate)
       : null;
 
     if (existing) {
-      // Update record presensi yang sudah ada (misal update Clock Out atau status)
+      // Update record presensi yang sudah ada (misal update Clock Out, Istirahat, atau status)
       const finalClockIn = attData.clockInTime || existing.clock_in_time;
+      const finalBreakOut = breakOut || existing.break_out_time;
+      const finalBreakIn = breakIn || existing.break_in_time;
       const finalClockOut = attData.clockOutTime || existing.clock_out_time;
       const finalSelfie = selfieUrl || existing.selfie_url;
 
       dbEngine.prepare(
         `UPDATE attendance SET
           clock_in_time = ?,
+          break_out_time = ?,
+          break_in_time = ?,
           clock_out_time = ?,
           status = ?,
           selfie_url = ?,
@@ -1370,10 +1403,15 @@ export function saveAttendance(attData) {
           location_name = COALESCE(?, location_name),
           is_geofence_valid = COALESCE(?, is_geofence_valid),
           distance_meters = COALESCE(?, distance_meters),
-          device_fingerprint = COALESCE(?, device_fingerprint)
+          device_fingerprint = COALESCE(?, device_fingerprint),
+          is_field_duty = COALESCE(?, is_field_duty),
+          field_duty_notes = COALESCE(?, field_duty_notes),
+          auto_closed = COALESCE(?, auto_closed)
         WHERE id = ?`
       ).run(
         finalClockIn,
+        finalBreakOut,
+        finalBreakIn,
         finalClockOut,
         attData.status || 'Hadir',
         finalSelfie,
@@ -1384,6 +1422,9 @@ export function saveAttendance(attData) {
         isGeoValid,
         dist,
         attData.deviceFingerprint || null,
+        isFieldDuty,
+        fieldDutyNotes,
+        autoClosed,
         existing.id
       );
 
@@ -1394,15 +1435,21 @@ export function saveAttendance(attData) {
         staffName,
         divisionId,
         clockInTime: finalClockIn,
-        clockOutTime: finalClockOut
+        breakOutTime: finalBreakOut,
+        breakInTime: finalBreakIn,
+        clockOutTime: finalClockOut,
+        isFieldDuty: Boolean(isFieldDuty),
+        fieldDutyNotes: fieldDutyNotes || '',
+        autoClosed: Boolean(autoClosed),
       };
     } else {
       // Buat entri presensi baru
       dbEngine.prepare(
         `INSERT INTO attendance (
-          id, staff_id, staff_name, division_id, date, clock_in_time, clock_out_time, status,
-          selfie_url, latitude, longitude, accuracy, location_name, is_geofence_valid, distance_meters, device_fingerprint, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          id, staff_id, staff_name, division_id, date, clock_in_time, break_out_time, break_in_time, clock_out_time, status,
+          selfie_url, latitude, longitude, accuracy, location_name, is_geofence_valid, distance_meters, device_fingerprint,
+          is_field_duty, field_duty_notes, auto_closed, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         id,
         staffId,
@@ -1410,6 +1457,8 @@ export function saveAttendance(attData) {
         divisionId || 'div-umpeg',
         recordDate,
         attData.clockInTime || null,
+        breakOut,
+        breakIn,
         attData.clockOutTime || null,
         attData.status || 'Hadir',
         selfieUrl || null,
@@ -1420,10 +1469,26 @@ export function saveAttendance(attData) {
         isGeoValid,
         dist,
         attData.deviceFingerprint || '',
+        isFieldDuty,
+        fieldDutyNotes,
+        autoClosed,
         now
       );
 
-      return { ...attData, id, selfieUrl, staffName, divisionId };
+      return {
+        ...attData,
+        id,
+        staffId,
+        staffName,
+        divisionId,
+        date: recordDate,
+        selfieUrl,
+        breakOutTime: breakOut,
+        breakInTime: breakIn,
+        isFieldDuty: Boolean(isFieldDuty),
+        fieldDutyNotes: fieldDutyNotes || '',
+        autoClosed: Boolean(autoClosed),
+      };
     }
   } else {
     const existingIdx = fallbackStore.attendance.findIndex(
@@ -1434,19 +1499,27 @@ export function saveAttendance(attData) {
         ...fallbackStore.attendance[existingIdx],
         ...attData,
         clockInTime: attData.clockInTime || fallbackStore.attendance[existingIdx].clockInTime,
+        breakOutTime: breakOut || fallbackStore.attendance[existingIdx].breakOutTime,
+        breakInTime: breakIn || fallbackStore.attendance[existingIdx].breakInTime,
         clockOutTime: attData.clockOutTime || fallbackStore.attendance[existingIdx].clockOutTime,
         selfieUrl: selfieUrl || fallbackStore.attendance[existingIdx].selfieUrl,
+        isFieldDuty: Boolean(isFieldDuty),
+        fieldDutyNotes: fieldDutyNotes || '',
       };
     } else {
       fallbackStore.attendance.push({
         ...attData,
         id,
         selfieUrl,
+        breakOutTime: breakOut,
+        breakInTime: breakIn,
+        isFieldDuty: Boolean(isFieldDuty),
+        fieldDutyNotes: fieldDutyNotes || '',
         createdAt: now
       });
     }
     persistFallback();
-    return { ...attData, id, selfieUrl, staffName, divisionId };
+    return { ...attData, id, selfieUrl, staffName, divisionId, isFieldDuty: Boolean(isFieldDuty) };
   }
 }
 
@@ -1477,6 +1550,8 @@ export function listAttendance(filters = {}) {
       divisionId: r.division_id,
       date: r.date,
       clockInTime: r.clock_in_time,
+      breakOutTime: r.break_out_time || null,
+      breakInTime: r.break_in_time || null,
       clockOutTime: r.clock_out_time,
       status: r.status,
       selfieUrl: r.selfie_url,
@@ -1485,6 +1560,9 @@ export function listAttendance(filters = {}) {
       accuracy: r.accuracy,
       locationName: r.location_name,
       isGeofenceValid: Boolean(r.is_geofence_valid),
+      isFieldDuty: Boolean(r.is_field_duty),
+      fieldDutyNotes: r.field_duty_notes || '',
+      autoClosed: Boolean(r.auto_closed),
       distanceMeters: r.distance_meters,
       locationCoords: {
         latitude: r.latitude,
@@ -1493,6 +1571,8 @@ export function listAttendance(filters = {}) {
         distanceMeters: r.distance_meters,
         withinRadius: Boolean(r.is_geofence_valid),
         locationName: r.location_name || 'Lokasi Terdaftar',
+        isFieldDuty: Boolean(r.is_field_duty),
+        fieldDutyNotes: r.field_duty_notes || '',
       },
       deviceFingerprint: r.device_fingerprint,
       createdAt: r.created_at
@@ -1888,6 +1968,156 @@ export function deleteLocation(id) {
     dbEngine.prepare('DELETE FROM locations WHERE id = ?').run(id);
   }
   return true;
+}
+
+// ==============================================================================
+// ATTENDANCE WORK HOURS & SCHEDULE SETTINGS (DISDIK HST)
+// ==============================================================================
+export const DEFAULT_ATTENDANCE_SETTINGS = {
+  workSchedule: {
+    monday: {
+      enabled: true,
+      dayName: 'Senin',
+      clockInStart: '07:00',
+      clockInEnd: '08:30',
+      clockOutStart: '16:30',
+      clockOutEnd: '21:00',
+      enableBreak: true,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+    tuesday: {
+      enabled: true,
+      dayName: 'Selasa',
+      clockInStart: '07:00',
+      clockInEnd: '08:30',
+      clockOutStart: '16:30',
+      clockOutEnd: '21:00',
+      enableBreak: true,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+    wednesday: {
+      enabled: true,
+      dayName: 'Rabu',
+      clockInStart: '07:00',
+      clockInEnd: '08:30',
+      clockOutStart: '16:30',
+      clockOutEnd: '21:00',
+      enableBreak: true,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+    thursday: {
+      enabled: true,
+      dayName: 'Kamis',
+      clockInStart: '07:00',
+      clockInEnd: '08:30',
+      clockOutStart: '16:30',
+      clockOutEnd: '21:00',
+      enableBreak: true,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+    friday: {
+      enabled: true,
+      dayName: 'Jumat',
+      clockInStart: '07:00',
+      clockInEnd: '08:30',
+      clockOutStart: '11:00',
+      clockOutEnd: '20:00',
+      enableBreak: false,
+      breakStart: '11:30',
+      breakEnd: '13:30',
+    },
+    saturday: {
+      enabled: false,
+      dayName: 'Sabtu',
+      clockInStart: '08:00',
+      clockInEnd: '09:00',
+      clockOutStart: '13:00',
+      clockOutEnd: '17:00',
+      enableBreak: false,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+    sunday: {
+      enabled: false,
+      dayName: 'Minggu',
+      clockInStart: '08:00',
+      clockInEnd: '09:00',
+      clockOutStart: '13:00',
+      clockOutEnd: '17:00',
+      enableBreak: false,
+      breakStart: '12:00',
+      breakEnd: '13:00',
+    },
+  },
+  breakSettings: {
+    enabled: true,
+    mandatory: false,
+    toleranceMinutes: 15,
+  },
+  fieldDutySettings: {
+    allowSelfAssignment: true,
+    requireSupervisorApproval: false,
+    bypassGeofenceOnFieldDuty: true,
+    allowedPurposes: [
+      'Monitoring & Pengawasan Sekolah',
+      'Inspeksi & Pemeliharaan Sarpras',
+      'Pelayanan Operasional Korwil',
+      'Pendampingan Acara Kedinasan',
+      'Pengantaran Berkas & Logistik Dinas',
+    ],
+  },
+  autoCloseMissingClockOut: true,
+};
+
+export function getAttendanceSettings() {
+  if (isNodeSqlite && dbEngine) {
+    try {
+      const row = dbEngine.prepare("SELECT value FROM system_settings WHERE key = 'attendance_settings'").get();
+      if (row && row.value) {
+        return JSON.parse(row.value);
+      }
+    } catch (e) {
+      console.warn('getAttendanceSettings error:', e);
+    }
+  }
+  return DEFAULT_ATTENDANCE_SETTINGS;
+}
+
+export function saveAttendanceSettings(settings) {
+  const jsonStr = JSON.stringify(settings);
+  const now = new Date().toISOString();
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      INSERT INTO system_settings (key, value, updated_at)
+      VALUES ('attendance_settings', ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(jsonStr, now);
+  }
+  return settings;
+}
+
+/**
+ * Otomatis menutup sesi presensi hari-hari sebelumnya yang belum di-clock out (23:59:59)
+ */
+export function autoClosePreviousDayAttendance(todayDateStr) {
+  if (!todayDateStr) return 0;
+  if (isNodeSqlite && dbEngine) {
+    try {
+      const result = dbEngine.prepare(`
+        UPDATE attendance
+        SET clock_out_time = '23:59:59', auto_closed = 1
+        WHERE date < ? AND (clock_out_time IS NULL OR clock_out_time = '' OR clock_out_time = '-')
+      `).run(todayDateStr);
+      return result.changes || 0;
+    } catch (e) {
+      console.warn('autoClosePreviousDayAttendance warning:', e);
+    }
+  }
+  return 0;
 }
 
 // Jalankan inisialisasi awal

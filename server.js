@@ -41,6 +41,9 @@ import {
   saveLocations,
   createLocation,
   deleteLocation,
+  getAttendanceSettings,
+  saveAttendanceSettings,
+  autoClosePreviousDayAttendance,
 } from './server/db.js';
 
 dotenv.config();
@@ -577,7 +580,10 @@ app.put('/api/staff/:id/supervisor', (req, res) => {
 // 11. Attendance
 app.get('/api/attendance', (req, res) => {
   try {
-    const { staffId, divisionId, date } = req.query;
+    const { staffId, divisionId, date, todayDateStr } = req.query;
+    if (todayDateStr) {
+      autoClosePreviousDayAttendance(todayDateStr);
+    }
     const records = listAttendance({ staffId, divisionId, date });
     res.json({ success: true, attendance: records });
   } catch (err) {
@@ -592,6 +598,39 @@ app.post('/api/attendance', (req, res) => {
   } catch (err) {
     console.error('[API Error] Save Attendance:', err);
     res.status(500).json({ error: 'Gagal menyimpan data presensi.' });
+  }
+});
+
+// 11b. Attendance Schedule & Work Hours Settings
+app.get('/api/settings/attendance', (req, res) => {
+  try {
+    const settings = getAttendanceSettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal memuat pengaturan jadwal presensi.' });
+  }
+});
+
+app.post('/api/settings/attendance', (req, res) => {
+  try {
+    const { settings } = req.body;
+    if (!settings) {
+      return res.status(400).json({ error: 'Data pengaturan jadwal tidak valid.' });
+    }
+    const saved = saveAttendanceSettings(settings);
+    res.json({ success: true, settings: saved });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menyimpan pengaturan jadwal presensi.' });
+  }
+});
+
+app.post('/api/attendance/auto-close', (req, res) => {
+  try {
+    const { todayDateStr } = req.body;
+    const closedCount = autoClosePreviousDayAttendance(todayDateStr);
+    res.json({ success: true, closedCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menjalankan auto-close presensi.' });
   }
 });
 

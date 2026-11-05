@@ -34,6 +34,9 @@ import {
   Clock,
   Shield,
   ArrowRight,
+  Coffee,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import {
   Division,
@@ -47,6 +50,9 @@ import {
   EnterpriseSecurityConfig,
   StaffProfile,
   OUTSOURCING_JOB_ROLES,
+  AttendanceGlobalSettings,
+  DEFAULT_ATTENDANCE_SETTINGS,
+  DayWorkSchedule,
 } from '../types';
 import { VisualMapPicker } from '../components/VisualMapPicker';
 import {
@@ -61,6 +67,7 @@ import {
   apiUpdateUserProfile,
   apiResetUserDevice,
   apiDeleteUser,
+  apiSaveAttendanceSettings,
 } from '../services/api';
 
 interface SystemSettingsViewProps {
@@ -83,6 +90,8 @@ interface SystemSettingsViewProps {
   onUpdateSupervisorMappings: (mappings: SupervisorMapping[]) => void;
   securityConfig: EnterpriseSecurityConfig;
   onUpdateSecurityConfig: (cfg: EnterpriseSecurityConfig) => void;
+  attendanceSettings?: AttendanceGlobalSettings;
+  onUpdateAttendanceSettings?: (settings: AttendanceGlobalSettings) => void;
   onShowToast: (message: string, type?: 'success' | 'warning' | 'info') => void;
 }
 
@@ -106,9 +115,120 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   onUpdateSupervisorMappings,
   securityConfig,
   onUpdateSecurityConfig,
+  attendanceSettings,
+  onUpdateAttendanceSettings,
   onShowToast,
 }) => {
-  const [activeTab, setActiveTab] = useState<'divisions' | 'vendors' | 'users' | 'geofence' | 'rbac'>('divisions');
+  const [activeTab, setActiveTab] = useState<'divisions' | 'vendors' | 'users' | 'geofence' | 'schedule' | 'rbac'>('divisions');
+
+  // ================= TAB: SCHEDULE & ATTENDANCE RULES =================
+  const [scheduleSettings, setScheduleSettings] = useState<AttendanceGlobalSettings>(() => {
+    return attendanceSettings || DEFAULT_ATTENDANCE_SETTINGS;
+  });
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [newPurposeInput, setNewPurposeInput] = useState('');
+
+  // Sync internal schedule state if props change
+  React.useEffect(() => {
+    if (attendanceSettings) {
+      setScheduleSettings(attendanceSettings);
+    }
+  }, [attendanceSettings]);
+
+  // ================= SCHEDULE & WORK HOURS HANDLERS =================
+  const handleDayToggle = (dayKey: string, enabled: boolean) => {
+    setScheduleSettings((prev) => ({
+      ...prev,
+      workSchedule: {
+        ...prev.workSchedule,
+        [dayKey]: {
+          ...prev.workSchedule[dayKey],
+          enabled,
+        },
+      },
+    }));
+  };
+
+  const handleDayChange = (dayKey: string, field: keyof DayWorkSchedule, val: any) => {
+    setScheduleSettings((prev) => ({
+      ...prev,
+      workSchedule: {
+        ...prev.workSchedule,
+        [dayKey]: {
+          ...prev.workSchedule[dayKey],
+          [field]: val,
+        },
+      },
+    }));
+  };
+
+  const handleApplyPreset = (preset: 'default_disdik' | 'ramadhan' | 'six_days') => {
+    if (preset === 'default_disdik') {
+      setScheduleSettings(DEFAULT_ATTENDANCE_SETTINGS);
+      onShowToast('Preset Standar Disdik HST (Jumat 11:00 & Sen-Kam 16:30) diterapkan!', 'info');
+    } else if (preset === 'ramadhan') {
+      setScheduleSettings((prev) => ({
+        ...prev,
+        workSchedule: {
+          ...prev.workSchedule,
+          monday: { ...prev.workSchedule.monday, clockInStart: '07:30', clockInEnd: '08:30', clockOutStart: '15:30', enableBreak: true, breakStart: '12:00', breakEnd: '12:30' },
+          tuesday: { ...prev.workSchedule.tuesday, clockInStart: '07:30', clockInEnd: '08:30', clockOutStart: '15:30', enableBreak: true, breakStart: '12:00', breakEnd: '12:30' },
+          wednesday: { ...prev.workSchedule.wednesday, clockInStart: '07:30', clockInEnd: '08:30', clockOutStart: '15:30', enableBreak: true, breakStart: '12:00', breakEnd: '12:30' },
+          thursday: { ...prev.workSchedule.thursday, clockInStart: '07:30', clockInEnd: '08:30', clockOutStart: '15:30', enableBreak: true, breakStart: '12:00', breakEnd: '12:30' },
+          friday: { ...prev.workSchedule.friday, clockInStart: '07:30', clockInEnd: '08:30', clockOutStart: '10:30', enableBreak: false },
+          saturday: { ...prev.workSchedule.saturday, enabled: false },
+          sunday: { ...prev.workSchedule.sunday, enabled: false },
+        },
+      }));
+      onShowToast('Preset Jam Kerja Ramadhan diterapkan!', 'info');
+    } else if (preset === 'six_days') {
+      setScheduleSettings((prev) => ({
+        ...prev,
+        workSchedule: {
+          ...prev.workSchedule,
+          saturday: { ...prev.workSchedule.saturday, enabled: true, clockInStart: '08:00', clockInEnd: '09:00', clockOutStart: '13:00', enableBreak: false },
+        },
+      }));
+      onShowToast('Preset Piket Operasional 6 Hari Kerja (Sabtu Aktif) diterapkan!', 'info');
+    }
+  };
+
+  const handleAddPurpose = () => {
+    if (!newPurposeInput.trim()) return;
+    setScheduleSettings((prev) => ({
+      ...prev,
+      fieldDutySettings: {
+        ...prev.fieldDutySettings,
+        allowedPurposes: [...prev.fieldDutySettings.allowedPurposes, newPurposeInput.trim()],
+      },
+    }));
+    setNewPurposeInput('');
+  };
+
+  const handleRemovePurpose = (idx: number) => {
+    setScheduleSettings((prev) => ({
+      ...prev,
+      fieldDutySettings: {
+        ...prev.fieldDutySettings,
+        allowedPurposes: prev.fieldDutySettings.allowedPurposes.filter((_, i) => i !== idx),
+      },
+    }));
+  };
+
+  const handleSaveScheduleSettings = async () => {
+    setIsSavingSchedule(true);
+    try {
+      await apiSaveAttendanceSettings(scheduleSettings);
+      if (onUpdateAttendanceSettings) {
+        onUpdateAttendanceSettings(scheduleSettings);
+      }
+      onShowToast('Pengaturan jam kerja & presensi berhasil disimpan ke SQLite server!', 'success');
+    } catch (err: any) {
+      onShowToast(err.message || 'Gagal menyimpan pengaturan jadwal.', 'warning');
+    } finally {
+      setIsSavingSchedule(false);
+    }
+  };
 
   // ================= TAB: DIVISIONS (BIDANG & SUBBAGIAN) =================
   const [divisionSearch, setDivisionSearch] = useState('');
@@ -804,6 +924,19 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
           <button
             type="button"
+            onClick={() => setActiveTab('schedule')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'schedule'
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>Jadwal & Aturan Kerja</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('rbac')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'rbac'
@@ -1293,6 +1426,459 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* TAB 5: JADWAL & ATURAN PRESENSI CANGGIH (SCHEDULE & WORK HOURS)           */}
+      {/* ========================================================================= */}
+      {activeTab === 'schedule' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Pengaturan Jadwal Jam Kerja &amp; Aturan Presensi Terpadu</span>
+                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                  WITA (Asia/Makassar)
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Konfigurasi jam masuk, jam pulang, istirahat per hari (Senin-Kamis 16:30, Jumat 11:00), auto-close, dan izin tugas lapangan
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveScheduleSettings}
+              disabled={isSavingSchedule}
+              className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-500/20 self-start sm:self-auto"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSavingSchedule ? 'Menyimpan...' : 'Simpan Pengaturan Jadwal'}</span>
+            </button>
+          </div>
+
+          {/* Preset Cepat (Quick Presets) */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-slate-50 dark:from-indigo-950/30 dark:via-blue-950/20 dark:to-slate-900/40 border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                Preset Pintas Jam Kerja Dinas:
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('default_disdik')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-indigo-200 dark:border-indigo-800/60 hover:border-indigo-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200 group-hover:text-indigo-600 dark:group-hover:text-cyan-400">
+                  Standar Disdik HST (Resmi)
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Kamis pulang 16:30, Jumat pulang 11:00 (tanpa istirahat siang)
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('ramadhan')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-amber-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                  Bulan Ramadhan
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Kamis pulang 15:30, Jumat pulang 10:30
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('six_days')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                  Piket 6 Hari Kerja
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Jumat standar, Sabtu buka piket 08:00 - 13:00 WITA
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Tabel Matriks Jam Kerja 7 Hari */}
+          <div className="p-6 glass-card space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Clock className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+                <span>Matriks Jam Kerja Mingguan (Senin - Minggu)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Tentukan jam masuk, batas toleransi, sesi istirahat keluar/masuk, dan jam pulang untuk masing-masing hari kerja
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                { key: 'monday', label: 'Senin' },
+                { key: 'tuesday', label: 'Selasa' },
+                { key: 'wednesday', label: 'Rabu' },
+                { key: 'thursday', label: 'Kamis' },
+                { key: 'friday', label: 'Jumat' },
+                { key: 'saturday', label: 'Sabtu' },
+                { key: 'sunday', label: 'Minggu' },
+              ].map(({ key, label }) => {
+                const day = scheduleSettings.workSchedule[key] || {
+                  enabled: key !== 'saturday' && key !== 'sunday',
+                  dayName: label,
+                  clockInStart: '07:00',
+                  clockInEnd: '08:30',
+                  clockOutStart: key === 'friday' ? '11:00' : '16:30',
+                  clockOutEnd: '21:00',
+                  enableBreak: key !== 'friday' && key !== 'saturday' && key !== 'sunday',
+                  breakStart: '12:00',
+                  breakEnd: '13:00',
+                };
+
+                return (
+                  <div
+                    key={key}
+                    className={`p-4 rounded-2xl border transition-all ${
+                      day.enabled
+                        ? key === 'friday'
+                          ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50'
+                          : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
+                        : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/60 dark:border-slate-800/40 opacity-70'
+                    }`}
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      {/* Kolom 1: Nama Hari & Switch Aktif/Libur */}
+                      <div className="flex items-center gap-3 min-w-[160px]">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={day.enabled}
+                            onChange={(e) => handleDayToggle(key, e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-10 h-5 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+                        </label>
+                        <div>
+                          <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span>{label}</span>
+                            {key === 'friday' && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold">
+                                Khusus Jumat
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {day.enabled ? 'Hari Kerja Aktif' : 'Libur / Off'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Kolom 2: Jam Masuk & Jam Pulang */}
+                      {day.enabled ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 text-xs">
+                          {/* Jam Masuk */}
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Presensi Masuk (Clock In)
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={day.clockInStart}
+                                onChange={(e) => handleDayChange(key, 'clockInStart', e.target.value)}
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                              />
+                              <span className="text-slate-400 text-[11px]">s.d.</span>
+                              <input
+                                type="time"
+                                value={day.clockInEnd}
+                                onChange={(e) => handleDayChange(key, 'clockInEnd', e.target.value)}
+                                title="Batas toleransi masuk tepat waktu"
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Sesi Istirahat */}
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Sesi Istirahat Siang
+                              </span>
+                              <label className="text-[10px] flex items-center gap-1 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={day.enableBreak}
+                                  onChange={(e) => handleDayChange(key, 'enableBreak', e.target.checked)}
+                                  className="w-3.5 h-3.5 accent-indigo-600 rounded"
+                                />
+                                <span>Aktif</span>
+                              </label>
+                            </div>
+                            {day.enableBreak ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="time"
+                                  value={day.breakStart}
+                                  onChange={(e) => handleDayChange(key, 'breakStart', e.target.value)}
+                                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
+                                />
+                                <span className="text-slate-400 text-[11px]">-</span>
+                                <input
+                                  type="time"
+                                  value={day.breakEnd}
+                                  onChange={(e) => handleDayChange(key, 'breakEnd', e.target.value)}
+                                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
+                                />
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-slate-400 font-medium py-1">
+                                {key === 'friday' ? 'Ditiadakan (Langsung pulang jam 11:00)' : 'Nonaktif'}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Jam Pulang */}
+                          <div className={`p-2.5 rounded-xl border space-y-1 ${
+                            key === 'friday'
+                              ? 'bg-amber-100/60 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800'
+                              : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60'
+                          }`}>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Presensi Pulang (Clock Out)
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={day.clockOutStart}
+                                onChange={(e) => handleDayChange(key, 'clockOutStart', e.target.value)}
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-extrabold text-indigo-700 dark:text-cyan-400"
+                              />
+                              <span className="text-slate-400 text-[11px]">WITA</span>
+                              {key === 'friday' && (
+                                <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 ml-auto">
+                                  (Jam 11:00)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-400 font-medium italic flex-1 py-2">
+                          Tidak ada kewajiban presensi pada hari ini (Hari Libur / Bebas Tugas)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Pengaturan Kebijakan Sesi & Auto-Close */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 glass-card space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Coffee className="w-4 h-4 text-amber-600" />
+                <span>Aturan Sesi Istirahat Siang</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Atur fleksibilitas staf dalam melakukan presensi keluar dan masuk kembali saat istirahat siang
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleSettings.breakSettings.mandatory}
+                    onChange={(e) =>
+                      setScheduleSettings((prev) => ({
+                        ...prev,
+                        breakSettings: { ...prev.breakSettings, mandatory: e.target.checked },
+                      }))
+                    }
+                    className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-900 dark:text-white">Wajib Presensi Sesi Istirahat</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Jika diaktifkan, staf harus mencatatkan jam keluar istirahat dan jam masuk kembali sebelum diperbolehkan Clock Out pulang.
+                    </p>
+                  </div>
+                </label>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Toleransi Menit Keterlambatan Istirahat:</span>
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <input
+                      type="number"
+                      min={0}
+                      max={60}
+                      value={scheduleSettings.breakSettings.toleranceMinutes}
+                      onChange={(e) =>
+                        setScheduleSettings((prev) => ({
+                          ...prev,
+                          breakSettings: { ...prev.breakSettings, toleranceMinutes: parseInt(e.target.value) || 0 },
+                        }))
+                      }
+                      className="w-16 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center font-bold"
+                    />
+                    <span className="text-slate-500">menit</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 glass-card space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Moon className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+                <span>Kunci Otomatis (Auto-Close) Pergantian Hari</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Pencegahan sesi menggantung jika staf lupa melakukan Clock Out pada hari sebelumnya
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleSettings.autoCloseMissingClockOut}
+                    onChange={(e) =>
+                      setScheduleSettings((prev) => ({
+                        ...prev,
+                        autoCloseMissingClockOut: e.target.checked,
+                      }))
+                    }
+                    className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-900 dark:text-white">Auto-Close Otomatis pada 23:59 WITA</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Jika staf lupa Clock Out hingga tengah malam, sistem otomatis menutup sesi kemarin pada pukul 23:59:59 dan mereset hari baru bersih untuk Clock In masuk berikutnya.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Parameter Penugasan Lapangan (Dinas Luar) */}
+          <div className="p-6 glass-card space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-amber-600" />
+                <span>Parameter &amp; Kebijakan Penugasan Lapangan (Dinas Luar)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Pengaturan staf alih daya yang bertugas ke sekolah, korwil, pengawasan sarpras, atau kegiatan kedinasan luar kantor
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleSettings.fieldDutySettings.allowSelfAssignment}
+                  onChange={(e) =>
+                    setScheduleSettings((prev) => ({
+                      ...prev,
+                      fieldDutySettings: { ...prev.fieldDutySettings, allowSelfAssignment: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Izin Presensi Tugas Lapangan Mandiri</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Staf dapat mengaktifkan toggle "Tugas Lapangan / Dinas Luar" saat presensi selfie di lokasi tugas lapangan.
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleSettings.fieldDutySettings.bypassGeofenceOnFieldDuty}
+                  onChange={(e) =>
+                    setScheduleSettings((prev) => ({
+                      ...prev,
+                      fieldDutySettings: { ...prev.fieldDutySettings, bypassGeofenceOnFieldDuty: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Bypass Geofence saat Tugas Lapangan</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Menghilangkan peringatan pelanggaran merah di dashboard atasan jika staf telah mencentang mode tugas dinas luar.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Daftar Jenis Penugasan Lapangan Resmi */}
+            <div className="space-y-2 pt-2 border-t border-slate-200/80 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                Daftar Jenis Penugasan Lapangan Resmi Terdaftar:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {scheduleSettings.fieldDutySettings.allowedPurposes.map((purpose, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800"
+                  >
+                    <span>{purpose}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePurpose(idx)}
+                      className="text-amber-700 hover:text-amber-950 dark:text-amber-400 dark:hover:text-amber-100 cursor-pointer"
+                      title="Hapus Jenis Tugas"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              <div className="flex gap-2 pt-2 max-w-md">
+                <input
+                  type="text"
+                  value={newPurposeInput}
+                  onChange={(e) => setNewPurposeInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddPurpose()}
+                  placeholder="Tambah jenis penugasan dinas baru..."
+                  className="flex-1 text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddPurpose}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold hover:bg-slate-800 cursor-pointer transition-colors"
+                >
+                  Tambah
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Tombol Simpan Bawah */}
+          <div className="flex justify-end p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+            <button
+              type="button"
+              onClick={handleSaveScheduleSettings}
+              disabled={isSavingSchedule}
+              className="px-6 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-indigo-500/25"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSavingSchedule ? 'Menyimpan ke Server...' : 'Simpan Semua Pengaturan Jam Kerja & Presensi'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* TAB 4: MASTER LOKASI & GEOFENCING                                         */}
       {/* ========================================================================= */}
       {activeTab === 'geofence' && (
@@ -1454,6 +2040,459 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 <span>Simpan Kebijakan Geofence</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: JADWAL & ATURAN PRESENSI CANGGIH (SCHEDULE & WORK HOURS)           */}
+      {/* ========================================================================= */}
+      {activeTab === 'schedule' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Pengaturan Jadwal Jam Kerja &amp; Aturan Presensi Terpadu</span>
+                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                  WITA (Asia/Makassar)
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Konfigurasi jam masuk, jam pulang, istirahat per hari (Senin-Kamis 16:30, Jumat 11:00), auto-close, dan izin tugas lapangan
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveScheduleSettings}
+              disabled={isSavingSchedule}
+              className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-500/20 self-start sm:self-auto"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSavingSchedule ? 'Menyimpan...' : 'Simpan Pengaturan Jadwal'}</span>
+            </button>
+          </div>
+
+          {/* Preset Cepat (Quick Presets) */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-slate-50 dark:from-indigo-950/30 dark:via-blue-950/20 dark:to-slate-900/40 border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                Preset Pintas Jam Kerja Dinas:
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('default_disdik')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-indigo-200 dark:border-indigo-800/60 hover:border-indigo-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200 group-hover:text-indigo-600 dark:group-hover:text-cyan-400">
+                  Standar Disdik HST (Resmi)
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Kamis pulang 16:30, Jumat pulang 11:00 (tanpa istirahat siang)
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('ramadhan')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-amber-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                  Bulan Ramadhan
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Kamis pulang 15:30, Jumat pulang 10:30
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('six_days')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                  Piket 6 Hari Kerja
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Jumat standar, Sabtu buka piket 08:00 - 13:00 WITA
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Tabel Matriks Jam Kerja 7 Hari */}
+          <div className="p-6 glass-card space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Clock className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+                <span>Matriks Jam Kerja Mingguan (Senin - Minggu)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Tentukan jam masuk, batas toleransi, sesi istirahat keluar/masuk, dan jam pulang untuk masing-masing hari kerja
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                { key: 'monday', label: 'Senin' },
+                { key: 'tuesday', label: 'Selasa' },
+                { key: 'wednesday', label: 'Rabu' },
+                { key: 'thursday', label: 'Kamis' },
+                { key: 'friday', label: 'Jumat' },
+                { key: 'saturday', label: 'Sabtu' },
+                { key: 'sunday', label: 'Minggu' },
+              ].map(({ key, label }) => {
+                const day = scheduleSettings.workSchedule[key] || {
+                  enabled: key !== 'saturday' && key !== 'sunday',
+                  dayName: label,
+                  clockInStart: '07:00',
+                  clockInEnd: '08:30',
+                  clockOutStart: key === 'friday' ? '11:00' : '16:30',
+                  clockOutEnd: '21:00',
+                  enableBreak: key !== 'friday' && key !== 'saturday' && key !== 'sunday',
+                  breakStart: '12:00',
+                  breakEnd: '13:00',
+                };
+
+                return (
+                  <div
+                    key={key}
+                    className={`p-4 rounded-2xl border transition-all ${
+                      day.enabled
+                        ? key === 'friday'
+                          ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50'
+                          : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
+                        : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/60 dark:border-slate-800/40 opacity-70'
+                    }`}
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      {/* Kolom 1: Nama Hari & Switch Aktif/Libur */}
+                      <div className="flex items-center gap-3 min-w-[160px]">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={day.enabled}
+                            onChange={(e) => handleDayToggle(key, e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-10 h-5 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+                        </label>
+                        <div>
+                          <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span>{label}</span>
+                            {key === 'friday' && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold">
+                                Khusus Jumat
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {day.enabled ? 'Hari Kerja Aktif' : 'Libur / Off'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Kolom 2: Jam Masuk & Jam Pulang */}
+                      {day.enabled ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 text-xs">
+                          {/* Jam Masuk */}
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Presensi Masuk (Clock In)
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={day.clockInStart}
+                                onChange={(e) => handleDayChange(key, 'clockInStart', e.target.value)}
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                              />
+                              <span className="text-slate-400 text-[11px]">s.d.</span>
+                              <input
+                                type="time"
+                                value={day.clockInEnd}
+                                onChange={(e) => handleDayChange(key, 'clockInEnd', e.target.value)}
+                                title="Batas toleransi masuk tepat waktu"
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Sesi Istirahat */}
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Sesi Istirahat Siang
+                              </span>
+                              <label className="text-[10px] flex items-center gap-1 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={day.enableBreak}
+                                  onChange={(e) => handleDayChange(key, 'enableBreak', e.target.checked)}
+                                  className="w-3.5 h-3.5 accent-indigo-600 rounded"
+                                />
+                                <span>Aktif</span>
+                              </label>
+                            </div>
+                            {day.enableBreak ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="time"
+                                  value={day.breakStart}
+                                  onChange={(e) => handleDayChange(key, 'breakStart', e.target.value)}
+                                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
+                                />
+                                <span className="text-slate-400 text-[11px]">-</span>
+                                <input
+                                  type="time"
+                                  value={day.breakEnd}
+                                  onChange={(e) => handleDayChange(key, 'breakEnd', e.target.value)}
+                                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
+                                />
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-slate-400 font-medium py-1">
+                                {key === 'friday' ? 'Ditiadakan (Langsung pulang jam 11:00)' : 'Nonaktif'}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Jam Pulang */}
+                          <div className={`p-2.5 rounded-xl border space-y-1 ${
+                            key === 'friday'
+                              ? 'bg-amber-100/60 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800'
+                              : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60'
+                          }`}>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Presensi Pulang (Clock Out)
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={day.clockOutStart}
+                                onChange={(e) => handleDayChange(key, 'clockOutStart', e.target.value)}
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-extrabold text-indigo-700 dark:text-cyan-400"
+                              />
+                              <span className="text-slate-400 text-[11px]">WITA</span>
+                              {key === 'friday' && (
+                                <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 ml-auto">
+                                  (Jam 11:00)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-400 font-medium italic flex-1 py-2">
+                          Tidak ada kewajiban presensi pada hari ini (Hari Libur / Bebas Tugas)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Pengaturan Kebijakan Sesi & Auto-Close */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 glass-card space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Coffee className="w-4 h-4 text-amber-600" />
+                <span>Aturan Sesi Istirahat Siang</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Atur fleksibilitas staf dalam melakukan presensi keluar dan masuk kembali saat istirahat siang
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleSettings.breakSettings.mandatory}
+                    onChange={(e) =>
+                      setScheduleSettings((prev) => ({
+                        ...prev,
+                        breakSettings: { ...prev.breakSettings, mandatory: e.target.checked },
+                      }))
+                    }
+                    className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-900 dark:text-white">Wajib Presensi Sesi Istirahat</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Jika diaktifkan, staf harus mencatatkan jam keluar istirahat dan jam masuk kembali sebelum diperbolehkan Clock Out pulang.
+                    </p>
+                  </div>
+                </label>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Toleransi Menit Keterlambatan Istirahat:</span>
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <input
+                      type="number"
+                      min={0}
+                      max={60}
+                      value={scheduleSettings.breakSettings.toleranceMinutes}
+                      onChange={(e) =>
+                        setScheduleSettings((prev) => ({
+                          ...prev,
+                          breakSettings: { ...prev.breakSettings, toleranceMinutes: parseInt(e.target.value) || 0 },
+                        }))
+                      }
+                      className="w-16 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center font-bold"
+                    />
+                    <span className="text-slate-500">menit</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 glass-card space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Moon className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+                <span>Kunci Otomatis (Auto-Close) Pergantian Hari</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Pencegahan sesi menggantung jika staf lupa melakukan Clock Out pada hari sebelumnya
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleSettings.autoCloseMissingClockOut}
+                    onChange={(e) =>
+                      setScheduleSettings((prev) => ({
+                        ...prev,
+                        autoCloseMissingClockOut: e.target.checked,
+                      }))
+                    }
+                    className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-900 dark:text-white">Auto-Close Otomatis pada 23:59 WITA</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Jika staf lupa Clock Out hingga tengah malam, sistem otomatis menutup sesi kemarin pada pukul 23:59:59 dan mereset hari baru bersih untuk Clock In masuk berikutnya.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Parameter Penugasan Lapangan (Dinas Luar) */}
+          <div className="p-6 glass-card space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-amber-600" />
+                <span>Parameter &amp; Kebijakan Penugasan Lapangan (Dinas Luar)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Pengaturan staf alih daya yang bertugas ke sekolah, korwil, pengawasan sarpras, atau kegiatan kedinasan luar kantor
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleSettings.fieldDutySettings.allowSelfAssignment}
+                  onChange={(e) =>
+                    setScheduleSettings((prev) => ({
+                      ...prev,
+                      fieldDutySettings: { ...prev.fieldDutySettings, allowSelfAssignment: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Izin Presensi Tugas Lapangan Mandiri</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Staf dapat mengaktifkan toggle "Tugas Lapangan / Dinas Luar" saat presensi selfie di lokasi tugas lapangan.
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleSettings.fieldDutySettings.bypassGeofenceOnFieldDuty}
+                  onChange={(e) =>
+                    setScheduleSettings((prev) => ({
+                      ...prev,
+                      fieldDutySettings: { ...prev.fieldDutySettings, bypassGeofenceOnFieldDuty: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Bypass Geofence saat Tugas Lapangan</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Menghilangkan peringatan pelanggaran merah di dashboard atasan jika staf telah mencentang mode tugas dinas luar.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Daftar Jenis Penugasan Lapangan Resmi */}
+            <div className="space-y-2 pt-2 border-t border-slate-200/80 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                Daftar Jenis Penugasan Lapangan Resmi Terdaftar:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {scheduleSettings.fieldDutySettings.allowedPurposes.map((purpose, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800"
+                  >
+                    <span>{purpose}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePurpose(idx)}
+                      className="text-amber-700 hover:text-amber-950 dark:text-amber-400 dark:hover:text-amber-100 cursor-pointer"
+                      title="Hapus Jenis Tugas"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              <div className="flex gap-2 pt-2 max-w-md">
+                <input
+                  type="text"
+                  value={newPurposeInput}
+                  onChange={(e) => setNewPurposeInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddPurpose()}
+                  placeholder="Tambah jenis penugasan dinas baru..."
+                  className="flex-1 text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddPurpose}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold hover:bg-slate-800 cursor-pointer transition-colors"
+                >
+                  Tambah
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Tombol Simpan Bawah */}
+          <div className="flex justify-end p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+            <button
+              type="button"
+              onClick={handleSaveScheduleSettings}
+              disabled={isSavingSchedule}
+              className="px-6 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-indigo-500/25"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSavingSchedule ? 'Menyimpan ke Server...' : 'Simpan Semua Pengaturan Jam Kerja & Presensi'}</span>
+            </button>
           </div>
         </div>
       )}
@@ -1684,6 +2723,459 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: JADWAL & ATURAN PRESENSI CANGGIH (SCHEDULE & WORK HOURS)           */}
+      {/* ========================================================================= */}
+      {activeTab === 'schedule' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Pengaturan Jadwal Jam Kerja &amp; Aturan Presensi Terpadu</span>
+                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                  WITA (Asia/Makassar)
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Konfigurasi jam masuk, jam pulang, istirahat per hari (Senin-Kamis 16:30, Jumat 11:00), auto-close, dan izin tugas lapangan
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveScheduleSettings}
+              disabled={isSavingSchedule}
+              className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-500/20 self-start sm:self-auto"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSavingSchedule ? 'Menyimpan...' : 'Simpan Pengaturan Jadwal'}</span>
+            </button>
+          </div>
+
+          {/* Preset Cepat (Quick Presets) */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-slate-50 dark:from-indigo-950/30 dark:via-blue-950/20 dark:to-slate-900/40 border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                Preset Pintas Jam Kerja Dinas:
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('default_disdik')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-indigo-200 dark:border-indigo-800/60 hover:border-indigo-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200 group-hover:text-indigo-600 dark:group-hover:text-cyan-400">
+                  Standar Disdik HST (Resmi)
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Kamis pulang 16:30, Jumat pulang 11:00 (tanpa istirahat siang)
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('ramadhan')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-amber-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                  Bulan Ramadhan
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Kamis pulang 15:30, Jumat pulang 10:30
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('six_days')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                  Piket 6 Hari Kerja
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Jumat standar, Sabtu buka piket 08:00 - 13:00 WITA
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Tabel Matriks Jam Kerja 7 Hari */}
+          <div className="p-6 glass-card space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Clock className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+                <span>Matriks Jam Kerja Mingguan (Senin - Minggu)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Tentukan jam masuk, batas toleransi, sesi istirahat keluar/masuk, dan jam pulang untuk masing-masing hari kerja
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                { key: 'monday', label: 'Senin' },
+                { key: 'tuesday', label: 'Selasa' },
+                { key: 'wednesday', label: 'Rabu' },
+                { key: 'thursday', label: 'Kamis' },
+                { key: 'friday', label: 'Jumat' },
+                { key: 'saturday', label: 'Sabtu' },
+                { key: 'sunday', label: 'Minggu' },
+              ].map(({ key, label }) => {
+                const day = scheduleSettings.workSchedule[key] || {
+                  enabled: key !== 'saturday' && key !== 'sunday',
+                  dayName: label,
+                  clockInStart: '07:00',
+                  clockInEnd: '08:30',
+                  clockOutStart: key === 'friday' ? '11:00' : '16:30',
+                  clockOutEnd: '21:00',
+                  enableBreak: key !== 'friday' && key !== 'saturday' && key !== 'sunday',
+                  breakStart: '12:00',
+                  breakEnd: '13:00',
+                };
+
+                return (
+                  <div
+                    key={key}
+                    className={`p-4 rounded-2xl border transition-all ${
+                      day.enabled
+                        ? key === 'friday'
+                          ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50'
+                          : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
+                        : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/60 dark:border-slate-800/40 opacity-70'
+                    }`}
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      {/* Kolom 1: Nama Hari & Switch Aktif/Libur */}
+                      <div className="flex items-center gap-3 min-w-[160px]">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={day.enabled}
+                            onChange={(e) => handleDayToggle(key, e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-10 h-5 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+                        </label>
+                        <div>
+                          <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span>{label}</span>
+                            {key === 'friday' && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold">
+                                Khusus Jumat
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {day.enabled ? 'Hari Kerja Aktif' : 'Libur / Off'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Kolom 2: Jam Masuk & Jam Pulang */}
+                      {day.enabled ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 text-xs">
+                          {/* Jam Masuk */}
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Presensi Masuk (Clock In)
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={day.clockInStart}
+                                onChange={(e) => handleDayChange(key, 'clockInStart', e.target.value)}
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                              />
+                              <span className="text-slate-400 text-[11px]">s.d.</span>
+                              <input
+                                type="time"
+                                value={day.clockInEnd}
+                                onChange={(e) => handleDayChange(key, 'clockInEnd', e.target.value)}
+                                title="Batas toleransi masuk tepat waktu"
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Sesi Istirahat */}
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Sesi Istirahat Siang
+                              </span>
+                              <label className="text-[10px] flex items-center gap-1 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={day.enableBreak}
+                                  onChange={(e) => handleDayChange(key, 'enableBreak', e.target.checked)}
+                                  className="w-3.5 h-3.5 accent-indigo-600 rounded"
+                                />
+                                <span>Aktif</span>
+                              </label>
+                            </div>
+                            {day.enableBreak ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="time"
+                                  value={day.breakStart}
+                                  onChange={(e) => handleDayChange(key, 'breakStart', e.target.value)}
+                                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
+                                />
+                                <span className="text-slate-400 text-[11px]">-</span>
+                                <input
+                                  type="time"
+                                  value={day.breakEnd}
+                                  onChange={(e) => handleDayChange(key, 'breakEnd', e.target.value)}
+                                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
+                                />
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-slate-400 font-medium py-1">
+                                {key === 'friday' ? 'Ditiadakan (Langsung pulang jam 11:00)' : 'Nonaktif'}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Jam Pulang */}
+                          <div className={`p-2.5 rounded-xl border space-y-1 ${
+                            key === 'friday'
+                              ? 'bg-amber-100/60 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800'
+                              : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60'
+                          }`}>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Presensi Pulang (Clock Out)
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={day.clockOutStart}
+                                onChange={(e) => handleDayChange(key, 'clockOutStart', e.target.value)}
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-extrabold text-indigo-700 dark:text-cyan-400"
+                              />
+                              <span className="text-slate-400 text-[11px]">WITA</span>
+                              {key === 'friday' && (
+                                <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 ml-auto">
+                                  (Jam 11:00)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-400 font-medium italic flex-1 py-2">
+                          Tidak ada kewajiban presensi pada hari ini (Hari Libur / Bebas Tugas)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Pengaturan Kebijakan Sesi & Auto-Close */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 glass-card space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Coffee className="w-4 h-4 text-amber-600" />
+                <span>Aturan Sesi Istirahat Siang</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Atur fleksibilitas staf dalam melakukan presensi keluar dan masuk kembali saat istirahat siang
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleSettings.breakSettings.mandatory}
+                    onChange={(e) =>
+                      setScheduleSettings((prev) => ({
+                        ...prev,
+                        breakSettings: { ...prev.breakSettings, mandatory: e.target.checked },
+                      }))
+                    }
+                    className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-900 dark:text-white">Wajib Presensi Sesi Istirahat</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Jika diaktifkan, staf harus mencatatkan jam keluar istirahat dan jam masuk kembali sebelum diperbolehkan Clock Out pulang.
+                    </p>
+                  </div>
+                </label>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Toleransi Menit Keterlambatan Istirahat:</span>
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <input
+                      type="number"
+                      min={0}
+                      max={60}
+                      value={scheduleSettings.breakSettings.toleranceMinutes}
+                      onChange={(e) =>
+                        setScheduleSettings((prev) => ({
+                          ...prev,
+                          breakSettings: { ...prev.breakSettings, toleranceMinutes: parseInt(e.target.value) || 0 },
+                        }))
+                      }
+                      className="w-16 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center font-bold"
+                    />
+                    <span className="text-slate-500">menit</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 glass-card space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Moon className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+                <span>Kunci Otomatis (Auto-Close) Pergantian Hari</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Pencegahan sesi menggantung jika staf lupa melakukan Clock Out pada hari sebelumnya
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleSettings.autoCloseMissingClockOut}
+                    onChange={(e) =>
+                      setScheduleSettings((prev) => ({
+                        ...prev,
+                        autoCloseMissingClockOut: e.target.checked,
+                      }))
+                    }
+                    className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-900 dark:text-white">Auto-Close Otomatis pada 23:59 WITA</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Jika staf lupa Clock Out hingga tengah malam, sistem otomatis menutup sesi kemarin pada pukul 23:59:59 dan mereset hari baru bersih untuk Clock In masuk berikutnya.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Parameter Penugasan Lapangan (Dinas Luar) */}
+          <div className="p-6 glass-card space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-amber-600" />
+                <span>Parameter &amp; Kebijakan Penugasan Lapangan (Dinas Luar)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Pengaturan staf alih daya yang bertugas ke sekolah, korwil, pengawasan sarpras, atau kegiatan kedinasan luar kantor
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleSettings.fieldDutySettings.allowSelfAssignment}
+                  onChange={(e) =>
+                    setScheduleSettings((prev) => ({
+                      ...prev,
+                      fieldDutySettings: { ...prev.fieldDutySettings, allowSelfAssignment: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Izin Presensi Tugas Lapangan Mandiri</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Staf dapat mengaktifkan toggle "Tugas Lapangan / Dinas Luar" saat presensi selfie di lokasi tugas lapangan.
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleSettings.fieldDutySettings.bypassGeofenceOnFieldDuty}
+                  onChange={(e) =>
+                    setScheduleSettings((prev) => ({
+                      ...prev,
+                      fieldDutySettings: { ...prev.fieldDutySettings, bypassGeofenceOnFieldDuty: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Bypass Geofence saat Tugas Lapangan</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Menghilangkan peringatan pelanggaran merah di dashboard atasan jika staf telah mencentang mode tugas dinas luar.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Daftar Jenis Penugasan Lapangan Resmi */}
+            <div className="space-y-2 pt-2 border-t border-slate-200/80 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                Daftar Jenis Penugasan Lapangan Resmi Terdaftar:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {scheduleSettings.fieldDutySettings.allowedPurposes.map((purpose, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800"
+                  >
+                    <span>{purpose}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePurpose(idx)}
+                      className="text-amber-700 hover:text-amber-950 dark:text-amber-400 dark:hover:text-amber-100 cursor-pointer"
+                      title="Hapus Jenis Tugas"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              <div className="flex gap-2 pt-2 max-w-md">
+                <input
+                  type="text"
+                  value={newPurposeInput}
+                  onChange={(e) => setNewPurposeInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddPurpose()}
+                  placeholder="Tambah jenis penugasan dinas baru..."
+                  className="flex-1 text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddPurpose}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold hover:bg-slate-800 cursor-pointer transition-colors"
+                >
+                  Tambah
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Tombol Simpan Bawah */}
+          <div className="flex justify-end p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+            <button
+              type="button"
+              onClick={handleSaveScheduleSettings}
+              disabled={isSavingSchedule}
+              className="px-6 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-indigo-500/25"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSavingSchedule ? 'Menyimpan ke Server...' : 'Simpan Semua Pengaturan Jam Kerja & Presensi'}</span>
+            </button>
           </div>
         </div>
       )}
@@ -2254,6 +3746,459 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: JADWAL & ATURAN PRESENSI CANGGIH (SCHEDULE & WORK HOURS)           */}
+      {/* ========================================================================= */}
+      {activeTab === 'schedule' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Pengaturan Jadwal Jam Kerja &amp; Aturan Presensi Terpadu</span>
+                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                  WITA (Asia/Makassar)
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Konfigurasi jam masuk, jam pulang, istirahat per hari (Senin-Kamis 16:30, Jumat 11:00), auto-close, dan izin tugas lapangan
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveScheduleSettings}
+              disabled={isSavingSchedule}
+              className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-500/20 self-start sm:self-auto"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSavingSchedule ? 'Menyimpan...' : 'Simpan Pengaturan Jadwal'}</span>
+            </button>
+          </div>
+
+          {/* Preset Cepat (Quick Presets) */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-slate-50 dark:from-indigo-950/30 dark:via-blue-950/20 dark:to-slate-900/40 border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                Preset Pintas Jam Kerja Dinas:
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('default_disdik')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-indigo-200 dark:border-indigo-800/60 hover:border-indigo-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200 group-hover:text-indigo-600 dark:group-hover:text-cyan-400">
+                  Standar Disdik HST (Resmi)
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Kamis pulang 16:30, Jumat pulang 11:00 (tanpa istirahat siang)
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('ramadhan')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-amber-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                  Bulan Ramadhan
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Kamis pulang 15:30, Jumat pulang 10:30
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('six_days')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                  Piket 6 Hari Kerja
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Senin-Jumat standar, Sabtu buka piket 08:00 - 13:00 WITA
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Tabel Matriks Jam Kerja 7 Hari */}
+          <div className="p-6 glass-card space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Clock className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+                <span>Matriks Jam Kerja Mingguan (Senin - Minggu)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Tentukan jam masuk, batas toleransi, sesi istirahat keluar/masuk, dan jam pulang untuk masing-masing hari kerja
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                { key: 'monday', label: 'Senin' },
+                { key: 'tuesday', label: 'Selasa' },
+                { key: 'wednesday', label: 'Rabu' },
+                { key: 'thursday', label: 'Kamis' },
+                { key: 'friday', label: 'Jumat' },
+                { key: 'saturday', label: 'Sabtu' },
+                { key: 'sunday', label: 'Minggu' },
+              ].map(({ key, label }) => {
+                const day = scheduleSettings.workSchedule[key] || {
+                  enabled: key !== 'saturday' && key !== 'sunday',
+                  dayName: label,
+                  clockInStart: '07:00',
+                  clockInEnd: '08:30',
+                  clockOutStart: key === 'friday' ? '11:00' : '16:30',
+                  clockOutEnd: '21:00',
+                  enableBreak: key !== 'friday' && key !== 'saturday' && key !== 'sunday',
+                  breakStart: '12:00',
+                  breakEnd: '13:00',
+                };
+
+                return (
+                  <div
+                    key={key}
+                    className={`p-4 rounded-2xl border transition-all ${
+                      day.enabled
+                        ? key === 'friday'
+                          ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50'
+                          : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
+                        : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/60 dark:border-slate-800/40 opacity-70'
+                    }`}
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      {/* Kolom 1: Nama Hari & Switch Aktif/Libur */}
+                      <div className="flex items-center gap-3 min-w-[160px]">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={day.enabled}
+                            onChange={(e) => handleDayToggle(key, e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-10 h-5 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+                        </label>
+                        <div>
+                          <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span>{label}</span>
+                            {key === 'friday' && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold">
+                                Khusus Jumat
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {day.enabled ? 'Hari Kerja Aktif' : 'Libur / Off'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Kolom 2: Jam Masuk & Jam Pulang */}
+                      {day.enabled ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 text-xs">
+                          {/* Jam Masuk */}
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Presensi Masuk (Clock In)
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={day.clockInStart}
+                                onChange={(e) => handleDayChange(key, 'clockInStart', e.target.value)}
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                              />
+                              <span className="text-slate-400 text-[11px]">s.d.</span>
+                              <input
+                                type="time"
+                                value={day.clockInEnd}
+                                onChange={(e) => handleDayChange(key, 'clockInEnd', e.target.value)}
+                                title="Batas toleransi masuk tepat waktu"
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Sesi Istirahat */}
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Sesi Istirahat Siang
+                              </span>
+                              <label className="text-[10px] flex items-center gap-1 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={day.enableBreak}
+                                  onChange={(e) => handleDayChange(key, 'enableBreak', e.target.checked)}
+                                  className="w-3.5 h-3.5 accent-indigo-600 rounded"
+                                />
+                                <span>Aktif</span>
+                              </label>
+                            </div>
+                            {day.enableBreak ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="time"
+                                  value={day.breakStart}
+                                  onChange={(e) => handleDayChange(key, 'breakStart', e.target.value)}
+                                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
+                                />
+                                <span className="text-slate-400 text-[11px]">-</span>
+                                <input
+                                  type="time"
+                                  value={day.breakEnd}
+                                  onChange={(e) => handleDayChange(key, 'breakEnd', e.target.value)}
+                                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
+                                />
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-slate-400 font-medium py-1">
+                                {key === 'friday' ? 'Ditiadakan (Langsung pulang jam 11:00)' : 'Nonaktif'}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Jam Pulang */}
+                          <div className={`p-2.5 rounded-xl border space-y-1 ${
+                            key === 'friday'
+                              ? 'bg-amber-100/60 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800'
+                              : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60'
+                          }`}>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                              Presensi Pulang (Clock Out)
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={day.clockOutStart}
+                                onChange={(e) => handleDayChange(key, 'clockOutStart', e.target.value)}
+                                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-extrabold text-indigo-700 dark:text-cyan-400"
+                              />
+                              <span className="text-slate-400 text-[11px]">WITA</span>
+                              {key === 'friday' && (
+                                <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 ml-auto">
+                                  (Jam 11:00)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-400 font-medium italic flex-1 py-2">
+                          Tidak ada kewajiban presensi pada hari ini (Hari Libur / Bebas Tugas)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Pengaturan Kebijakan Sesi & Auto-Close */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 glass-card space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Coffee className="w-4 h-4 text-amber-600" />
+                <span>Aturan Sesi Istirahat Siang</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Atur fleksibilitas staf dalam melakukan presensi keluar dan masuk kembali saat istirahat siang
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleSettings.breakSettings.mandatory}
+                    onChange={(e) =>
+                      setScheduleSettings((prev) => ({
+                        ...prev,
+                        breakSettings: { ...prev.breakSettings, mandatory: e.target.checked },
+                      }))
+                    }
+                    className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-900 dark:text-white">Wajib Presensi Sesi Istirahat</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Jika diaktifkan, staf harus mencatatkan jam keluar istirahat dan jam masuk kembali sebelum diperbolehkan Clock Out pulang.
+                    </p>
+                  </div>
+                </label>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Toleransi Menit Keterlambatan Istirahat:</span>
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <input
+                      type="number"
+                      min={0}
+                      max={60}
+                      value={scheduleSettings.breakSettings.toleranceMinutes}
+                      onChange={(e) =>
+                        setScheduleSettings((prev) => ({
+                          ...prev,
+                          breakSettings: { ...prev.breakSettings, toleranceMinutes: parseInt(e.target.value) || 0 },
+                        }))
+                      }
+                      className="w-16 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center font-bold"
+                    />
+                    <span className="text-slate-500">menit</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 glass-card space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Moon className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+                <span>Kunci Otomatis (Auto-Close) Pergantian Hari</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Pencegahan sesi menggantung jika staf lupa melakukan Clock Out pada hari sebelumnya
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleSettings.autoCloseMissingClockOut}
+                    onChange={(e) =>
+                      setScheduleSettings((prev) => ({
+                        ...prev,
+                        autoCloseMissingClockOut: e.target.checked,
+                      }))
+                    }
+                    className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-900 dark:text-white">Auto-Close Otomatis pada 23:59 WITA</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Jika staf lupa Clock Out hingga tengah malam, sistem otomatis menutup sesi kemarin pada pukul 23:59:59 dan mereset hari baru bersih untuk Clock In masuk berikutnya.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Parameter Penugasan Lapangan (Dinas Luar) */}
+          <div className="p-6 glass-card space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-amber-600" />
+                <span>Parameter &amp; Kebijakan Penugasan Lapangan (Dinas Luar)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Pengaturan staf alih daya yang bertugas ke sekolah, korwil, pengawasan sarpras, atau kegiatan kedinasan luar kantor
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleSettings.fieldDutySettings.allowSelfAssignment}
+                  onChange={(e) =>
+                    setScheduleSettings((prev) => ({
+                      ...prev,
+                      fieldDutySettings: { ...prev.fieldDutySettings, allowSelfAssignment: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Izin Presensi Tugas Lapangan Mandiri</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Staf dapat mengaktifkan toggle "Tugas Lapangan / Dinas Luar" saat presensi selfie di lokasi tugas lapangan.
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleSettings.fieldDutySettings.bypassGeofenceOnFieldDuty}
+                  onChange={(e) =>
+                    setScheduleSettings((prev) => ({
+                      ...prev,
+                      fieldDutySettings: { ...prev.fieldDutySettings, bypassGeofenceOnFieldDuty: e.target.checked },
+                    }))
+                  }
+                  className="w-4 h-4 mt-0.5 accent-indigo-600 rounded"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white">Bypass Geofence saat Tugas Lapangan</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Menghilangkan peringatan pelanggaran merah di dashboard atasan jika staf telah mencentang mode tugas dinas luar.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Daftar Jenis Penugasan Lapangan Resmi */}
+            <div className="space-y-2 pt-2 border-t border-slate-200/80 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                Daftar Jenis Penugasan Lapangan Resmi Terdaftar:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {scheduleSettings.fieldDutySettings.allowedPurposes.map((purpose, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800"
+                  >
+                    <span>{purpose}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePurpose(idx)}
+                      className="text-amber-700 hover:text-amber-950 dark:text-amber-400 dark:hover:text-amber-100 cursor-pointer"
+                      title="Hapus Jenis Tugas"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              <div className="flex gap-2 pt-2 max-w-md">
+                <input
+                  type="text"
+                  value={newPurposeInput}
+                  onChange={(e) => setNewPurposeInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddPurpose()}
+                  placeholder="Tambah jenis penugasan dinas baru..."
+                  className="flex-1 text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddPurpose}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold hover:bg-slate-800 cursor-pointer transition-colors"
+                >
+                  Tambah
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Tombol Simpan Bawah */}
+          <div className="flex justify-end p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+            <button
+              type="button"
+              onClick={handleSaveScheduleSettings}
+              disabled={isSavingSchedule}
+              className="px-6 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-indigo-500/25"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSavingSchedule ? 'Menyimpan ke Server...' : 'Simpan Semua Pengaturan Jam Kerja & Presensi'}</span>
+            </button>
           </div>
         </div>
       )}

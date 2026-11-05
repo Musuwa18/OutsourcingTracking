@@ -14,9 +14,12 @@ import {
   Cpu,
   RefreshCw,
   AlertTriangle,
+  Briefcase,
+  Coffee,
 } from 'lucide-react';
-import { StaffProfile, AttendanceRecord, DailyWorkReport } from '../types';
+import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
+import { getDayOfWeekKey } from '../utils/date';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { WatermarkCameraModal } from '../components/WatermarkCameraModal';
 import { AiDuplicateValidationModal } from '../components/AiDuplicateValidationModal';
@@ -30,8 +33,11 @@ interface StaffHomeViewProps {
   allReports?: DailyWorkReport[];
   staffList?: StaffProfile[];
   activeStaffId?: string;
+  attendanceSettings?: AttendanceGlobalSettings;
   onSwitchStaff?: (staffId: string) => void;
   onClockIn: (selfieBase64: string, locationData: any) => void;
+  onBreakOut?: (selfieBase64: string, locationData: any) => void;
+  onBreakIn?: (selfieBase64: string, locationData: any) => void;
   onClockOut: (selfieBase64: string, locationData: any) => void;
   onSubmitReport: (newReport: Omit<DailyWorkReport, 'id' | 'createdAt'>) => void;
 }
@@ -43,14 +49,20 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   allReports = [],
   staffList = [],
   activeStaffId,
+  attendanceSettings,
   onSwitchStaff,
   onClockIn,
+  onBreakOut,
+  onBreakIn,
   onClockOut,
   onSubmitReport,
 }) => {
   const safeOffice = staff?.assignedLocation || PRIMARY_OFFICES[0];
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
-  const [actionType, setActionType] = useState<'clock-in' | 'clock-out'>('clock-in');
+  const [actionType, setActionType] = useState<'clock-in' | 'clock-out' | 'break-out' | 'break-in'>('clock-in');
+
+  const todayDayKey = getDayOfWeekKey();
+  const todaySchedule = attendanceSettings?.workSchedule?.[todayDayKey] || DEFAULT_ATTENDANCE_SETTINGS.workSchedule[todayDayKey];
 
   // Report modal state
   const [watermarkModalOpen, setWatermarkModalOpen] = useState(false);
@@ -78,9 +90,53 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   } | null>(null);
 
   const hasClockedIn = !!todayAttendance && todayAttendance.status !== 'Izin';
+  const hasBrokenOut = !!todayAttendance?.breakOutTime && todayAttendance.breakOutTime !== '-';
+  const hasBrokenIn = !!todayAttendance?.breakInTime && todayAttendance.breakInTime !== '-';
   const hasClockedOut = !!todayAttendance?.clockOutTime && todayAttendance.clockOutTime !== '-';
 
-  const handleOpenAttendance = (type: 'clock-in' | 'clock-out') => {
+  const computeActiveWorkDuration = () => {
+    if (!todayAttendance?.clockInTime) return 'Belum Dimulai';
+    
+    const [inH, inM] = todayAttendance.clockInTime.replace(/\./g, ':').split(':').map(Number);
+    if (isNaN(inH) || isNaN(inM)) return 'Aktif';
+
+    let endH: number;
+    let endM: number;
+    if (todayAttendance.clockOutTime && todayAttendance.clockOutTime !== '-') {
+      const [oH, oM] = todayAttendance.clockOutTime.replace(/\./g, ':').split(':').map(Number);
+      endH = isNaN(oH) ? inH : oH;
+      endM = isNaN(oM) ? inM : oM;
+    } else {
+      const now = new Date();
+      const witaStr = new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Makassar',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(now).replace(/\./g, ':');
+      const [nH, nM] = witaStr.split(':').map(Number);
+      endH = isNaN(nH) ? inH : nH;
+      endM = isNaN(nM) ? inM : nM;
+    }
+
+    let diffMinutes = (endH * 60 + endM) - (inH * 60 + inM);
+    if (diffMinutes < 0) diffMinutes += 24 * 60;
+
+    if (todayAttendance.breakOutTime && todayAttendance.breakInTime) {
+      const [bOutH, bOutM] = todayAttendance.breakOutTime.replace(/\./g, ':').split(':').map(Number);
+      const [bInH, bInM] = todayAttendance.breakInTime.replace(/\./g, ':').split(':').map(Number);
+      if (!isNaN(bOutH) && !isNaN(bInH)) {
+        const breakMins = (bInH * 60 + bInM) - (bOutH * 60 + bOutM);
+        if (breakMins > 0) diffMinutes = Math.max(0, diffMinutes - breakMins);
+      }
+    }
+
+    const hours = Math.floor(diffMinutes / 60);
+    const mins = diffMinutes % 60;
+    return `${hours}j ${mins}m`;
+  };
+
+  const handleOpenAttendance = (type: 'clock-in' | 'clock-out' | 'break-out' | 'break-in') => {
     setActionType(type);
     setCameraModalOpen(true);
   };
@@ -88,6 +144,12 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   const handleAttendanceCapture = (selfieBase64: string, locationData: any) => {
     if (actionType === 'clock-in') {
       onClockIn(selfieBase64, locationData);
+    } else if (actionType === 'break-out') {
+      if (onBreakOut) onBreakOut(selfieBase64, locationData);
+      else onClockOut(selfieBase64, locationData);
+    } else if (actionType === 'break-in') {
+      if (onBreakIn) onBreakIn(selfieBase64, locationData);
+      else onClockIn(selfieBase64, locationData);
     } else {
       onClockOut(selfieBase64, locationData);
     }
@@ -236,20 +298,30 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         </div>
       </div>
 
-      {/* Friendly Reminder Banner before 17:00 */}
-      {(!hasClockedIn || todayReports.length === 0) && (
-        <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-900/60 flex items-start gap-3">
-          <AlertCircle className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-950 dark:text-amber-200 space-y-0.5">
-            <span className="font-bold">Pengingat Operasional Hari Ini:</span>
-            <p className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-300 font-medium">
-              {!hasClockedIn
-                ? 'Anda belum melakukan Clock In masuk. Harap lakukan presensi selfie WebRTC di lokasi tugas.'
-                : 'Harap selesaikan dan kirim minimal 1 Laporan Kinerja Harian sebelum pukul 17:00 WIB.'}
-            </p>
+      {/* Friendly Schedule & Operational Reminder Banner */}
+      <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/30 border border-amber-300 dark:border-amber-900/60 flex items-start gap-3">
+        <AlertCircle className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div className="text-xs text-amber-950 dark:text-amber-200 space-y-1 w-full">
+          <div className="flex items-center justify-between">
+            <span className="font-bold">Jadwal Tugas Hari Ini ({todaySchedule?.dayName || 'Hari Kerja'}):</span>
+            <span className="font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+              Pulang: {todaySchedule?.clockOutStart || '16:30'} WITA
+            </span>
           </div>
+          <p className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-300 font-medium">
+            {!todaySchedule?.enabled
+              ? 'Hari ini dijadwalkan libur / non-operasional resmi dinas.'
+              : todaySchedule?.enableBreak
+              ? `Masuk: ${todaySchedule.clockInStart} - ${todaySchedule.clockInEnd} WITA · Istirahat: ${todaySchedule.breakStart} - ${todaySchedule.breakEnd} WITA · Pulang: ${todaySchedule.clockOutStart} WITA.`
+              : `Hari Jumat: Masuk ${todaySchedule.clockInStart} - ${todaySchedule.clockInEnd} WITA · Pulang pukul ${todaySchedule.clockOutStart} WITA (Langsung pulang tanpa sesi istirahat siang).`}
+          </p>
+          {!hasClockedIn && (
+            <p className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold pt-0.5">
+              👉 Anda belum Clock In masuk hari ini. Silakan lakukan selfie WebRTC di lokasi penugasan.
+            </p>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Profile & Shift Status Header Card */}
       <div className="p-5 glass-card space-y-4">
@@ -275,11 +347,60 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           </span>
         </div>
 
-        {/* Assigned Location Badge */}
-        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 backdrop-blur-md text-xs text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10 font-medium">
-          <MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-          <span className="truncate">Lokasi Tugas: <strong className="text-slate-900 dark:text-white">{safeOffice.name || PRIMARY_OFFICES[0].name}</strong></span>
-        </div>
+        {/* Assigned Location Badge or Field Duty Badge */}
+        {todayAttendance?.isFieldDuty ? (
+          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-xs text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800 font-medium">
+            <Briefcase className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="truncate">Penugasan Lapangan: <strong className="text-amber-950 dark:text-amber-100">{todayAttendance.fieldDutyNotes || 'Dinas Luar Resmi'}</strong></span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 backdrop-blur-md text-xs text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10 font-medium">
+            <MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span className="truncate">Lokasi Tugas: <strong className="text-slate-900 dark:text-white">{safeOffice.name || PRIMARY_OFFICES[0].name}</strong></span>
+          </div>
+        )}
+
+        {/* Sesi Istirahat Siang (Jika Diaktifkan Superadmin & Staf Sudah Clock-In) */}
+        {todaySchedule?.enableBreak && hasClockedIn && !hasClockedOut && (
+          <div className="p-3 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+              <Coffee className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <div>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  Sesi Istirahat ({todaySchedule.breakStart} - {todaySchedule.breakEnd} WITA)
+                </span>
+                <p className="text-[10px] text-slate-500">
+                  {hasBrokenOut && !hasBrokenIn
+                    ? `Sedang istirahat sejak ${todayAttendance?.breakOutTime} WITA`
+                    : hasBrokenIn
+                    ? `Istirahat selesai (${todayAttendance?.breakOutTime} - ${todayAttendance?.breakInTime} WITA)`
+                    : 'Tekan tombol saat keluar istirahat'}
+                </p>
+              </div>
+            </div>
+            {!hasBrokenOut ? (
+              <button
+                type="button"
+                onClick={() => handleOpenAttendance('break-out')}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shadow-xs cursor-pointer transition-all"
+              >
+                Istirahat Keluar
+              </button>
+            ) : !hasBrokenIn ? (
+              <button
+                type="button"
+                onClick={() => handleOpenAttendance('break-in')}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs cursor-pointer transition-all"
+              >
+                Selesai Istirahat
+              </button>
+            ) : (
+              <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                Tuntas
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Floating Action Card for Smart Attendance */}
         <div className="pt-2 grid grid-cols-2 gap-3">
@@ -301,7 +422,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               </span>
             </div>
             <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
-              {hasClockedIn ? `${todayAttendance?.clockInTime} WIB` : 'Live Selfie + GPS'}
+              {hasClockedIn ? `${todayAttendance?.clockInTime} WITA` : 'Live Selfie + GPS'}
             </span>
           </button>
 
@@ -321,11 +442,11 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
             <div className="flex items-center gap-1.5">
               <Clock className="w-4 h-4" />
               <span className="text-xs font-bold">
-                {hasClockedOut ? 'Sudah Clock Out' : 'Clock Out Pulang'}
+                {hasClockedOut ? 'Sudah Clock Out' : `Clock Out (${todaySchedule?.clockOutStart || '16:30'})`}
               </span>
             </div>
             <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
-              {hasClockedOut ? `${todayAttendance?.clockOutTime} WIB` : 'Kunci Jam Kerja'}
+              {hasClockedOut ? `${todayAttendance?.clockOutTime} WITA` : 'Kunci Jam Kerja'}
             </span>
           </button>
         </div>
@@ -342,7 +463,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         <div className="p-4 glass-card">
           <div className="text-[11px] text-slate-700 dark:text-slate-300 font-bold">Durasi Kerja Aktif</div>
           <div className="text-xl font-bold font-mono text-indigo-700 dark:text-cyan-400 mt-1">
-            {hasClockedIn ? '7j 35m' : 'Belum Dimulai'}
+            {computeActiveWorkDuration()}
           </div>
         </div>
       </div>

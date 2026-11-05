@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AttendanceRecord, StaffProfile, DailyWorkReport } from '../types';
 import { exportAttendanceToCSV } from '../utils/export';
+import { getTodayDateStr } from '../utils/date';
 import { AttendanceInspectionModal } from '../components/AttendanceInspectionModal';
 import { GeofenceBreachAlertBanner } from '../components/GeofenceBreachAlertBanner';
 
@@ -39,7 +40,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDivision, setSelectedDivision] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
-  const [selectedDate, setSelectedDate] = useState('2026-10-09');
+  const [selectedDate, setSelectedDate] = useState(getTodayDateStr());
 
   // Inspection modal state
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
@@ -59,7 +60,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
     if (selectedDivision !== 'ALL' && staff.division !== selectedDivision) return false;
 
     if (selectedStatus === 'BREACH') {
-      if (rec.locationCoords.withinRadius) return false;
+      if (rec.locationCoords.withinRadius || rec.isFieldDuty) return false;
     } else if (selectedStatus !== 'ALL' && rec.status !== selectedStatus) {
       return false;
     }
@@ -81,7 +82,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   const terlambatCount = dayLogs.filter((r) => r.status === 'Terlambat').length;
   const izinCount = dayLogs.filter((r) => r.status === 'Izin').length;
   const dayReports = dailyReports.filter((r) => r.date === selectedDate);
-  const dayBreaches = dayLogs.filter((r) => !r.locationCoords.withinRadius);
+  const dayBreaches = dayLogs.filter((r) => !r.locationCoords.withinRadius && !r.isFieldDuty);
 
   const handleRowClick = (rec: AttendanceRecord) => {
     const staff = staffMap.get(rec.staffId) || null;
@@ -291,7 +292,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
                   const staffReportToday = dailyReports.find(
                     (r) => r.staffId === rec.staffId && r.date === rec.date
                   );
-                  const isOutsideRadius = !rec.locationCoords.withinRadius;
+                  const isOutsideRadius = !rec.locationCoords.withinRadius && !rec.isFieldDuty;
 
                   return (
                     <tr
@@ -372,7 +373,12 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
                             {rec.locationCoords.locationName}
                           </span>
                         </div>
-                        {isOutsideRadius ? (
+                        {rec.isFieldDuty ? (
+                          <div className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>Tugas Lapangan: {rec.fieldDutyNotes || 'Dinas Luar'}</span>
+                          </div>
+                        ) : isOutsideRadius ? (
                           <div className="text-[10px] font-mono font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1">
                             <AlertTriangle className="w-3 h-3 shrink-0" />
                             <span>{rec.locationCoords.distanceMeters}m (Luar Radius!)</span>

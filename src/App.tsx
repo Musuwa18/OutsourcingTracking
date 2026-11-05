@@ -20,6 +20,8 @@ import {
   RolePermissions,
   SupervisorMapping,
   EnterpriseSecurityConfig,
+  AttendanceGlobalSettings,
+  DEFAULT_ATTENDANCE_SETTINGS,
 } from './types';
 import {
   MOCK_STAFF,
@@ -70,7 +72,9 @@ import {
   apiSubmitReport,
   apiApproveReport,
   apiSubmitEvaluation,
+  apiGetAttendanceSettings,
 } from './services/api';
+import { getTodayDateStr, getCurrentWitaTimeStr } from './utils/date';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { SessionTimeoutModal } from './components/SessionTimeoutModal';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
@@ -250,10 +254,18 @@ export default function App() {
     });
 
     // 1. Sinkronisasi Server-First Riwayat Presensi (Clock In / Out) dari SQLite
-    apiFetchAttendance().then((attList) => {
+    apiFetchAttendance({ todayDateStr: getTodayDateStr() }).then((attList) => {
       if (attList && attList.length > 0) {
         setAttendanceRecords(attList);
         localStorage.setItem('ot_attendance_records', JSON.stringify(attList));
+      }
+    });
+
+    // 1b. Sinkronisasi Pengaturan Presensi & Jam Kerja dari SQLite
+    apiGetAttendanceSettings().then((settings) => {
+      if (settings) {
+        setAttendanceSettings(settings);
+        localStorage.setItem('ot_attendance_settings', JSON.stringify(settings));
       }
     });
 
@@ -286,7 +298,7 @@ export default function App() {
       }
 
       // Re-fetch presensi & laporan setiap kali user login atau sesi diperbarui
-      apiFetchAttendance().then((attList) => {
+      apiFetchAttendance({ todayDateStr: getTodayDateStr() }).then((attList) => {
         if (attList && attList.length > 0) {
           setAttendanceRecords(attList);
           localStorage.setItem('ot_attendance_records', JSON.stringify(attList));
@@ -514,6 +526,16 @@ export default function App() {
     return INITIAL_SECURITY_CONFIG;
   });
 
+  const [attendanceSettings, setAttendanceSettings] = useState<AttendanceGlobalSettings>(() => {
+    const saved = localStorage.getItem('ot_attendance_settings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return DEFAULT_ATTENDANCE_SETTINGS;
+  });
+
   // Gemini AI Analytics & Custom Location Modal States
   const [aiChatOpen, setAiChatOpen] = useState<boolean>(false);
   const [customLocationStaff, setCustomLocationStaff] = useState<StaffProfile | null>(null);
@@ -700,8 +722,8 @@ export default function App() {
     return computeMonthlyAggregates(staffList, weeklyEvaluations, '2026-10');
   }, [staffList, weeklyEvaluations]);
 
-  // Today's attendance for active staff
-  const todayDateStr = '2026-10-09';
+  // Today's attendance for active staff (Auto-reset based on real-time WITA date)
+  const todayDateStr = getTodayDateStr();
   const staffTodayAttendance = attendanceRecords.find(
     (a) => (a.staffId === currentStaff?.id || a.staffId === currentUser?.id) && a.date === todayDateStr
   );
@@ -712,9 +734,9 @@ export default function App() {
   // Pending daily reports for supervisor badge
   const pendingReportsCount = dailyReports.filter((r) => r.supervisorApproval === 'Pending').length;
 
-  // Active geofence breach count for today
+  // Active geofence breach count for today (excluding approved field duty)
   const geofenceBreachCount = attendanceRecords.filter(
-    (r) => r.date === todayDateStr && (r.locationCoords ? !r.locationCoords.withinRadius : false)
+    (r) => r.date === todayDateStr && (r.locationCoords ? !r.locationCoords.withinRadius && !r.isFieldDuty : false)
   ).length;
 
   // Dark mode effect
@@ -786,9 +808,11 @@ export default function App() {
 
   // Handle Clock In (Staff)
   const handleClockIn = (selfieBase64: string, locationData: any) => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('id-ID', { hour12: false });
+    const timeStr = getCurrentWitaTimeStr();
     const targetStaffId = currentStaff?.id || 'usr-os-default';
+
+    const isFieldDuty = Boolean(locationData.isFieldDuty);
+    const fieldDutyNotes = locationData.fieldDutyNotes || undefined;
 
     const newRecord: AttendanceRecord = {
       id: `att-${targetStaffId}-${todayDateStr}`,
@@ -798,7 +822,9 @@ export default function App() {
       selfieUrl: selfieBase64,
       locationCoords: locationData,
       status: 'Hadir',
-      verifiedBy: 'Sistem Geofence WebRTC',
+      verifiedBy: isFieldDuty ? 'Disetujui: Penugasan Lapangan' : 'Sistem Geofence WebRTC',
+      isFieldDuty,
+      fieldDutyNotes,
     };
 
     setAttendanceRecords((prev) => {
@@ -816,10 +842,24 @@ export default function App() {
       selfieUrl: selfieBase64,
       locationCoords: locationData,
       status: 'Hadir',
-      verifiedBy: 'Sistem Geofence WebRTC',
+      verifiedBy: isFieldDuty ? 'Disetujui: Penugasan Lapangan' : 'Sistem Geofence WebRTC',
+      isFieldDuty,
+      fieldDutyNotes,
     }).catch((err) => console.warn('Sync attendance failed:', err));
 
-    if (!locationData.withinRadius) {
+    if (isFieldDuty) {
+      addAuditLog(
+        'Presensi Penugasan Lapangan (Clock In)',
+        `${currentStaff?.name || 'Staf'} melakukan Clock-In Tugas Lapangan (${fieldDutyNotes || 'Dinas Luar'}). Koordinat: ${locationData.latitude ? locationData.latitude.toFixed(6) : '-'}, ${locationData.longitude ? locationData.longitude.toFixed(6) : '-'}. Radius dilewati otomatis sesuai kebijakan penugasan.`,
+        'Kehadiran'
+      );
+
+      addNotification(
+        'Presensi Tugas Lapangan Berhasil',
+        `Clock In Tugas Lapangan tercatat pada pukul ${timeStr} WITA (${fieldDutyNotes || 'Dinas Luar'}).`,
+        'attendance'
+      );
+    } else if (!locationData.withinRadius) {
       addAuditLog(
         'Pelanggaran Geofence: Presensi di Luar Radius',
         `PERINGATAN GEOFENCE: ${currentStaff?.name || 'Staf'} presensi di luar radius aman (${locationData.distanceMeters}m dari ${locationData.locationName}, batas radius ${currentStaff?.assignedLocation?.radiusMeters || 80}m). Notifikasi otomatis dikirim ke supervisor.`,
@@ -834,22 +874,97 @@ export default function App() {
     } else {
       addAuditLog(
         'Presensi Masuk (Clock In)',
-        `Berhasil clock-in selfie WebRTC pada ${timeStr} WIB di ${locationData.locationName} (Jarak: ${locationData.distanceMeters}m, Akurasi: ±${Math.round(locationData.accuracy)}m).`,
+        `Berhasil clock-in selfie WebRTC pada ${timeStr} WITA di ${locationData.locationName} (Jarak: ${locationData.distanceMeters}m, Akurasi: ±${Math.round(locationData.accuracy || 0)}m).`,
         'Kehadiran'
       );
 
       addNotification(
         'Presensi Masuk Berhasil',
-        `Clock In Anda pada pukul ${timeStr} WIB telah diverifikasi dan terkunci otomatis oleh server.`,
+        `Clock In Anda pada pukul ${timeStr} WITA telah diverifikasi dan terkunci otomatis oleh server.`,
         'attendance'
       );
     }
   };
 
+  // Handle Break Out (Staff)
+  const handleBreakOut = (selfieBase64: string, locationData: any) => {
+    const timeStr = getCurrentWitaTimeStr();
+    const targetStaffId = currentStaff?.id || 'usr-os-default';
+
+    setAttendanceRecords((prev) =>
+      prev.map((r) => {
+        if (r.staffId === targetStaffId && r.date === todayDateStr) {
+          return {
+            ...r,
+            breakOutTime: timeStr,
+          };
+        }
+        return r;
+      })
+    );
+
+    apiSubmitAttendance({
+      staffId: targetStaffId,
+      date: todayDateStr,
+      breakOutTime: timeStr,
+      locationCoords: locationData,
+      status: 'Hadir',
+    }).catch((err) => console.warn('Sync break-out failed:', err));
+
+    addAuditLog(
+      'Sesi Istirahat Keluar (Break Out)',
+      `Staf (${currentStaff?.name || 'Staf'}) mencatat jam istirahat keluar pada ${timeStr} WITA.`,
+      'Kehadiran'
+    );
+
+    addNotification(
+      'Istirahat Dimulai',
+      `Jam istirahat keluar tercatat pada ${timeStr} WITA. Selamat beristirahat.`,
+      'attendance'
+    );
+  };
+
+  // Handle Break In (Staff)
+  const handleBreakIn = (selfieBase64: string, locationData: any) => {
+    const timeStr = getCurrentWitaTimeStr();
+    const targetStaffId = currentStaff?.id || 'usr-os-default';
+
+    setAttendanceRecords((prev) =>
+      prev.map((r) => {
+        if (r.staffId === targetStaffId && r.date === todayDateStr) {
+          return {
+            ...r,
+            breakInTime: timeStr,
+          };
+        }
+        return r;
+      })
+    );
+
+    apiSubmitAttendance({
+      staffId: targetStaffId,
+      date: todayDateStr,
+      breakInTime: timeStr,
+      locationCoords: locationData,
+      status: 'Hadir',
+    }).catch((err) => console.warn('Sync break-in failed:', err));
+
+    addAuditLog(
+      'Sesi Kembali Kerja (Break In)',
+      `Staf (${currentStaff?.name || 'Staf'}) kembali dari istirahat pada ${timeStr} WITA. Melanjutkan dinas aktif.`,
+      'Kehadiran'
+    );
+
+    addNotification(
+      'Kembali Bertugas',
+      `Jam selesai istirahat tercatat pada ${timeStr} WITA. Selamat melanjutkan tugas!`,
+      'attendance'
+    );
+  };
+
   // Handle Clock Out (Staff)
   const handleClockOut = (selfieBase64: string, locationData: any) => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('id-ID', { hour12: false });
+    const timeStr = getCurrentWitaTimeStr();
     const targetStaffId = currentStaff?.id || 'usr-os-default';
 
     setAttendanceRecords((prev) =>
@@ -877,13 +992,13 @@ export default function App() {
 
     addAuditLog(
       'Presensi Pulang (Clock Out)',
-      `Berhasil clock-out pada ${timeStr} WIB. Jam kerja harian terkunci.`,
+      `Berhasil clock-out pada ${timeStr} WITA. Jam kerja harian terkunci.`,
       'Kehadiran'
     );
 
     addNotification(
       'Presensi Pulang Terkunci',
-      `Clock Out tercatat pada ${timeStr} WIB. Terima kasih atas dedikasi kerja Anda hari ini!`,
+      `Clock Out tercatat pada ${timeStr} WITA. Terima kasih atas dedikasi kerja Anda hari ini!`,
       'attendance'
     );
   };
@@ -1188,7 +1303,10 @@ export default function App() {
                   allReports={dailyReports}
                   staffList={staffList}
                   activeStaffId={currentStaff?.id || ''}
+                  attendanceSettings={attendanceSettings}
                   onClockIn={handleClockIn}
+                  onBreakOut={handleBreakOut}
+                  onBreakIn={handleBreakIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
                 />
@@ -1202,7 +1320,10 @@ export default function App() {
                   allReports={dailyReports}
                   staffList={staffList}
                   activeStaffId={currentStaff?.id || ''}
+                  attendanceSettings={attendanceSettings}
                   onClockIn={handleClockIn}
+                  onBreakOut={handleBreakOut}
+                  onBreakIn={handleBreakIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
                 />
@@ -1344,6 +1465,8 @@ export default function App() {
                   onUpdateSupervisorMappings={handleUpdateSupervisorMappings}
                   securityConfig={securityConfig}
                   onUpdateSecurityConfig={handleUpdateSecurityConfig}
+                  attendanceSettings={attendanceSettings}
+                  onUpdateAttendanceSettings={(s) => setAttendanceSettings(s)}
                   onShowToast={showToast}
                 />
               )}

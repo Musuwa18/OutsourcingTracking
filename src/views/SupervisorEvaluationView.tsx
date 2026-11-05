@@ -27,6 +27,7 @@ import {
   AttendanceRecord,
   AuthUser,
 } from '../types';
+import { getTodayDateStr } from '../utils/date';
 import { StarRating } from '../components/StarRating';
 import { GeofenceBreachAlertBanner } from '../components/GeofenceBreachAlertBanner';
 import { AttendanceInspectionModal } from '../components/AttendanceInspectionModal';
@@ -73,7 +74,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
   // Evaluation Form State
   const [selectedStaffId, setSelectedStaffId] = useState(staffList[0]?.id || '');
   const [selectedWeek, setSelectedWeek] = useState<number>(2);
-  const [evaluationDate, setEvaluationDate] = useState('2026-10-09'); // Friday
+  const [evaluationDate, setEvaluationDate] = useState(getTodayDateStr());
 
   // Searchable Staff Picker State (Scalable for hundreds of staff)
   const [isStaffPickerOpen, setIsStaffPickerOpen] = useState(false);
@@ -120,7 +121,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
   // Geofence breaches today
   const todayBreaches = attendanceRecords.filter(
-    (r) => r.date === '2026-10-09' && !r.locationCoords.withinRadius
+    (r) => r.date === evaluationDate && !r.locationCoords.withinRadius && !r.isFieldDuty
   );
 
   // 4 Pillars & 11 Competencies

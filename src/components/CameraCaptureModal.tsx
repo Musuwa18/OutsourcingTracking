@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, RefreshCw, X, ShieldCheck, AlertCircle, MapPin, CheckCircle2, Navigation } from 'lucide-react';
+import { Camera, RefreshCw, X, ShieldCheck, AlertCircle, MapPin, CheckCircle2, Navigation, Briefcase, FileText, Check } from 'lucide-react';
 import { OfficeLocation } from '../types';
 import { formatDistance, PRIMARY_OFFICES } from '../utils/geo';
 import { GeofenceRadarMap } from './GeofenceRadarMap';
@@ -15,9 +15,11 @@ interface CameraCaptureModalProps {
     distanceMeters: number;
     withinRadius: boolean;
     locationName: string;
+    isFieldDuty?: boolean;
+    fieldDutyNotes?: string;
   }) => void;
   assignedLocation?: OfficeLocation;
-  actionType: 'clock-in' | 'clock-out';
+  actionType: 'clock-in' | 'clock-out' | 'break-out' | 'break-in';
 }
 
 export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
@@ -57,6 +59,11 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   // Mode Tampilan: Kamera Selfie vs Peta Radar Lokasi
   const [activeViewTab, setActiveViewTab] = useState<'camera' | 'map'>('camera');
+
+  // Mode Tugas Lapangan / Dinas Luar
+  const [isFieldDuty, setIsFieldDuty] = useState(false);
+  const [fieldDutyPurpose, setFieldDutyPurpose] = useState('Monitoring & Pengawasan Sekolah');
+  const [fieldDutyNotes, setFieldDutyNotes] = useState('');
 
   // Jaga video stream WebRTC tetap hidup & terhubung saat berpindah tab (Anti-Black Screen)
   useEffect(() => {
@@ -111,7 +118,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       month: 'short',
       year: 'numeric',
     });
-    setServerTime(`${dateFormatted} · ${timeFormatted} WIB`);
+    setServerTime(`${dateFormatted} · ${timeFormatted} WITA`);
 
     startCamera();
     detectGeolocation();
@@ -324,16 +331,28 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       latitude: coords.latitude,
       longitude: coords.longitude,
       accuracy: coords.accuracy,
-      distanceMeters: coords.distance,
-      withinRadius: coords.withinRadius,
-      locationName: targetName,
+      distanceMeters: Math.round(coords.distance),
+      withinRadius: isFieldDuty ? true : coords.withinRadius,
+      locationName: isFieldDuty ? `Tugas Lapangan (${fieldDutyPurpose})` : targetName,
+      isFieldDuty,
+      fieldDutyNotes: isFieldDuty ? `${fieldDutyPurpose}${fieldDutyNotes ? `: ${fieldDutyNotes}` : ''}` : undefined,
     });
     onClose();
   };
 
   if (!isOpen) return null;
 
-  const isLocationDisallowed = coords ? !coords.withinRadius : false;
+  const isLocationDisallowed = !isFieldDuty && (coords ? !coords.withinRadius : false);
+
+  const getActionTitle = () => {
+    switch (actionType) {
+      case 'clock-in': return 'Presensi Masuk (Clock In)';
+      case 'clock-out': return 'Presensi Pulang (Clock Out)';
+      case 'break-out': return 'Presensi Istirahat Keluar';
+      case 'break-in': return 'Presensi Selesai Istirahat';
+      default: return 'Presensi WebRTC';
+    }
+  };
 
   const modalContent = (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200 sm:p-4">
@@ -344,14 +363,16 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900 z-10">
           <div>
             <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <span>{actionType === 'clock-in' ? 'Presensi Masuk (Clock In)' : 'Presensi Pulang (Clock Out)'}</span>
+              <span>{getActionTitle()}</span>
               {coords && (
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  coords.withinRadius
+                  isFieldDuty
+                    ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                    : coords.withinRadius
                     ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
                     : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300'
                 }`}>
-                  {coords.withinRadius ? 'Radius Aman' : 'Luar Radius'}
+                  {isFieldDuty ? 'Tugas Lapangan' : coords.withinRadius ? 'Radius Aman' : 'Luar Radius'}
                 </span>
               )}
             </h2>
@@ -490,32 +511,107 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             </div>
           </div>
 
+          {/* Toggle Mode Penugasan Lapangan / Dinas Luar */}
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className={`p-1.5 rounded-lg transition-colors ${
+                  isFieldDuty ? 'bg-amber-500 text-white shadow-xs' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                }`}>
+                  <Briefcase className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span>Tugas Lapangan / Dinas Luar</span>
+                    {isFieldDuty && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold">
+                        Aktif
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    {isFieldDuty
+                      ? 'Lolos geofence radius kantor untuk tugas resmi luar'
+                      : 'Presensi di titik kantor resmi yang ditugaskan'}
+                  </p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isFieldDuty}
+                  onChange={(e) => setIsFieldDuty(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-10 h-5 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-amber-600"></div>
+              </label>
+            </div>
+
+            {isFieldDuty && (
+              <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700/60 space-y-2 animate-in fade-in duration-150">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    Jenis Penugasan Lapangan:
+                  </label>
+                  <select
+                    value={fieldDutyPurpose}
+                    onChange={(e) => setFieldDutyPurpose(e.target.value)}
+                    className="w-full text-xs py-1.5 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium focus:ring-1 focus:ring-amber-500 outline-hidden"
+                  >
+                    <option value="Monitoring & Pengawasan Sekolah">Monitoring & Pengawasan Sekolah</option>
+                    <option value="Inspeksi & Pemeliharaan Sarpras">Inspeksi & Pemeliharaan Sarpras</option>
+                    <option value="Pelayanan Operasional Korwil">Pelayanan Operasional Korwil</option>
+                    <option value="Pendampingan Acara Kedinasan">Pendampingan Acara Kedinasan</option>
+                    <option value="Pengantaran Berkas & Logistik Dinas">Pengantaran Berkas & Logistik Dinas</option>
+                    <option value="Tugas Lapangan Khusus">Tugas Lapangan Khusus</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    Catatan Lokasi / Surat Tugas (Opsional):
+                  </label>
+                  <input
+                    type="text"
+                    value={fieldDutyNotes}
+                    onChange={(e) => setFieldDutyNotes(e.target.value)}
+                    placeholder="Contoh: SDN 1 Barabai Timur / Giat Apel"
+                    className="w-full text-xs py-1.5 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-1 focus:ring-amber-500 outline-hidden"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Rincian Status Lokasi & GPS */}
           <div className={`p-3.5 rounded-2xl border text-xs transition-colors ${
             isLocating
               ? 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
               : gpsError
               ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200'
+              : isFieldDuty
+              ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 text-amber-900 dark:text-amber-200'
               : coords?.withinRadius
               ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60 text-emerald-900 dark:text-emerald-200'
               : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 text-amber-900 dark:text-amber-200'
           }`}>
             <div className="flex items-start gap-2.5">
               <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${
-                coords?.withinRadius ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+                isFieldDuty ? 'text-amber-600 dark:text-amber-400' : coords?.withinRadius ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
               }`} />
               <div className="space-y-1.5 w-full">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-900 dark:text-white">
-                    {targetName}
+                    {isFieldDuty ? `Dinas Luar: ${fieldDutyPurpose}` : targetName}
                   </span>
                   {coords && (
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      coords.withinRadius
-                        ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300'
-                        : 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-300'
+                      isFieldDuty
+                        ? 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-300 font-bold'
+                        : coords.withinRadius
+                        ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 font-bold'
+                        : 'bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-300 font-bold'
                     }`}>
-                      {coords.withinRadius ? 'Radius Aman' : 'Luar Radius'}
+                      {isFieldDuty ? 'Izin Tugas Lapangan' : coords.withinRadius ? 'Radius Aman' : 'Luar Radius'}
                     </span>
                   )}
                 </div>
@@ -540,8 +636,10 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                       <strong className="font-mono tabular-nums">±{Math.round(coords.accuracy)} meter (Anti-Mock OK)</strong>
                     </div>
                     <div className="flex justify-between">
-                      <span>Radius maksimal resmi:</span>
-                      <span className="font-mono tabular-nums">{targetRadius} meter</span>
+                      <span>Status Geofence:</span>
+                      <span className={`font-mono font-bold ${isFieldDuty || coords.withinRadius ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {isFieldDuty ? 'Disetujui Tugas Luar' : coords.withinRadius ? `Dalam Radius ${targetRadius}m` : `Di Luar Radius (${targetRadius}m)`}
+                      </span>
                     </div>
                   </div>
                 ) : null}
@@ -549,15 +647,22 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             </div>
           </div>
 
-          {/* Banner Peringatan Luar Radius */}
-          {isLocationDisallowed && (
+          {/* Banner Peringatan Luar Radius atau Info Tugas Lapangan */}
+          {isFieldDuty ? (
+            <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="leading-relaxed">
+                <strong>Penugasan Lapangan / Dinas Luar Sah:</strong> Presensi di luar kantor diizinkan untuk keperluan dinas. Koordinat GPS dicatat sebagai bukti kehadiran tugas lapangan tanpa tanda peringatan pelanggaran.
+              </div>
+            </div>
+          ) : isLocationDisallowed ? (
             <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-[11px] text-rose-800 dark:text-rose-200 flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div className="leading-relaxed">
-                <strong>Peringatan Pelanggaran Geofence:</strong> Anda berada di luar radius resmi tugas ({formatDistance(coords?.distance || 0)} dari batas {targetRadius}m). Jika Anda mengirim presensi ini, sistem akan <strong>otomatis mengirim notifikasi peringatan visual ke dashboard atasan / supervisor</strong>.
+                <strong>Peringatan Pelanggaran Geofence:</strong> Anda berada di luar radius resmi tugas ({formatDistance(coords?.distance || 0)} dari batas {targetRadius}m). Jika Anda sedang tugas luar, aktifkan tombol <strong>"Tugas Lapangan / Dinas Luar"</strong> di atas.
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* 4. Footer Aksi Menempel di Bawah (Sticky Bottom Action Footer) */}
@@ -597,12 +702,19 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 onClick={handleConfirm}
                 disabled={!capturedImage || !coords || !!gpsError}
                 className={`w-2/3 py-3 px-4 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.99] ${
-                  coords?.withinRadius
+                  isFieldDuty
+                    ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
+                    : coords?.withinRadius
                     ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
                     : 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
                 }`}
               >
-                {coords?.withinRadius ? (
+                {isFieldDuty ? (
+                  <>
+                    <Briefcase className="w-4 h-4" />
+                    <span>Kirim Presensi Tugas Lapangan</span>
+                  </>
+                ) : coords?.withinRadius ? (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Kirim &amp; Kunci Presensi</span>
