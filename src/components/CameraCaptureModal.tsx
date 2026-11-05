@@ -53,6 +53,24 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   // Mode Tampilan: Kamera Selfie vs Peta Radar Lokasi
   const [activeViewTab, setActiveViewTab] = useState<'camera' | 'map'>('camera');
 
+  // Jaga video stream WebRTC tetap hidup & terhubung saat berpindah tab (Anti-Black Screen)
+  useEffect(() => {
+    if (activeViewTab === 'camera' && isOpen) {
+      if (videoRef.current && streamRef.current) {
+        if (videoRef.current.srcObject !== streamRef.current) {
+          videoRef.current.srcObject = streamRef.current;
+        }
+        videoRef.current.play().catch(() => {});
+      } else if (!streamRef.current) {
+        startCamera();
+      }
+    } else if (activeViewTab === 'map') {
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 150);
+    }
+  }, [activeViewTab, isOpen]);
+
   // Kunci scrolling halaman latar belakang saat modal aktif
   useEffect(() => {
     if (isOpen) {
@@ -388,86 +406,84 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
         {/* 3. Badan Konten yang Dapat Di-Scroll Secara Halus (Unified Scroll Body) */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3.5">
-          {activeViewTab === 'camera' ? (
-            /* ================= TAB 1: KAMERA SELFIE ================= */
-            <>
-              {/* Camera Viewport / Captured Preview */}
-              <div className="relative bg-slate-950 aspect-[4/3] w-full rounded-2xl overflow-hidden shadow-inner flex items-center justify-center">
-                {capturedImage ? (
-                  <img
-                    src={capturedImage}
-                    alt="Bukti Selfie Presensi"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <>
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover -scale-x-100"
-                    />
-                    
-                    {/* Face Guide Overlay */}
-                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                      <div className="w-44 h-56 border-2 border-dashed border-indigo-400/80 rounded-[50%] flex items-center justify-center">
-                        <span className="text-[11px] font-medium text-white/80 bg-black/60 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
-                          Wajah Dalam Bingkai
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Anti-Gallery Warning Badge */}
-                    <div className="absolute top-3 left-3 bg-slate-900/85 backdrop-blur-xs text-slate-300 text-[10px] font-semibold px-2.5 py-1 rounded-lg border border-slate-700/60 flex items-center gap-1.5 shadow-sm">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Kamera WebRTC (Anti-Galeri)</span>
-                    </div>
-                  </>
-                )}
-
-                <canvas ref={canvasRef} className="hidden" />
-              </div>
-
-              {/* Pintasan Cepat ke Peta Radar */}
-              <div className="flex items-center justify-between text-xs px-1 text-slate-600 dark:text-slate-400">
-                <span className="flex items-center gap-1.5 font-mono text-[11px]">
-                  <Navigation className="w-3.5 h-3.5 text-indigo-500" />
-                  Jarak: <strong className="text-slate-900 dark:text-white">{coords ? formatDistance(coords.distance) : 'Menghitung...'}</strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveViewTab('map')}
-                  className="text-indigo-600 dark:text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <span>Lihat Peta Radar Lokasi</span>
-                  <span>&rarr;</span>
-                </button>
-              </div>
-            </>
-          ) : (
-            /* ================= TAB 2: PETA RADAR INTERAKTIF ================= */
-            <div className="space-y-3">
-              <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-md">
-                <GeofenceRadarMap
-                  userCoords={coords}
-                  assignedLocation={assignedLocation}
-                  height="340px"
-                  className="w-full"
+          {/* ================= TAB 1: KAMERA SELFIE (Tetap di DOM, Tanpa Unmount) ================= */}
+          <div className={activeViewTab === 'camera' ? 'space-y-3.5' : 'hidden'}>
+            {/* Camera Viewport / Captured Preview */}
+            <div className="relative bg-slate-950 aspect-[4/3] w-full rounded-2xl overflow-hidden shadow-inner flex items-center justify-center">
+              {capturedImage ? (
+                <img
+                  src={capturedImage}
+                  alt="Bukti Selfie Presensi"
+                  className="w-full h-full object-cover"
                 />
-              </div>
-              <div className="flex items-center justify-between text-xs px-1 text-slate-500 dark:text-slate-400">
-                <span className="text-[11px] font-mono">Pusat Tugas: {assignedLocation.name}</span>
-                <button
-                  type="button"
-                  onClick={() => setActiveViewTab('camera')}
-                  className="text-indigo-600 dark:text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <span>Buka Kamera Selfie &rarr;</span>
-                </button>
-              </div>
+              ) : (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover -scale-x-100"
+                  />
+                  
+                  {/* Face Guide Overlay */}
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                    <div className="w-44 h-56 border-2 border-dashed border-indigo-400/80 rounded-[50%] flex items-center justify-center">
+                      <span className="text-[11px] font-medium text-white/80 bg-black/60 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
+                        Wajah Dalam Bingkai
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Anti-Gallery Warning Badge */}
+                  <div className="absolute top-3 left-3 bg-slate-900/85 backdrop-blur-xs text-slate-300 text-[10px] font-semibold px-2.5 py-1 rounded-lg border border-slate-700/60 flex items-center gap-1.5 shadow-sm">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Kamera WebRTC (Anti-Galeri)</span>
+                  </div>
+                </>
+              )}
+
+              <canvas ref={canvasRef} className="hidden" />
             </div>
-          )}
+
+            {/* Pintasan Cepat ke Peta Radar */}
+            <div className="flex items-center justify-between text-xs px-1 text-slate-600 dark:text-slate-400">
+              <span className="flex items-center gap-1.5 font-mono text-[11px]">
+                <Navigation className="w-3.5 h-3.5 text-indigo-500" />
+                Jarak: <strong className="text-slate-900 dark:text-white">{coords ? formatDistance(coords.distance) : 'Menghitung...'}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveViewTab('map')}
+                className="text-indigo-600 dark:text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Lihat Peta Radar Lokasi</span>
+                <span>&rarr;</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ================= TAB 2: PETA RADAR INTERAKTIF (Tetap di DOM) ================= */}
+          <div className={activeViewTab === 'map' ? 'space-y-3' : 'hidden'}>
+            <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-md">
+              <GeofenceRadarMap
+                userCoords={coords}
+                assignedLocation={assignedLocation}
+                height="340px"
+                className="w-full"
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs px-1 text-slate-500 dark:text-slate-400">
+              <span className="text-[11px] font-mono">Pusat Tugas: {assignedLocation.name}</span>
+              <button
+                type="button"
+                onClick={() => setActiveViewTab('camera')}
+                className="text-indigo-600 dark:text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Buka Kamera Selfie &rarr;</span>
+              </button>
+            </div>
+          </div>
 
           {/* Rincian Status Lokasi & GPS */}
           <div className={`p-3.5 rounded-2xl border text-xs transition-colors ${
