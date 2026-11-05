@@ -1078,6 +1078,8 @@ export function listVendors() {
 export function createVendor(data) {
   const id = `ven-${Date.now()}`;
   const now = new Date().toISOString();
+  const cStart = data.contractStart || data.contractStartDate || '';
+  const cEnd = data.contractEnd || data.contractEndDate || '';
   if (isNodeSqlite && dbEngine) {
     dbEngine.prepare(
       `INSERT INTO vendors (id, name, code, contract_number, contract_start, contract_end, pic_name, pic_phone, address, status, created_at)
@@ -1087,8 +1089,8 @@ export function createVendor(data) {
       data.name,
       data.code || 'VEN',
       data.contractNumber || '',
-      data.contractStart || '',
-      data.contractEnd || '',
+      cStart,
+      cEnd,
       data.picName || '',
       data.picPhone || '',
       data.address || '',
@@ -1097,13 +1099,15 @@ export function createVendor(data) {
     );
   } else {
     if (!fallbackStore.vendors) fallbackStore.vendors = [];
-    fallbackStore.vendors.push({ id, ...data, createdAt: now });
+    fallbackStore.vendors.push({ id, ...data, contractStart: cStart, contractEnd: cEnd, createdAt: now });
     persistFallback();
   }
-  return { id, ...data, createdAt: now, staffCount: 0 };
+  return { id, ...data, contractStart: cStart, contractEnd: cEnd, createdAt: now, staffCount: 0 };
 }
 
 export function updateVendor(id, data) {
+  const cStart = data.contractStart || data.contractStartDate || '';
+  const cEnd = data.contractEnd || data.contractEndDate || '';
   if (isNodeSqlite && dbEngine) {
     // Ambil nama lama untuk sinkronisasi nama vendor jika berubah
     const oldVen = dbEngine.prepare('SELECT name FROM vendors WHERE id = ?').get(id);
@@ -1113,8 +1117,8 @@ export function updateVendor(id, data) {
       data.name,
       data.code,
       data.contractNumber || '',
-      data.contractStart || '',
-      data.contractEnd || '',
+      cStart,
+      cEnd,
       data.picName || '',
       data.picPhone || '',
       data.address || '',
@@ -1129,25 +1133,29 @@ export function updateVendor(id, data) {
     if (!fallbackStore.vendors) fallbackStore.vendors = [];
     const v = fallbackStore.vendors.find((item) => item.id === id);
     if (v) {
-      Object.assign(v, data);
+      Object.assign(v, data, { contractStart: cStart, contractEnd: cEnd });
       persistFallback();
     }
   }
-  return { id, ...data };
+  return { id, ...data, contractStart: cStart, contractEnd: cEnd };
 }
 
 export function deleteVendor(id) {
   if (isNodeSqlite && dbEngine) {
     const ven = dbEngine.prepare('SELECT name FROM vendors WHERE id = ?').get(id);
     if (ven) {
-      const staffCount = dbEngine.prepare('SELECT COUNT(*) as cnt FROM users WHERE vendor_name = ?').get(ven.name)?.cnt || 0;
-      if (staffCount > 0) {
-        throw new Error(`Tidak dapat menghapus perusahaan ini karena masih terdapat ${staffCount} staf alih daya tertaut.`);
-      }
+      // Alihkan staf yang tertaut ke Dinas Pendidikan Kab. HST agar tidak yatim piatu
+      dbEngine.prepare("UPDATE users SET vendor_name = 'Dinas Pendidikan Kab. HST' WHERE vendor_name = ?").run(ven.name);
     }
     dbEngine.prepare('DELETE FROM vendors WHERE id = ?').run(id);
   } else {
     if (fallbackStore.vendors) {
+      const ven = fallbackStore.vendors.find((v) => v.id === id);
+      if (ven && fallbackStore.users) {
+        fallbackStore.users.forEach((u) => {
+          if (u.vendorName === ven.name) u.vendorName = 'Dinas Pendidikan Kab. HST';
+        });
+      }
       fallbackStore.vendors = fallbackStore.vendors.filter((v) => v.id !== id);
       persistFallback();
     }

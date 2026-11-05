@@ -227,13 +227,14 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           description: divDesc.trim(),
           supervisorName: divSupervisor.trim(),
         });
-        if (res.success && res.division) {
-          const updated = divisions.map((d) => (d.id === editingDivision.id ? res.division! : d));
+        const savedDiv = res?.division || (res?.id ? res : null);
+        if (savedDiv) {
+          const updated = divisions.map((d) => (d.id === editingDivision.id ? savedDiv : d));
           onUpdateDivisions(updated);
-          onShowToast(`Bidang "${res.division.name}" berhasil diperbarui.`, 'success');
+          onShowToast(`Bidang "${savedDiv.name}" berhasil diperbarui.`, 'success');
           setDivisionModalOpen(false);
         } else {
-          onShowToast(res.message || 'Gagal memperbarui bidang', 'warning');
+          onShowToast(res?.message || 'Gagal memperbarui bidang', 'warning');
         }
       } else {
         const res = await apiCreateDivision({
@@ -242,12 +243,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           description: divDesc.trim(),
           supervisorName: divSupervisor.trim(),
         });
-        if (res.success && res.division) {
-          onUpdateDivisions([...divisions, res.division]);
-          onShowToast(`Bidang baru "${res.division.name}" berhasil didaftarkan.`, 'success');
+        const newDiv = res?.division || (res?.id ? res : null);
+        if (newDiv) {
+          onUpdateDivisions([...divisions, newDiv]);
+          onShowToast(`Bidang baru "${newDiv.name}" berhasil didaftarkan.`, 'success');
           setDivisionModalOpen(false);
         } else {
-          onShowToast(res.message || 'Gagal menambah bidang', 'warning');
+          onShowToast(res?.message || 'Gagal menambah bidang', 'warning');
         }
       }
     } catch (err: any) {
@@ -260,13 +262,9 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const handleDeleteDivision = async (id: string, name: string) => {
     if (!window.confirm(`Hapus bidang "${name}" dari master data dinas?`)) return;
     try {
-      const res = await apiDeleteDivision(id);
-      if (res.success) {
-        onUpdateDivisions(divisions.filter((d) => d.id !== id));
-        onShowToast(`Bidang "${name}" telah dihapus.`, 'info');
-      } else {
-        onShowToast(res.message || 'Gagal menghapus bidang', 'warning');
-      }
+      await apiDeleteDivision(id);
+      onUpdateDivisions(divisions.filter((d) => d.id !== id));
+      onShowToast(`Bidang "${name}" telah dihapus.`, 'info');
     } catch (err: any) {
       onShowToast(err.message || 'Gagal menghapus bidang', 'warning');
     }
@@ -321,13 +319,14 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           address: venAddress.trim(),
           status: venStatus,
         });
-        if (res.success && res.vendor) {
-          const updated = vendors.map((v) => (v.id === editingVendor.id ? res.vendor! : v));
+        const savedVendor = res?.vendor || (res?.id ? res : null);
+        if (savedVendor) {
+          const updated = vendors.map((v) => (v.id === editingVendor.id ? { ...v, ...savedVendor } : v));
           onUpdateVendors(updated);
-          onShowToast(`Data vendor "${res.vendor.name}" berhasil diperbarui.`, 'success');
+          onShowToast(`Data vendor "${savedVendor.name}" berhasil diperbarui.`, 'success');
           setVendorModalOpen(false);
         } else {
-          onShowToast(res.message || 'Gagal memperbarui vendor', 'warning');
+          onShowToast(res?.message || 'Gagal memperbarui vendor', 'warning');
         }
       } else {
         const res = await apiCreateVendor({
@@ -341,12 +340,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           address: venAddress.trim(),
           status: venStatus,
         });
-        if (res.success && res.vendor) {
-          onUpdateVendors([...vendors, res.vendor]);
-          onShowToast(`Perusahaan vendor "${res.vendor.name}" berhasil ditambahkan.`, 'success');
+        const newVendor = res?.vendor || (res?.id ? res : null);
+        if (newVendor) {
+          onUpdateVendors([...vendors, newVendor]);
+          onShowToast(`Perusahaan vendor "${newVendor.name}" berhasil ditambahkan.`, 'success');
           setVendorModalOpen(false);
         } else {
-          onShowToast(res.message || 'Gagal menambah vendor', 'warning');
+          onShowToast(res?.message || 'Gagal menambah vendor', 'warning');
         }
       }
     } catch (err: any) {
@@ -359,13 +359,9 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const handleDeleteVendor = async (id: string, name: string) => {
     if (!window.confirm(`Hapus perusahaan vendor "${name}" dari master sistem?`)) return;
     try {
-      const res = await apiDeleteVendor(id);
-      if (res.success) {
-        onUpdateVendors(vendors.filter((v) => v.id !== id));
-        onShowToast(`Vendor "${name}" telah dihapus.`, 'info');
-      } else {
-        onShowToast(res.message || 'Gagal menghapus vendor', 'warning');
-      }
+      await apiDeleteVendor(id);
+      onUpdateVendors(vendors.filter((v) => v.id !== id));
+      onShowToast(`Vendor "${name}" telah dihapus.`, 'info');
     } catch (err: any) {
       onShowToast(err.message || 'Gagal menghapus vendor', 'warning');
     }

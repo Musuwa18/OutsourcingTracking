@@ -92,7 +92,7 @@ export async function apiFetchDivisions(): Promise<Division[]> {
   return [];
 }
 
-export async function apiCreateDivision(division: Partial<Division>): Promise<Division> {
+export async function apiCreateDivision(division: Partial<Division>): Promise<any> {
   const res = await fetch(`${API_BASE}/divisions`, {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -100,10 +100,10 @@ export async function apiCreateDivision(division: Partial<Division>): Promise<Di
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Gagal menambahkan bidang/subbagian.');
-  return data.division;
+  return data;
 }
 
-export async function apiUpdateDivision(id: string, division: Partial<Division>): Promise<Division> {
+export async function apiUpdateDivision(id: string, division: Partial<Division>): Promise<any> {
   const res = await fetch(`${API_BASE}/divisions/${id}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
@@ -111,16 +111,17 @@ export async function apiUpdateDivision(id: string, division: Partial<Division>)
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Gagal memperbarui bidang/subbagian.');
-  return data.division;
+  return data;
 }
 
-export async function apiDeleteDivision(id: string): Promise<void> {
+export async function apiDeleteDivision(id: string): Promise<any> {
   const res = await fetch(`${API_BASE}/divisions/${id}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Gagal menghapus bidang/subbagian.');
+  return data;
 }
 
 // 4.B. Master Vendors
@@ -137,7 +138,7 @@ export async function apiFetchVendors(): Promise<Vendor[]> {
   return [];
 }
 
-export async function apiCreateVendor(vendor: Partial<Vendor>): Promise<Vendor> {
+export async function apiCreateVendor(vendor: Partial<Vendor>): Promise<any> {
   const res = await fetch(`${API_BASE}/vendors`, {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -145,10 +146,10 @@ export async function apiCreateVendor(vendor: Partial<Vendor>): Promise<Vendor> 
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Gagal menambahkan vendor.');
-  return data.vendor;
+  return data;
 }
 
-export async function apiUpdateVendor(id: string, vendor: Partial<Vendor>): Promise<Vendor> {
+export async function apiUpdateVendor(id: string, vendor: Partial<Vendor>): Promise<any> {
   const res = await fetch(`${API_BASE}/vendors/${id}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
@@ -156,16 +157,17 @@ export async function apiUpdateVendor(id: string, vendor: Partial<Vendor>): Prom
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Gagal memperbarui vendor.');
-  return data.vendor;
+  return data;
 }
 
-export async function apiDeleteVendor(id: string): Promise<void> {
+export async function apiDeleteVendor(id: string): Promise<any> {
   const res = await fetch(`${API_BASE}/vendors/${id}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Gagal menghapus vendor.');
+  return data;
 }
 
 // 4.C. User Accounts & Management
