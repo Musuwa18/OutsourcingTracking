@@ -568,13 +568,13 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    NIP / NIK *
+                    Nama Pengguna *
                   </label>
                   <input
                     type="text"
                     value={osNip}
                     onChange={(e) => setOsNip(e.target.value)}
-                    placeholder="Contoh: OS-IT-009"
+                    placeholder="Contoh: Tuhalus atau OS-IT-009"
                     className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
                     required
                   />
