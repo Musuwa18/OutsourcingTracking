@@ -185,12 +185,21 @@ export default function App() {
     apiFetchVendors().then((vens) => {
       if (vens && vens.length > 0) setVendors(vens);
     });
+    apiFetchAllUsers().then((usrs) => {
+      if (usrs && usrs.length > 0) {
+        setUsers(usrs);
+        localStorage.setItem('ot_users', JSON.stringify(usrs));
+      }
+    });
   }, []);
 
   useEffect(() => {
     if (currentUser && currentUser.role !== 'outsourcing') {
       apiFetchAllUsers().then((usrs) => {
-        if (usrs && usrs.length > 0) setUsers(usrs);
+        if (usrs && usrs.length > 0) {
+          setUsers(usrs);
+          localStorage.setItem('ot_users', JSON.stringify(usrs));
+        }
       });
     }
   }, [currentUser]);
