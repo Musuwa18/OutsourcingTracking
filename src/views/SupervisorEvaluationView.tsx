@@ -171,6 +171,24 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
     }));
   };
 
+  if (staffList.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="p-12 text-center glass-card rounded-3xl space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto shadow-xs">
+            <Users className="w-7 h-7" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">
+            Belum Ada Staf Outsourcing untuk Dievaluasi
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+            Silakan daftarkan tenaga alih daya resmi di unit kerja Anda melalui menu <strong>Pusat Pengaturan Sistem</strong> untuk memulai siklus penilaian kinerja mingguan.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const handleSubmitEvaluation = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStaffId) return;

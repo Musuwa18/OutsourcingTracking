@@ -130,6 +130,24 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
     }
   };
 
+  if (staffList.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="p-12 text-center glass-card rounded-3xl space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto shadow-xs">
+            <Users className="w-7 h-7" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">
+            Belum Ada Data Tenaga Outsourcing Terdaftar
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+            Data analitik dan rekapitulasi KPI akan muncul secara otomatis setelah tenaga outsourcing resmi didaftarkan melalui menu <strong>Pusat Pengaturan Sistem &gt; Manajemen Pengguna & Staf</strong>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const handleExportCSV = () => {
     exportMonthlyKpiToCSV(monthlyAggregates, staffMap);
   };

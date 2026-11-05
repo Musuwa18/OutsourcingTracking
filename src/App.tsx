@@ -189,6 +189,35 @@ export default function App() {
       if (usrs && usrs.length > 0) {
         setUsers(usrs);
         localStorage.setItem('ot_users', JSON.stringify(usrs));
+        const osUsers = usrs.filter((u: any) => u.role === 'outsourcing');
+        const mappedStaff = osUsers.map((u: any) => {
+          let customLoc = undefined;
+          if (u.customLocationJson) {
+            try {
+              customLoc = typeof u.customLocationJson === 'string' ? JSON.parse(u.customLocationJson) : u.customLocationJson;
+            } catch (e) {}
+          }
+          return {
+            id: u.id,
+            nip: u.nip,
+            name: u.name,
+            email: u.email,
+            phone: u.phone || '',
+            division: u.divisionName,
+            vendorName: u.vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)',
+            roleTitle: u.roleTitle,
+            assignedLocation: customLoc || PRIMARY_OFFICES[0],
+            customLocation: customLoc,
+            workspaceNote: u.workspaceNote || '',
+            supervisorId: u.supervisorId || undefined,
+            avatarColor: u.avatarColor || '#4f46e5',
+            initials: u.initials || u.name.slice(0, 2).toUpperCase(),
+            joinDate: '2026-01-02',
+            status: 'Aktif',
+          };
+        });
+        setStaffList(mappedStaff);
+        localStorage.setItem('ot_staff_list', JSON.stringify(mappedStaff));
       }
     });
   }, []);
@@ -347,7 +376,7 @@ export default function App() {
         // fallback
       }
     }
-    return INITIAL_ACTIVE_SESSIONS;
+    return [];
   });
 
   const [geofenceConfig, setGeofenceConfig] = useState<GeofenceGlobalConfig>(() => {
