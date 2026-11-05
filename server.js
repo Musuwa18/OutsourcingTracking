@@ -97,6 +97,14 @@ export const PRIMARY_OFFICES = [
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Tangani error parsing JSON secara graceful agar server tidak crash saat menerima payload malformed
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Format JSON payload tidak valid.' });
+  }
+  next(err);
+});
+
 // Security & Caching Headers
 app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
@@ -636,6 +644,20 @@ app.use(express.static(DIST_DIR, {
 // Fallback semua rute client-side (SPA) ke index.html
 app.get('*', (req, res) => {
   res.sendFile(path.join(DIST_DIR, 'index.html'));
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('[Unhandled Server Error]:', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Terjadi kesalahan internal pada server.' });
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Process Error] Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Process Error] Unhandled Rejection:', reason);
 });
 
 app.listen(PORT, '0.0.0.0', () => {
