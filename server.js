@@ -167,16 +167,42 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(400).json({ error: 'Kata sandi atau kredensial biometrik diperlukan.' });
     }
 
-    // Device binding check / update
-    if (deviceId && !user.deviceId) {
-      updateUserDevice(user.id, deviceId);
-      user.deviceId = deviceId;
-      user.deviceBinding = {
-        registered: true,
-        deviceModel: deviceId,
-        registeredAt: new Date().toISOString(),
-        biometricEnabled: !!user.biometricKey
-      };
+    // ----------------------------------------------------
+    // Device Binding Enforcement (Anti-Titip Absen)
+    // ----------------------------------------------------
+    // Aturan ketat 1 Akun = 1 HP khusus Tenaga Outsourcing
+    if (user.role === 'outsourcing') {
+      if (user.deviceId) {
+        if (!deviceId || deviceId !== user.deviceId) {
+          return res.status(403).json({
+            error: 'PERANGKAT TIDAK DIKENALI (ANTI-TITIP ABSEN): Akun Anda telah terikat secara resmi pada smartphone utama yang Anda daftarkan sebelumnya. Demi integritas presensi, dilarang login di HP orang lain untuk mencegah titip absen. Silakan gunakan HP terdaftar Anda, atau hubungi Kasubag / Administrator Disdik HST untuk reset kunci perangkat jika Anda resmi berganti HP baru.',
+            code: 'DEVICE_BINDING_MISMATCH',
+            boundDeviceId: user.deviceId
+          });
+        }
+      } else if (deviceId) {
+        // Ikat HP pertama kali (setelah registrasi atau setelah di-reset oleh admin)
+        updateUserDevice(user.id, deviceId);
+        user.deviceId = deviceId;
+        user.deviceBinding = {
+          registered: true,
+          deviceModel: deviceId,
+          registeredAt: new Date().toISOString(),
+          biometricEnabled: !!user.biometricKey
+        };
+      }
+    } else {
+      // Supervisor, Admin, & Super Admin bebas login multi-perangkat (PC / Laptop / HP)
+      if (deviceId && !user.deviceId) {
+        updateUserDevice(user.id, deviceId);
+        user.deviceId = deviceId;
+        user.deviceBinding = {
+          registered: true,
+          deviceModel: deviceId,
+          registeredAt: new Date().toISOString(),
+          biometricEnabled: !!user.biometricKey
+        };
+      }
     }
 
     const token = `ot_token_${user.id}_${Date.now()}`;

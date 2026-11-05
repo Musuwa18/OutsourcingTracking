@@ -1313,7 +1313,9 @@ export function deleteUser(userId) {
 
 // ATTENDANCE
 export function saveAttendance(attData) {
-  const id = attData.id || `att-${Date.now()}`;
+  const recordDate = attData.date || new Date().toISOString().slice(0, 10);
+  const staffId = attData.staffId || null;
+  const id = attData.id || `att-${staffId || 'staff'}-${recordDate}`;
   const now = new Date().toISOString();
   const selfieUrl = saveBase64Image(attData.selfieUrl, 'attendance');
 
@@ -1335,41 +1337,107 @@ export function saveAttendance(attData) {
   const dist = attData.locationCoords?.distanceMeters ?? attData.distanceMeters ?? 0;
 
   if (isNodeSqlite && dbEngine) {
-    dbEngine.prepare(
-      `INSERT INTO attendance (
-        id, staff_id, staff_name, division_id, date, clock_in_time, clock_out_time, status,
-        selfie_url, latitude, longitude, accuracy, location_name, is_geofence_valid, distance_meters, device_fingerprint, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      id,
-      attData.staffId || null,
-      staffName || 'Tenaga Outsourcing',
-      divisionId || 'div-umpeg',
-      attData.date || new Date().toISOString().slice(0, 10),
-      attData.clockInTime || null,
-      attData.clockOutTime || null,
-      attData.status || 'Hadir',
-      selfieUrl || null,
-      lat,
-      lon,
-      acc,
-      locName,
-      isGeoValid,
-      dist,
-      attData.deviceFingerprint || '',
-      now
-    );
-  } else {
-    fallbackStore.attendance.push({
-      ...attData,
-      id,
-      selfieUrl,
-      createdAt: now
-    });
-    persistFallback();
-  }
+    // Periksa apakah sudah ada presensi staf pada tanggal yang sama
+    const existing = staffId
+      ? dbEngine.prepare('SELECT id, clock_in_time, clock_out_time, selfie_url FROM attendance WHERE staff_id = ? AND date = ?').get(staffId, recordDate)
+      : null;
 
-  return { ...attData, id, selfieUrl, staffName, divisionId };
+    if (existing) {
+      // Update record presensi yang sudah ada (misal update Clock Out atau status)
+      const finalClockIn = attData.clockInTime || existing.clock_in_time;
+      const finalClockOut = attData.clockOutTime || existing.clock_out_time;
+      const finalSelfie = selfieUrl || existing.selfie_url;
+
+      dbEngine.prepare(
+        `UPDATE attendance SET
+          clock_in_time = ?,
+          clock_out_time = ?,
+          status = ?,
+          selfie_url = ?,
+          latitude = COALESCE(?, latitude),
+          longitude = COALESCE(?, longitude),
+          accuracy = COALESCE(?, accuracy),
+          location_name = COALESCE(?, location_name),
+          is_geofence_valid = COALESCE(?, is_geofence_valid),
+          distance_meters = COALESCE(?, distance_meters),
+          device_fingerprint = COALESCE(?, device_fingerprint)
+        WHERE id = ?`
+      ).run(
+        finalClockIn,
+        finalClockOut,
+        attData.status || 'Hadir',
+        finalSelfie,
+        lat,
+        lon,
+        acc,
+        locName,
+        isGeoValid,
+        dist,
+        attData.deviceFingerprint || null,
+        existing.id
+      );
+
+      return {
+        ...attData,
+        id: existing.id,
+        selfieUrl: finalSelfie,
+        staffName,
+        divisionId,
+        clockInTime: finalClockIn,
+        clockOutTime: finalClockOut
+      };
+    } else {
+      // Buat entri presensi baru
+      dbEngine.prepare(
+        `INSERT INTO attendance (
+          id, staff_id, staff_name, division_id, date, clock_in_time, clock_out_time, status,
+          selfie_url, latitude, longitude, accuracy, location_name, is_geofence_valid, distance_meters, device_fingerprint, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        id,
+        staffId,
+        staffName || 'Tenaga Outsourcing',
+        divisionId || 'div-umpeg',
+        recordDate,
+        attData.clockInTime || null,
+        attData.clockOutTime || null,
+        attData.status || 'Hadir',
+        selfieUrl || null,
+        lat,
+        lon,
+        acc,
+        locName,
+        isGeoValid,
+        dist,
+        attData.deviceFingerprint || '',
+        now
+      );
+
+      return { ...attData, id, selfieUrl, staffName, divisionId };
+    }
+  } else {
+    const existingIdx = fallbackStore.attendance.findIndex(
+      (r) => r.staffId === staffId && r.date === recordDate
+    );
+    if (existingIdx >= 0) {
+      fallbackStore.attendance[existingIdx] = {
+        ...fallbackStore.attendance[existingIdx],
+        ...attData,
+        clockInTime: attData.clockInTime || fallbackStore.attendance[existingIdx].clockInTime,
+        clockOutTime: attData.clockOutTime || fallbackStore.attendance[existingIdx].clockOutTime,
+        selfieUrl: selfieUrl || fallbackStore.attendance[existingIdx].selfieUrl,
+      };
+    } else {
+      fallbackStore.attendance.push({
+        ...attData,
+        id,
+        selfieUrl,
+        createdAt: now
+      });
+    }
+    persistFallback();
+    return { ...attData, id, selfieUrl, staffName, divisionId };
+  }
 }
 
 export function listAttendance(filters = {}) {
@@ -1408,6 +1476,14 @@ export function listAttendance(filters = {}) {
       locationName: r.location_name,
       isGeofenceValid: Boolean(r.is_geofence_valid),
       distanceMeters: r.distance_meters,
+      locationCoords: {
+        latitude: r.latitude,
+        longitude: r.longitude,
+        accuracy: r.accuracy,
+        distanceMeters: r.distance_meters,
+        withinRadius: Boolean(r.is_geofence_valid),
+        locationName: r.location_name || 'Lokasi Terdaftar',
+      },
       deviceFingerprint: r.device_fingerprint,
       createdAt: r.created_at
     }));

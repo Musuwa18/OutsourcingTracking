@@ -23,6 +23,7 @@ import {
 import { AuthUser, Division, Vendor, OfficeLocation, OUTSOURCING_JOB_ROLES } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
 import { apiLogin, apiRegister, apiBindDevice } from '../services/api';
+import { getDeviceFingerprint } from '../utils/fingerprint';
 
 const DEFAULT_DIVISIONS: Division[] = [
   {
@@ -148,11 +149,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [spvDivisionId, setSpvDivisionId] = useState(activeDivisions[0]?.id || 'div-it');
   const [spvLocationId, setSpvLocationId] = useState(activeLocations[0]?.id || 'loc-disdik-hst');
   const [spvTitle, setSpvTitle] = useState('Kepala Sub Bagian Operasional');
-
-  // Device Fingerprint generator
-  const getDeviceFingerprint = () => {
-    return `dev-${navigator.platform.toLowerCase().replace(/\s+/g, '')}-${navigator.userAgent.length}-${Date.now().toString(36)}`;
-  };
 
   // 1. Handle Submit Login
   const handleLoginSubmit = async (e: React.FormEvent) => {

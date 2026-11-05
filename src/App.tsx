@@ -61,6 +61,9 @@ import {
   apiFetchDivisions,
   apiFetchVendors,
   apiFetchAllUsers,
+  apiFetchAttendance,
+  apiFetchReports,
+  apiFetchEvaluations,
   apiSubmitAttendance,
   apiSubmitReport,
   apiApproveReport,
@@ -237,14 +240,55 @@ export default function App() {
         localStorage.setItem('ot_staff_list', JSON.stringify(mappedStaff));
       }
     });
+
+    // 1. Sinkronisasi Server-First Riwayat Presensi (Clock In / Out) dari SQLite
+    apiFetchAttendance().then((attList) => {
+      if (attList && attList.length > 0) {
+        setAttendanceRecords(attList);
+        localStorage.setItem('ot_attendance_records', JSON.stringify(attList));
+      }
+    });
+
+    // 2. Sinkronisasi Server-First Laporan Kerja Harian dari SQLite
+    apiFetchReports().then((repList) => {
+      if (repList && repList.length > 0) {
+        setDailyReports(repList);
+        localStorage.setItem('ot_daily_reports', JSON.stringify(repList));
+      }
+    });
+
+    // 3. Sinkronisasi Server-First Evaluasi Kinerja Mingguan dari SQLite
+    apiFetchEvaluations().then((evalList) => {
+      if (evalList && evalList.length > 0) {
+        setWeeklyEvaluations(evalList);
+        localStorage.setItem('ot_weekly_evaluations', JSON.stringify(evalList));
+      }
+    });
   }, []);
 
   useEffect(() => {
-    if (currentUser && currentUser.role !== 'outsourcing') {
-      apiFetchAllUsers().then((usrs) => {
-        if (usrs && usrs.length > 0) {
-          setUsers(usrs);
-          localStorage.setItem('ot_users', JSON.stringify(usrs));
+    if (currentUser) {
+      if (currentUser.role !== 'outsourcing') {
+        apiFetchAllUsers().then((usrs) => {
+          if (usrs && usrs.length > 0) {
+            setUsers(usrs);
+            localStorage.setItem('ot_users', JSON.stringify(usrs));
+          }
+        });
+      }
+
+      // Re-fetch presensi & laporan setiap kali user login atau sesi diperbarui
+      apiFetchAttendance().then((attList) => {
+        if (attList && attList.length > 0) {
+          setAttendanceRecords(attList);
+          localStorage.setItem('ot_attendance_records', JSON.stringify(attList));
+        }
+      });
+
+      apiFetchReports().then((repList) => {
+        if (repList && repList.length > 0) {
+          setDailyReports(repList);
+          localStorage.setItem('ot_daily_reports', JSON.stringify(repList));
         }
       });
     }
@@ -650,10 +694,10 @@ export default function App() {
   // Today's attendance for active staff
   const todayDateStr = '2026-10-09';
   const staffTodayAttendance = attendanceRecords.find(
-    (a) => a.staffId === currentStaff?.id && a.date === todayDateStr
+    (a) => (a.staffId === currentStaff?.id || a.staffId === currentUser?.id) && a.date === todayDateStr
   );
   const staffTodayReports = dailyReports.filter(
-    (r) => r.staffId === currentStaff?.id && r.date === todayDateStr
+    (r) => (r.staffId === currentStaff?.id || r.staffId === currentUser?.id) && r.date === todayDateStr
   );
 
   // Pending daily reports for supervisor badge
@@ -661,7 +705,7 @@ export default function App() {
 
   // Active geofence breach count for today
   const geofenceBreachCount = attendanceRecords.filter(
-    (r) => r.date === todayDateStr && !r.locationCoords.withinRadius
+    (r) => r.date === todayDateStr && (r.locationCoords ? !r.locationCoords.withinRadius : false)
   ).length;
 
   // Dark mode effect
