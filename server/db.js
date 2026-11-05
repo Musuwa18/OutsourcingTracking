@@ -156,6 +156,9 @@ if (isNodeSqlite && dbEngine) {
   try {
     dbEngine.exec(`ALTER TABLE users ADD COLUMN workspace_note TEXT;`);
   } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'Aktif';`);
+  } catch (e) {}
 }
 
 // Fallback JSON in-memory store jika sqlite bawaan tidak aktif
@@ -808,6 +811,16 @@ function mapUserRow(row) {
       customLocation = JSON.parse(row.custom_location_json);
     } catch (e) {}
   }
+  const hasDevice = Boolean(row.device_id);
+  const deviceBinding = hasDevice
+    ? {
+        registered: true,
+        deviceModel: row.device_id,
+        deviceUuid: row.device_id,
+        registeredAt: row.created_at || new Date().toISOString(),
+      }
+    : null;
+
   return {
     id: row.id,
     nip: row.nip,
@@ -823,6 +836,8 @@ function mapUserRow(row) {
     avatarColor: row.avatar_color,
     initials: row.initials,
     deviceId: row.device_id,
+    deviceBinding,
+    status: row.status || 'Aktif',
     biometricKey: row.biometric_key,
     customLocation,
     assignedLocation: customLocation, // jika null, client fallback ke Kantor Disdik HST
@@ -857,6 +872,7 @@ export function createUser(userData) {
     customLocation: userData.customLocation || null,
     supervisorId: userData.supervisorId || null,
     workspaceNote: userData.workspaceNote || null,
+    status: userData.status || 'Aktif',
     createdAt: now
   };
 
@@ -867,8 +883,8 @@ export function createUser(userData) {
       `INSERT INTO users (
         id, nip, name, email, password_hash, role, division_id, division_name,
         role_title, phone, vendor_name, avatar_color, initials, device_id, biometric_key,
-        custom_location_json, supervisor_id, workspace_note, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        custom_location_json, supervisor_id, workspace_note, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       userObj.id,
       userObj.nip,
@@ -888,6 +904,7 @@ export function createUser(userData) {
       customLocationJson,
       userObj.supervisorId,
       userObj.workspaceNote,
+      userObj.status,
       now
     );
   } else {
@@ -1229,6 +1246,22 @@ export function updateUserProfile(userId, profileData) {
       updates.push('workspace_note = ?');
       values.push(profileData.workspaceNote);
     }
+    if (profileData.status) {
+      updates.push('status = ?');
+      values.push(profileData.status);
+    }
+    if (profileData.deviceId !== undefined) {
+      updates.push('device_id = ?');
+      values.push(profileData.deviceId);
+    }
+    if (profileData.email) {
+      updates.push('email = ?');
+      values.push(profileData.email);
+    }
+    if (profileData.nip) {
+      updates.push('nip = ?');
+      values.push(profileData.nip);
+    }
 
     if (updates.length > 0) {
       values.push(userId);
@@ -1247,9 +1280,23 @@ export function updateUserProfile(userId, profileData) {
 }
 
 export function deleteUser(userId) {
+  const user = getUserById(userId);
+  if (user && (user.nip === 'ADMIN-HST' || user.email === 'admin@disdikhst.go.id')) {
+    throw new Error('Akun Super Administrator Utama tidak dapat dihapus demi keamanan sistem.');
+  }
   if (isNodeSqlite && dbEngine) {
+    try {
+      dbEngine.prepare('DELETE FROM evaluations WHERE staff_id = ?').run(userId);
+      dbEngine.prepare('DELETE FROM daily_reports WHERE staff_id = ?').run(userId);
+      dbEngine.prepare('DELETE FROM attendance WHERE staff_id = ?').run(userId);
+    } catch (e) {
+      console.warn('[DB deleteUser cascade warn]', e.message);
+    }
     dbEngine.prepare('DELETE FROM users WHERE id = ?').run(userId);
   } else {
+    fallbackStore.evaluations = (fallbackStore.evaluations || []).filter((e) => e.staffId !== userId);
+    fallbackStore.dailyReports = (fallbackStore.dailyReports || []).filter((r) => r.staffId !== userId);
+    fallbackStore.attendance = (fallbackStore.attendance || []).filter((a) => a.staffId !== userId);
     fallbackStore.users = fallbackStore.users.filter((u) => u.id !== userId);
     persistFallback();
   }

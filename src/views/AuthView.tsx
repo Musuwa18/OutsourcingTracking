@@ -19,7 +19,7 @@ import {
   Briefcase,
   Layers,
 } from 'lucide-react';
-import { AuthUser, Division } from '../types';
+import { AuthUser, Division, Vendor, OUTSOURCING_JOB_ROLES } from '../types';
 import { apiLogin, apiRegister, apiBindDevice } from '../services/api';
 
 const DEFAULT_DIVISIONS: Division[] = [
@@ -76,6 +76,7 @@ const DEFAULT_DIVISIONS: Division[] = [
 
 interface AuthViewProps {
   divisions?: Division[];
+  vendors?: Vendor[];
   onLoginSuccess: (user: AuthUser, token: string) => void;
   onShowToast?: (message: string, type: 'success' | 'warning' | 'info') => void;
   darkMode?: boolean;
@@ -84,12 +85,22 @@ interface AuthViewProps {
 
 export const AuthView: React.FC<AuthViewProps> = ({
   divisions,
+  vendors,
   onLoginSuccess,
   onShowToast = () => {},
   darkMode = false,
   onToggleDarkMode = () => {},
 }) => {
   const activeDivisions = divisions && divisions.length > 0 ? divisions : DEFAULT_DIVISIONS;
+  
+  const availableVendors = (vendors && vendors.length > 0)
+    ? vendors.map((v) => v.name)
+    : [
+        'PT Handil Bakti Utama (Mitra Disdik HST)',
+        'CV Murakata Sarana Mandiri',
+        'Dinas Pendidikan Kab. HST'
+      ];
+
   const [activeTab, setActiveTab] = useState<'login' | 'register-os' | 'register-spv'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -106,7 +117,15 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [osPassword, setOsPassword] = useState('');
   const [osPhone, setOsPhone] = useState('');
   const [osDivisionId, setOsDivisionId] = useState(activeDivisions[0]?.id || 'div-it');
-  const [osVendor, setOsVendor] = useState('PT Indo Tekno Prima');
+  const [osRoleTitle, setOsRoleTitle] = useState<string>(OUTSOURCING_JOB_ROLES[0]);
+  const [osVendor, setOsVendor] = useState<string>(availableVendors[0] || 'PT Handil Bakti Utama (Mitra Disdik HST)');
+
+  // Sync vendor default when availableVendors loads
+  React.useEffect(() => {
+    if (availableVendors.length > 0 && (!osVendor || !availableVendors.includes(osVendor))) {
+      setOsVendor(availableVendors[0]);
+    }
+  }, [vendors]);
 
   // Register Supervisor Form States
   const [spvName, setSpvName] = useState('');
@@ -206,7 +225,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
         role: 'outsourcing',
         divisionId: osDivisionId,
         divisionName: selectedDiv?.name || 'Sub Bagian Dinas',
-        roleTitle: `Tenaga Alih Daya (${selectedDiv?.code || 'Outsource'})`,
+        roleTitle: osRoleTitle.trim() || 'Administrasi Perkantoran',
         phone: osPhone.trim(),
         vendorName: osVendor.trim(),
         deviceId,
@@ -426,7 +445,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  Pilih Sub Bagian / Divisi Tugas *
+                  Pilih Sub Bagian / Divisi Penempatan *
                 </label>
                 <select
                   value={osDivisionId}
@@ -437,6 +456,24 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   {activeDivisions.map((d) => (
                     <option key={d.id} value={d.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       {d.name} ({d.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                  Pilih Jenis Pekerjaan / Formasi Tugas *
+                </label>
+                <select
+                  value={osRoleTitle}
+                  onChange={(e) => setOsRoleTitle(e.target.value)}
+                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                  required
+                >
+                  {OUTSOURCING_JOB_ROLES.map((job) => (
+                    <option key={job} value={job} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      {job}
                     </option>
                   ))}
                 </select>
@@ -515,15 +552,20 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    Perusahaan Vendor Mitra
+                    Perusahaan Vendor Mitra *
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={osVendor}
                     onChange={(e) => setOsVendor(e.target.value)}
-                    placeholder="PT Mitra Rekanan"
                     className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                  />
+                    required
+                  >
+                    {availableVendors.map((vName) => (
+                      <option key={vName} value={vName} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                        {vName}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

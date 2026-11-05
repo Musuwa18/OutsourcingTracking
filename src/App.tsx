@@ -477,6 +477,28 @@ export default function App() {
   const handleUpdateUsers = (newUsers: UserAccount[]) => {
     setUsers(newUsers);
     localStorage.setItem('ot_users', JSON.stringify(newUsers));
+    
+    // Sinkronkan staffList alih daya secara otomatis
+    const activeStaff: StaffProfile[] = newUsers
+      .filter((u) => u.role === 'outsourcing')
+      .map((u) => ({
+        id: u.id,
+        nip: u.nip,
+        name: u.name,
+        email: u.email,
+        phone: u.phone || '',
+        division: u.divisionName || '',
+        vendorName: u.vendorName || '',
+        roleTitle: u.roleTitle || 'Tenaga Outsourcing',
+        assignedLocation: locations[0],
+        supervisorId: u.supervisorId,
+        avatarColor: u.avatarColor || '#4f46e5',
+        initials: u.initials || 'OS',
+        joinDate: '2026-01-01',
+        status: (u.status === 'Nonaktif' ? 'Nonaktif' : 'Aktif') as any,
+      }));
+    setStaffList(activeStaff);
+
     addAuditLog('Pembaruan Data Pengguna', `Daftar akun pengguna diperbarui (${newUsers.length} total akun).`, 'Pengaturan');
   };
 
@@ -946,6 +968,7 @@ export default function App() {
       <div className={`min-h-screen ${darkMode ? 'dark' : ''}`}>
         <AuthView
           divisions={divisions}
+          vendors={vendors}
           onLoginSuccess={handleLoginSuccess}
           onShowToast={showToast}
           darkMode={darkMode}

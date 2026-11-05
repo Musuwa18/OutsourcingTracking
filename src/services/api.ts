@@ -212,7 +212,17 @@ export async function apiUpdateUserProfile(userId: string, profileData: any): Pr
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Gagal memperbarui profil.');
-  return data.user;
+  return data;
+}
+
+export async function apiResetUserDevice(userId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/users/${userId}/reset-device`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal mereset kunci perangkat.');
+  return data;
 }
 
 export async function apiDeleteUser(userId: string): Promise<void> {

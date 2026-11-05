@@ -212,6 +212,16 @@ export interface NotificationItem {
   severity?: 'warning' | 'critical' | 'info';
 }
 
+export const OUTSOURCING_JOB_ROLES = [
+  'Administrasi Perkantoran',
+  'Resepsionis',
+  'Petugas Kebersihan',
+  'Penjaga Malam / Wakar',
+  'Driver / Pengemudi',
+] as const;
+
+export type OutsourcingJobRole = typeof OUTSOURCING_JOB_ROLES[number];
+
 export interface UserAccount {
   id: string;
   name: string;
@@ -219,20 +229,21 @@ export interface UserAccount {
   email: string;
   role: 'outsourcing' | 'coordinator' | 'supervisor' | 'admin';
   roleTitle: string;
-  status: 'Aktif' | 'Tangguhkan';
+  status: 'Aktif' | 'Nonaktif' | 'Tangguhkan';
   divisionId?: string;
   divisionName?: string;
   vendorName?: string;
   supervisorId?: string;
   phone?: string;
+  deviceId?: string | null;
   deviceBinding: {
     registered: boolean;
     deviceModel: string;
-    deviceUuid: string;
-    registeredAt: string;
-    ipAddress: string;
+    deviceUuid?: string;
+    registeredAt?: string;
+    ipAddress?: string;
   } | null;
-  lastLogin: string;
+  lastLogin?: string;
   avatarColor: string;
   initials: string;
 }

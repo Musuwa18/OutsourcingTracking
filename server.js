@@ -138,6 +138,13 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(401).json({ error: 'Akun tidak ditemukan. Periksa kembali NIP atau Email Anda.' });
     }
 
+    // Cek status aktif / nonaktif akun oleh Administrator
+    if (user.status === 'Nonaktif') {
+      return res.status(403).json({
+        error: 'Akun Anda sedang dinonaktifkan oleh Administrator. Silakan hubungi Sub Bagian Umum dan Kepegawaian Disdik HST.'
+      });
+    }
+
     // Cek password jika bukan login via biometricKey yang valid
     if (password) {
       const hashedInput = hashPassword(password);
@@ -156,6 +163,12 @@ app.post('/api/auth/login', (req, res) => {
     if (deviceId && !user.deviceId) {
       updateUserDevice(user.id, deviceId);
       user.deviceId = deviceId;
+      user.deviceBinding = {
+        registered: true,
+        deviceModel: deviceId,
+        registeredAt: new Date().toISOString(),
+        biometricEnabled: !!user.biometricKey
+      };
     }
 
     const token = `ot_token_${user.id}_${Date.now()}`;
@@ -376,6 +389,15 @@ app.post('/api/users/change-password', (req, res) => {
     res.json({ success: true, message: 'Kata sandi Anda berhasil diperbarui.' });
   } catch (err) {
     res.status(400).json({ error: err.message || 'Gagal memperbarui kata sandi.' });
+  }
+});
+
+app.post('/api/users/:id/reset-device', (req, res) => {
+  try {
+    const updated = updateUserProfile(req.params.id, { deviceId: null });
+    res.json({ success: true, user: updated, message: 'Kunci perangkat pengguna berhasil direset.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Gagal mereset kunci perangkat.' });
   }
 });
 
