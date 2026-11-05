@@ -1027,6 +1027,7 @@ export default function App() {
         <AuthView
           divisions={divisions}
           vendors={vendors}
+          locations={locations}
           onLoginSuccess={handleLoginSuccess}
           onShowToast={showToast}
           darkMode={darkMode}

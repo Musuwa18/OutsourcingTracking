@@ -18,8 +18,10 @@ import {
   CheckCircle2,
   Briefcase,
   Layers,
+  MapPin,
 } from 'lucide-react';
-import { AuthUser, Division, Vendor, OUTSOURCING_JOB_ROLES } from '../types';
+import { AuthUser, Division, Vendor, OfficeLocation, OUTSOURCING_JOB_ROLES } from '../types';
+import { PRIMARY_OFFICES } from '../utils/geo';
 import { apiLogin, apiRegister, apiBindDevice } from '../services/api';
 
 const DEFAULT_DIVISIONS: Division[] = [
@@ -77,6 +79,7 @@ const DEFAULT_DIVISIONS: Division[] = [
 interface AuthViewProps {
   divisions?: Division[];
   vendors?: Vendor[];
+  locations?: OfficeLocation[];
   onLoginSuccess: (user: AuthUser, token: string) => void;
   onShowToast?: (message: string, type: 'success' | 'warning' | 'info') => void;
   darkMode?: boolean;
@@ -86,12 +89,14 @@ interface AuthViewProps {
 export const AuthView: React.FC<AuthViewProps> = ({
   divisions,
   vendors,
+  locations,
   onLoginSuccess,
   onShowToast = () => {},
   darkMode = false,
   onToggleDarkMode = () => {},
 }) => {
   const activeDivisions = divisions && divisions.length > 0 ? divisions : DEFAULT_DIVISIONS;
+  const activeLocations = locations && locations.length > 0 ? locations : PRIMARY_OFFICES;
   
   const availableVendors = (vendors && vendors.length > 0)
     ? vendors.map((v) => v.name)
@@ -115,8 +120,12 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [osNip, setOsNip] = useState('');
   const [osEmail, setOsEmail] = useState('');
   const [osPassword, setOsPassword] = useState('');
+  const [osConfirmPassword, setOsConfirmPassword] = useState('');
+  const [showOsPassword, setShowOsPassword] = useState(false);
+  const [showOsConfirmPassword, setShowOsConfirmPassword] = useState(false);
   const [osPhone, setOsPhone] = useState('');
   const [osDivisionId, setOsDivisionId] = useState(activeDivisions[0]?.id || 'div-it');
+  const [osLocationId, setOsLocationId] = useState(activeLocations[0]?.id || 'loc-disdik-hst');
   const [osRoleTitle, setOsRoleTitle] = useState<string>(OUTSOURCING_JOB_ROLES[0]);
   const [osVendor, setOsVendor] = useState<string>(availableVendors[0] || 'PT Handil Bakti Utama (Mitra Disdik HST)');
 
@@ -132,8 +141,12 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [spvNip, setSpvNip] = useState('');
   const [spvEmail, setSpvEmail] = useState('');
   const [spvPassword, setSpvPassword] = useState('');
+  const [spvConfirmPassword, setSpvConfirmPassword] = useState('');
+  const [showSpvPassword, setShowSpvPassword] = useState(false);
+  const [showSpvConfirmPassword, setShowSpvConfirmPassword] = useState(false);
   const [spvPhone, setSpvPhone] = useState('');
   const [spvDivisionId, setSpvDivisionId] = useState(activeDivisions[0]?.id || 'div-it');
+  const [spvLocationId, setSpvLocationId] = useState(activeLocations[0]?.id || 'loc-disdik-hst');
   const [spvTitle, setSpvTitle] = useState('Kepala Sub Bagian Operasional');
 
   // Device Fingerprint generator
@@ -206,14 +219,25 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const handleRegisterOsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    if (!osName || !osNip || !osEmail || !osPassword) {
+    if (!osName || !osNip || !osEmail || !osPassword || !osConfirmPassword) {
       setErrorMessage('Harap lengkapi seluruh kolom bertanda bintang (*).');
+      return;
+    }
+
+    if (osPassword.length < 6) {
+      setErrorMessage('Kata sandi minimal terdiri dari 6 karakter.');
+      return;
+    }
+
+    if (osPassword !== osConfirmPassword) {
+      setErrorMessage('Konfirmasi kata sandi tidak cocok. Harap periksa kembali.');
       return;
     }
 
     try {
       setLoading(true);
       const selectedDiv = activeDivisions.find((d) => d.id === osDivisionId);
+      const selectedLoc = activeLocations.find((l) => l.id === osLocationId) || activeLocations[0];
       const deviceId = localStorage.getItem('ot_device_id') || getDeviceFingerprint();
       localStorage.setItem('ot_device_id', deviceId);
 
@@ -229,10 +253,12 @@ export const AuthView: React.FC<AuthViewProps> = ({
         phone: osPhone.trim(),
         vendorName: osVendor.trim(),
         deviceId,
+        customLocation: selectedLoc,
+        workspaceNote: `Penugasan Resmi: ${selectedLoc.name}`,
       });
 
       localStorage.setItem('ot_last_email', result.user.email);
-      onShowToast('Pendaftaran akun Tenaga Outsourcing berhasil!', 'success');
+      onShowToast(`Pendaftaran berhasil! Terikat pada lokasi: ${selectedLoc.name}`, 'success');
       onLoginSuccess(result.user, result.token);
     } catch (err: any) {
       setErrorMessage(err.message || 'Pendaftaran gagal.');
@@ -245,14 +271,25 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const handleRegisterSpvSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    if (!spvName || !spvNip || !spvEmail || !spvPassword) {
+    if (!spvName || !spvNip || !spvEmail || !spvPassword || !spvConfirmPassword) {
       setErrorMessage('Harap lengkapi seluruh kolom bertanda bintang (*).');
+      return;
+    }
+
+    if (spvPassword.length < 6) {
+      setErrorMessage('Kata sandi minimal terdiri dari 6 karakter.');
+      return;
+    }
+
+    if (spvPassword !== spvConfirmPassword) {
+      setErrorMessage('Konfirmasi kata sandi tidak cocok. Harap periksa kembali.');
       return;
     }
 
     try {
       setLoading(true);
       const selectedDiv = activeDivisions.find((d) => d.id === spvDivisionId);
+      const selectedLoc = activeLocations.find((l) => l.id === spvLocationId) || activeLocations[0];
       const deviceId = localStorage.getItem('ot_device_id') || getDeviceFingerprint();
       localStorage.setItem('ot_device_id', deviceId);
 
@@ -268,6 +305,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
         phone: spvPhone.trim(),
         vendorName: 'Dinas Pendidikan Kab. HST',
         deviceId,
+        customLocation: selectedLoc,
+        workspaceNote: `Penugasan di: ${selectedLoc.name}`,
       });
 
       localStorage.setItem('ot_last_email', result.user.email);
@@ -440,7 +479,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
           {activeTab === 'register-os' && (
             <form onSubmit={handleRegisterOsSubmit} className="space-y-4">
               <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/40 text-xs text-indigo-900 dark:text-indigo-200">
-                <strong>Registrasi Tenaga Outsourcing:</strong> Akun ini akan terkunci pada antarmuka PWA mobile dan terikat pada Sub Bagian serta Atasan Langsung terkait.
+                <strong>Registrasi Tenaga Outsourcing:</strong> Akun ini akan terkunci pada antarmuka PWA mobile dan terikat pada Sub Bagian, Atasan Langsung, serta Geofence lokasi kerja yang dipilih.
               </div>
 
               <div>
@@ -477,6 +516,44 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Pilihan Lokasi Tempat Bekerja (Geofence Target) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Pilih Lokasi Tempat Bekerja / Titik Tugas *</span>
+                  </label>
+                  {(() => {
+                    const loc = activeLocations.find((l) => l.id === osLocationId);
+                    return loc ? (
+                      <span className="text-[10px] text-emerald-600 dark:text-cyan-400 font-semibold font-mono">
+                        Radius: {loc.radiusMeters}m
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+                <select
+                  value={osLocationId}
+                  onChange={(e) => setOsLocationId(e.target.value)}
+                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                  required
+                >
+                  {activeLocations.map((loc) => (
+                    <option key={loc.id} value={loc.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      {loc.name} (Radius Absen: {loc.radiusMeters} meter)
+                    </option>
+                  ))}
+                </select>
+                {(() => {
+                  const loc = activeLocations.find((l) => l.id === osLocationId);
+                  return loc ? (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                      📍 {loc.address}
+                    </p>
+                  ) : null;
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -524,22 +601,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    Kata Sandi *
-                  </label>
-                  <input
-                    type="password"
-                    value={osPassword}
-                    onChange={(e) => setOsPassword(e.target.value)}
-                    placeholder="Minimal 6 karakter"
-                    className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
                     No. WhatsApp / HP
                   </label>
                   <input
@@ -550,22 +611,93 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                  Perusahaan Vendor Mitra *
+                </label>
+                <select
+                  value={osVendor}
+                  onChange={(e) => setOsVendor(e.target.value)}
+                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                  required
+                >
+                  {availableVendors.map((vName) => (
+                    <option key={vName} value={vName} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      {vName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Kata Sandi & Konfirmasi Kata Sandi dengan Ikon Mata */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    Perusahaan Vendor Mitra *
+                    Kata Sandi *
                   </label>
-                  <select
-                    value={osVendor}
-                    onChange={(e) => setOsVendor(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                    required
-                  >
-                    {availableVendors.map((vName) => (
-                      <option key={vName} value={vName} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                        {vName}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <input
+                      type={showOsPassword ? 'text' : 'password'}
+                      value={osPassword}
+                      onChange={(e) => setOsPassword(e.target.value)}
+                      placeholder="Minimal 6 karakter"
+                      className="w-full pl-3 pr-10 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowOsPassword(!showOsPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                      title={showOsPassword ? 'Sembunyikan Kata Sandi' : 'Lihat Kata Sandi'}
+                      aria-label="Toggle lihat kata sandi"
+                    >
+                      {showOsPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Ulangi Kata Sandi *
+                    </label>
+                    {osConfirmPassword && (
+                      <span className={`text-[10px] font-bold ${
+                        osPassword === osConfirmPassword
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-rose-500'
+                      }`}>
+                        {osPassword === osConfirmPassword ? '✓ Cocok' : '✗ Tidak cocok'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showOsConfirmPassword ? 'text' : 'password'}
+                      value={osConfirmPassword}
+                      onChange={(e) => setOsConfirmPassword(e.target.value)}
+                      placeholder="Ketik ulang kata sandi"
+                      className={`w-full pl-3 pr-10 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium ${
+                        osConfirmPassword
+                          ? osPassword === osConfirmPassword
+                            ? 'border-emerald-500 ring-1 ring-emerald-500/30'
+                            : 'border-rose-500 ring-1 ring-rose-500/30'
+                          : ''
+                      }`}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowOsConfirmPassword(!showOsConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                      title={showOsConfirmPassword ? 'Sembunyikan Kata Sandi' : 'Lihat Kata Sandi'}
+                      aria-label="Toggle lihat konfirmasi kata sandi"
+                    >
+                      {showOsConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -603,6 +735,33 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Pilihan Lokasi Kantor / Titik Tugas Atasan */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                  Pilih Lokasi Kantor / Pos Penugasan Atasan *
+                </label>
+                <select
+                  value={spvLocationId}
+                  onChange={(e) => setSpvLocationId(e.target.value)}
+                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                  required
+                >
+                  {activeLocations.map((loc) => (
+                    <option key={loc.id} value={loc.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      {loc.name} (Radius Absen: {loc.radiusMeters} meter)
+                    </option>
+                  ))}
+                </select>
+                {(() => {
+                  const loc = activeLocations.find((l) => l.id === spvLocationId);
+                  return loc ? (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                      📍 {loc.address}
+                    </p>
+                  ) : null;
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -650,22 +809,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    Kata Sandi *
-                  </label>
-                  <input
-                    type="password"
-                    value={spvPassword}
-                    onChange={(e) => setSpvPassword(e.target.value)}
-                    placeholder="Minimal 6 karakter"
-                    className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
                     No. Telepon / WhatsApp
                   </label>
                   <input
@@ -676,17 +819,88 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                  Jabatan Struktural
+                </label>
+                <input
+                  type="text"
+                  value={spvTitle}
+                  onChange={(e) => setSpvTitle(e.target.value)}
+                  placeholder="Contoh: Kepala Sub Bagian / PPTK"
+                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                />
+              </div>
+
+              {/* Kata Sandi & Konfirmasi Kata Sandi Atasan */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    Jabatan Struktural
+                    Kata Sandi *
                   </label>
-                  <input
-                    type="text"
-                    value={spvTitle}
-                    onChange={(e) => setSpvTitle(e.target.value)}
-                    placeholder="Kepala Sub Bagian"
-                    className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showSpvPassword ? 'text' : 'password'}
+                      value={spvPassword}
+                      onChange={(e) => setSpvPassword(e.target.value)}
+                      placeholder="Minimal 6 karakter"
+                      className="w-full pl-3 pr-10 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSpvPassword(!showSpvPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                      title={showSpvPassword ? 'Sembunyikan Kata Sandi' : 'Lihat Kata Sandi'}
+                      aria-label="Toggle lihat kata sandi atasan"
+                    >
+                      {showSpvPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Ulangi Kata Sandi *
+                    </label>
+                    {spvConfirmPassword && (
+                      <span className={`text-[10px] font-bold ${
+                        spvPassword === spvConfirmPassword
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-rose-500'
+                      }`}>
+                        {spvPassword === spvConfirmPassword ? '✓ Cocok' : '✗ Tidak cocok'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showSpvConfirmPassword ? 'text' : 'password'}
+                      value={spvConfirmPassword}
+                      onChange={(e) => setSpvConfirmPassword(e.target.value)}
+                      placeholder="Ketik ulang kata sandi"
+                      className={`w-full pl-3 pr-10 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium ${
+                        spvConfirmPassword
+                          ? spvPassword === spvConfirmPassword
+                            ? 'border-emerald-500 ring-1 ring-emerald-500/30'
+                            : 'border-rose-500 ring-1 ring-rose-500/30'
+                          : ''
+                      }`}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSpvConfirmPassword(!showSpvConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                      title={showSpvConfirmPassword ? 'Sembunyikan Kata Sandi' : 'Lihat Kata Sandi'}
+                      aria-label="Toggle lihat konfirmasi kata sandi atasan"
+                    >
+                      {showSpvConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
