@@ -28,12 +28,12 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-24 md:pb-8">
       {/* Header & Filter Controls */}
-      <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+      <div className="p-5 glass-card space-y-4">
         <div>
           <h1 className="text-base font-bold text-slate-900 dark:text-white">
             Linimasa Aktivitas 30 Hari Terakhir
           </h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
             Riwayat presensi geofence dan laporan kinerja harian terlacak
           </p>
         </div>
@@ -46,7 +46,7 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
             className={`flex-1 py-1.5 px-3 rounded-lg transition-all cursor-pointer text-center ${
               filterType === 'all'
                 ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-medium'
             }`}
           >
             Semua ({staffAttendance.length + staffReports.length})
@@ -57,7 +57,7 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
             className={`flex-1 py-1.5 px-3 rounded-lg transition-all cursor-pointer text-center ${
               filterType === 'attendance'
                 ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-medium'
             }`}
           >
             Presensi ({staffAttendance.length})
@@ -68,7 +68,7 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
             className={`flex-1 py-1.5 px-3 rounded-lg transition-all cursor-pointer text-center ${
               filterType === 'reports'
                 ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-medium'
             }`}
           >
             Laporan Tugas ({staffReports.length})
@@ -98,7 +98,7 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
               {/* Date Header */}
               <div className="flex items-center gap-2 px-1">
                 <Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-200">
                   {formattedDate}
                 </span>
               </div>
@@ -111,33 +111,33 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                     <div className="flex items-center gap-3">
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                         dayAttendance.status === 'Hadir'
-                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
                           : dayAttendance.status === 'Terlambat'
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                          : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20'
+                          : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/20'
                       }`}>
                         <Clock className="w-4 h-4" />
                       </div>
                       <div>
-                        <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                           <span>Presensi Harian</span>
-                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             dayAttendance.status === 'Hadir'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                              ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300'
                           }`}>
                             {dayAttendance.status}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                        <div className="text-[11px] text-slate-700 dark:text-slate-300 font-mono mt-0.5 font-semibold">
                           Masuk: {dayAttendance.clockInTime} · Pulang: {dayAttendance.clockOutTime || 'Belum'}
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-right text-[11px] text-slate-400">
-                      <div>{dayAttendance.locationCoords.locationName}</div>
-                      <div className="font-mono text-[10px]">Akurasi ±{Math.round(dayAttendance.locationCoords.accuracy)}m</div>
+                    <div className="text-right text-[11px] text-slate-700 dark:text-slate-400 font-medium">
+                      <div className="font-semibold text-slate-800 dark:text-slate-300">{dayAttendance.locationCoords.locationName}</div>
+                      <div className="font-mono text-[10px] text-slate-600 dark:text-slate-400">Akurasi ±{Math.round(dayAttendance.locationCoords.accuracy)}m</div>
                     </div>
                   </div>
                 )}
@@ -156,22 +156,22 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                             {report.title}
                           </span>
                         </div>
-                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0 ${
                           report.supervisorApproval === 'Disetujui'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                            ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300'
                         }`}>
                           {report.supervisorApproval}
                         </span>
                       </div>
 
-                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
+                      <p className="text-slate-800 dark:text-slate-200 leading-relaxed text-[11px] font-normal">
                         {report.summary}
                       </p>
 
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800 font-mono">
+                      <div className="flex items-center justify-between text-[10px] text-slate-700 dark:text-slate-400 pt-1 border-t border-slate-200 dark:border-slate-800 font-mono font-medium">
                         <span>{report.startTime} - {report.endTime} WIB</span>
-                        <span>{report.category}</span>
+                        <span className="font-semibold text-indigo-700 dark:text-indigo-400">{report.category}</span>
                       </div>
                     </div>
                   ))}

@@ -24,8 +24,21 @@ import {
   RefreshCw,
   LogOut,
   Fingerprint,
+  Building2,
+  Briefcase,
+  Copy,
+  Search,
+  Calendar,
+  Phone,
+  UserCheck,
+  FileText,
+  Clock,
+  Shield,
+  ArrowRight,
 } from 'lucide-react';
 import {
+  Division,
+  Vendor,
   OfficeLocation,
   UserAccount,
   ActiveSession,
@@ -36,6 +49,17 @@ import {
   StaffProfile,
 } from '../types';
 import { VisualMapPicker } from '../components/VisualMapPicker';
+import {
+  apiCreateDivision,
+  apiUpdateDivision,
+  apiDeleteDivision,
+  apiCreateVendor,
+  apiUpdateVendor,
+  apiDeleteVendor,
+  apiResetPassword,
+  apiUpdateUserProfile,
+  apiDeleteUser,
+} from '../services/api';
 
 interface SystemSettingsViewProps {
   locations: OfficeLocation[];
@@ -43,6 +67,10 @@ interface SystemSettingsViewProps {
   staffList: StaffProfile[];
   users: UserAccount[];
   onUpdateUsers: (users: UserAccount[]) => void;
+  divisions: Division[];
+  onUpdateDivisions: (divs: Division[]) => void;
+  vendors: Vendor[];
+  onUpdateVendors: (vens: Vendor[]) => void;
   sessions: ActiveSession[];
   onUpdateSessions: (sessions: ActiveSession[]) => void;
   geofenceConfig: GeofenceGlobalConfig;
@@ -62,6 +90,10 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   staffList,
   users,
   onUpdateUsers,
+  divisions,
+  onUpdateDivisions,
+  vendors,
+  onUpdateVendors,
   sessions,
   onUpdateSessions,
   geofenceConfig,
@@ -74,39 +106,348 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   onUpdateSecurityConfig,
   onShowToast,
 }) => {
-  const [activeTab, setActiveTab] = useState<'geofence' | 'users' | 'rbac'>('geofence');
+  const [activeTab, setActiveTab] = useState<'divisions' | 'vendors' | 'users' | 'geofence' | 'rbac'>('divisions');
 
-  // ================= TAB 1: GEOFENCE STATE =================
+  // ================= TAB: DIVISIONS (BIDANG & SUBBAGIAN) =================
+  const [divisionSearch, setDivisionSearch] = useState('');
+  const [divisionModalOpen, setDivisionModalOpen] = useState(false);
+  const [editingDivision, setEditingDivision] = useState<Division | null>(null);
+  const [divName, setDivName] = useState('');
+  const [divCode, setDivCode] = useState('');
+  const [divDesc, setDivDesc] = useState('');
+  const [divSupervisor, setDivSupervisor] = useState('');
+  const [isSavingDivision, setIsSavingDivision] = useState(false);
+
+  // ================= TAB: VENDORS (PERUSAHAAN PENYEDIA) =================
+  const [vendorSearch, setVendorSearch] = useState('');
+  const [vendorModalOpen, setVendorModalOpen] = useState(false);
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [venName, setVenName] = useState('');
+  const [venCode, setVenCode] = useState('');
+  const [venContract, setVenContract] = useState('');
+  const [venStart, setVenStart] = useState('2026-01-02');
+  const [venEnd, setVenEnd] = useState('2026-12-31');
+  const [venPic, setVenPic] = useState('');
+  const [venPhone, setVenPhone] = useState('');
+  const [venAddress, setVenAddress] = useState('');
+  const [venStatus, setVenStatus] = useState<'Aktif' | 'Nonaktif'>('Aktif');
+  const [isSavingVendor, setIsSavingVendor] = useState(false);
+
+  // ================= RESET PASSWORD & USER EDIT =================
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [targetUserForReset, setTargetUserForReset] = useState<UserAccount | null>(null);
+  const [resetPasswordInput, setResetPasswordInput] = useState('Password123!');
+  const [isResettingPass, setIsResettingPass] = useState(false);
+
+  const [editUserModalOpen, setEditUserModalOpen] = useState(false);
+  const [targetUserForEdit, setTargetUserForEdit] = useState<UserAccount | null>(null);
+  const [editUserDivisionId, setEditUserDivisionId] = useState('');
+  const [editUserSupervisorId, setEditUserSupervisorId] = useState('');
+  const [editUserVendorName, setEditUserVendorName] = useState('');
+  const [editUserRoleTitle, setEditUserRoleTitle] = useState('');
+  const [editUserRole, setEditUserRole] = useState<'outsourcing' | 'coordinator' | 'supervisor' | 'admin'>('outsourcing');
+  const [isSavingUserEdit, setIsSavingUserEdit] = useState(false);
+
+  // ================= TAB: GEOFENCE STATE =================
   const [editingLocation, setEditingLocation] = useState<OfficeLocation | null>(null);
   const [isNewLocation, setIsNewLocation] = useState(false);
   const [locModalOpen, setLocModalOpen] = useState(false);
 
-  // Form fields for location modal
   const [locName, setLocName] = useState('');
   const [locAddress, setLocAddress] = useState('');
   const [locLat, setLocLat] = useState(-6.22384);
   const [locLng, setLocLng] = useState(106.80892);
   const [locRadius, setLocRadius] = useState(80);
 
-  // Global Geofence Config Local State
   const [assignmentPolicy, setAssignmentPolicy] = useState(geofenceConfig.assignmentPolicy);
   const [gpsThreshold, setGpsThreshold] = useState(geofenceConfig.gpsAccuracyThreshold);
   const [strictOpenSky, setStrictOpenSky] = useState(geofenceConfig.strictOpenSkyWarning);
 
-  // ================= TAB 2: USER MANAGEMENT STATE =================
+  // ================= TAB: USER MANAGEMENT STATE =================
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [newUserModalOpen, setNewUserModalOpen] = useState(false);
 
-  // Form fields for new user
   const [newUserName, setNewUserName] = useState('');
   const [newUserNip, setNewUserNip] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState<'outsourcing' | 'coordinator' | 'supervisor' | 'admin'>('outsourcing');
   const [newUserRoleTitle, setNewUserRoleTitle] = useState('');
 
-  // ================= TAB 3: RBAC LOCAL STATE =================
+  // ================= TAB: RBAC LOCAL STATE =================
   const [localPermissions, setLocalPermissions] = useState<Record<string, RolePermissions>>(rolePermissions);
+
+  // Helper for supervisor name lookup
+  const getSupervisorName = (supId?: string) => {
+    if (!supId) return 'Belum Ditetapkan';
+    const found = users.find((u) => u.id === supId || u.nip === supId);
+    return found ? found.name : supId;
+  };
+
+  const supervisorCandidates = users.filter(
+    (u) => u.role === 'supervisor' || u.role === 'admin' || u.role === 'coordinator'
+  );
+
+  // ================= ACTION HANDLERS: DIVISIONS =================
+  const handleOpenAddDivision = () => {
+    setEditingDivision(null);
+    setDivName('');
+    setDivCode('');
+    setDivDesc('');
+    setDivSupervisor('');
+    setDivisionModalOpen(true);
+  };
+
+  const handleOpenEditDivision = (div: Division) => {
+    setEditingDivision(div);
+    setDivName(div.name);
+    setDivCode(div.code || '');
+    setDivDesc(div.description || '');
+    setDivSupervisor(div.supervisorName || '');
+    setDivisionModalOpen(true);
+  };
+
+  const handleSaveDivision = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!divName.trim()) {
+      onShowToast('Nama bidang / subbagian wajib diisi', 'warning');
+      return;
+    }
+    setIsSavingDivision(true);
+    try {
+      if (editingDivision) {
+        const res = await apiUpdateDivision(editingDivision.id, {
+          name: divName.trim(),
+          code: divCode.trim().toUpperCase() || 'DIV',
+          description: divDesc.trim(),
+          supervisorName: divSupervisor.trim(),
+        });
+        if (res.success && res.division) {
+          const updated = divisions.map((d) => (d.id === editingDivision.id ? res.division! : d));
+          onUpdateDivisions(updated);
+          onShowToast(`Bidang "${res.division.name}" berhasil diperbarui.`, 'success');
+          setDivisionModalOpen(false);
+        } else {
+          onShowToast(res.message || 'Gagal memperbarui bidang', 'warning');
+        }
+      } else {
+        const res = await apiCreateDivision({
+          name: divName.trim(),
+          code: divCode.trim().toUpperCase() || 'DIV',
+          description: divDesc.trim(),
+          supervisorName: divSupervisor.trim(),
+        });
+        if (res.success && res.division) {
+          onUpdateDivisions([...divisions, res.division]);
+          onShowToast(`Bidang baru "${res.division.name}" berhasil didaftarkan.`, 'success');
+          setDivisionModalOpen(false);
+        } else {
+          onShowToast(res.message || 'Gagal menambah bidang', 'warning');
+        }
+      }
+    } catch (err: any) {
+      onShowToast(err.message || 'Terjadi kesalahan sistem', 'warning');
+    } finally {
+      setIsSavingDivision(false);
+    }
+  };
+
+  const handleDeleteDivision = async (id: string, name: string) => {
+    if (!window.confirm(`Hapus bidang "${name}" dari master data dinas?`)) return;
+    try {
+      const res = await apiDeleteDivision(id);
+      if (res.success) {
+        onUpdateDivisions(divisions.filter((d) => d.id !== id));
+        onShowToast(`Bidang "${name}" telah dihapus.`, 'info');
+      } else {
+        onShowToast(res.message || 'Gagal menghapus bidang', 'warning');
+      }
+    } catch (err: any) {
+      onShowToast(err.message || 'Gagal menghapus bidang', 'warning');
+    }
+  };
+
+  // ================= ACTION HANDLERS: VENDORS =================
+  const handleOpenAddVendor = () => {
+    setEditingVendor(null);
+    setVenName('');
+    setVenCode('');
+    setVenContract('');
+    setVenStart('2026-01-02');
+    setVenEnd('2026-12-31');
+    setVenPic('');
+    setVenPhone('');
+    setVenAddress('');
+    setVenStatus('Aktif');
+    setVendorModalOpen(true);
+  };
+
+  const handleOpenEditVendor = (v: Vendor) => {
+    setEditingVendor(v);
+    setVenName(v.name);
+    setVenCode(v.code || '');
+    setVenContract(v.contractNumber || '');
+    setVenStart(v.contractStartDate || '2026-01-02');
+    setVenEnd(v.contractEndDate || '2026-12-31');
+    setVenPic(v.picName || '');
+    setVenPhone(v.picPhone || '');
+    setVenAddress(v.address || '');
+    setVenStatus(v.status || 'Aktif');
+    setVendorModalOpen(true);
+  };
+
+  const handleSaveVendor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!venName.trim()) {
+      onShowToast('Nama badan usaha / perusahaan vendor wajib diisi', 'warning');
+      return;
+    }
+    setIsSavingVendor(true);
+    try {
+      if (editingVendor) {
+        const res = await apiUpdateVendor(editingVendor.id, {
+          name: venName.trim(),
+          code: venCode.trim().toUpperCase(),
+          contractNumber: venContract.trim(),
+          contractStartDate: venStart,
+          contractEndDate: venEnd,
+          picName: venPic.trim(),
+          picPhone: venPhone.trim(),
+          address: venAddress.trim(),
+          status: venStatus,
+        });
+        if (res.success && res.vendor) {
+          const updated = vendors.map((v) => (v.id === editingVendor.id ? res.vendor! : v));
+          onUpdateVendors(updated);
+          onShowToast(`Data vendor "${res.vendor.name}" berhasil diperbarui.`, 'success');
+          setVendorModalOpen(false);
+        } else {
+          onShowToast(res.message || 'Gagal memperbarui vendor', 'warning');
+        }
+      } else {
+        const res = await apiCreateVendor({
+          name: venName.trim(),
+          code: venCode.trim().toUpperCase(),
+          contractNumber: venContract.trim(),
+          contractStartDate: venStart,
+          contractEndDate: venEnd,
+          picName: venPic.trim(),
+          picPhone: venPhone.trim(),
+          address: venAddress.trim(),
+          status: venStatus,
+        });
+        if (res.success && res.vendor) {
+          onUpdateVendors([...vendors, res.vendor]);
+          onShowToast(`Perusahaan vendor "${res.vendor.name}" berhasil ditambahkan.`, 'success');
+          setVendorModalOpen(false);
+        } else {
+          onShowToast(res.message || 'Gagal menambah vendor', 'warning');
+        }
+      }
+    } catch (err: any) {
+      onShowToast(err.message || 'Terjadi kesalahan sistem', 'warning');
+    } finally {
+      setIsSavingVendor(false);
+    }
+  };
+
+  const handleDeleteVendor = async (id: string, name: string) => {
+    if (!window.confirm(`Hapus perusahaan vendor "${name}" dari master sistem?`)) return;
+    try {
+      const res = await apiDeleteVendor(id);
+      if (res.success) {
+        onUpdateVendors(vendors.filter((v) => v.id !== id));
+        onShowToast(`Vendor "${name}" telah dihapus.`, 'info');
+      } else {
+        onShowToast(res.message || 'Gagal menghapus vendor', 'warning');
+      }
+    } catch (err: any) {
+      onShowToast(err.message || 'Gagal menghapus vendor', 'warning');
+    }
+  };
+
+  // ================= ACTION HANDLERS: USER RESET PASSWORD & EDIT =================
+  const handleOpenResetModal = (user: UserAccount) => {
+    setTargetUserForReset(user);
+    setResetPasswordInput('Password123!');
+    setResetModalOpen(true);
+  };
+
+  const handleConfirmResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetUserForReset) return;
+    if (!resetPasswordInput || resetPasswordInput.length < 6) {
+      onShowToast('Kata sandi minimal 6 karakter', 'warning');
+      return;
+    }
+    setIsResettingPass(true);
+    try {
+      const res = await apiResetPassword(targetUserForReset.id, resetPasswordInput);
+      if (res.success) {
+        onShowToast(`Kata sandi akun "${targetUserForReset.name}" berhasil di-reset menjadi: ${resetPasswordInput}`, 'success');
+        setResetModalOpen(false);
+      } else {
+        onShowToast(res.message || 'Gagal mereset kata sandi', 'warning');
+      }
+    } catch (err: any) {
+      onShowToast(err.message || 'Terjadi kesalahan sistem', 'warning');
+    } finally {
+      setIsResettingPass(false);
+    }
+  };
+
+  const handleOpenEditUser = (user: UserAccount) => {
+    setTargetUserForEdit(user);
+    setEditUserDivisionId(user.divisionId || '');
+    setEditUserSupervisorId(user.supervisorId || '');
+    setEditUserVendorName(user.vendorName || (vendors[0]?.name || ''));
+    setEditUserRoleTitle(user.roleTitle || '');
+    setEditUserRole(user.role);
+    setEditUserModalOpen(true);
+  };
+
+  const handleSaveUserEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetUserForEdit) return;
+    setIsSavingUserEdit(true);
+    try {
+      const selectedDiv = divisions.find((d) => d.id === editUserDivisionId);
+      const res = await apiUpdateUserProfile(targetUserForEdit.id, {
+        divisionId: editUserDivisionId,
+        divisionName: selectedDiv?.name || targetUserForEdit.divisionName,
+        supervisorId: editUserSupervisorId,
+        vendorName: editUserVendorName,
+        roleTitle: editUserRoleTitle.trim() || targetUserForEdit.roleTitle,
+        role: editUserRole,
+      });
+
+      if (res.success) {
+        const updatedUsers = users.map((u) => {
+          if (u.id === targetUserForEdit.id) {
+            return {
+              ...u,
+              divisionId: editUserDivisionId,
+              divisionName: selectedDiv?.name || u.divisionName,
+              supervisorId: editUserSupervisorId,
+              vendorName: editUserVendorName,
+              roleTitle: editUserRoleTitle.trim() || u.roleTitle,
+              role: editUserRole,
+            };
+          }
+          return u;
+        });
+        onUpdateUsers(updatedUsers);
+        onShowToast(`Penugasan dan atasan untuk "${targetUserForEdit.name}" berhasil disimpan.`, 'success');
+        setEditUserModalOpen(false);
+      } else {
+        onShowToast(res.message || 'Gagal memperbarui pengguna', 'warning');
+      }
+    } catch (err: any) {
+      onShowToast(err.message || 'Terjadi kesalahan sistem', 'warning');
+    } finally {
+      setIsSavingUserEdit(false);
+    }
+  };
 
   // ================= ACTION HANDLERS: TAB 1 (GEOFENCE) =================
   const handleOpenAddLocation = () => {
@@ -114,8 +455,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     setEditingLocation(null);
     setLocName('');
     setLocAddress('');
-    setLocLat(-6.22384);
-    setLocLng(106.80892);
+    setLocLat(-2.5936);
+    setLocLng(115.3812);
     setLocRadius(80);
     setLocModalOpen(true);
   };
@@ -142,7 +483,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       const newLoc: OfficeLocation = {
         id: `loc-${Date.now()}`,
         name: locName.trim(),
-        address: locAddress.trim() || 'Alamat Penugasan Lapangan',
+        address: locAddress.trim() || 'Alamat Penugasan Lapangan Barabai',
         latitude: locLat,
         longitude: locLng,
         radiusMeters: locRadius,
@@ -301,7 +642,28 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     onShowToast(`Konfigurasi keamanan "${key}" diperbarui.`, 'success');
   };
 
-  // Filtered users for Tab 2
+  // Filtered queries
+  const filteredDivisions = divisions.filter((d) => {
+    if (!divisionSearch.trim()) return true;
+    const q = divisionSearch.toLowerCase();
+    return (
+      d.name.toLowerCase().includes(q) ||
+      (d.code && d.code.toLowerCase().includes(q)) ||
+      (d.supervisorName && d.supervisorName.toLowerCase().includes(q))
+    );
+  });
+
+  const filteredVendors = vendors.filter((v) => {
+    if (!vendorSearch.trim()) return true;
+    const q = vendorSearch.toLowerCase();
+    return (
+      v.name.toLowerCase().includes(q) ||
+      (v.code && v.code.toLowerCase().includes(q)) ||
+      (v.contractNumber && v.contractNumber.toLowerCase().includes(q)) ||
+      (v.picName && v.picName.toLowerCase().includes(q))
+    );
+  });
+
   const filteredUsers = users.filter((u) => {
     if (roleFilter !== 'ALL' && u.role !== roleFilter) return false;
     if (userSearch.trim()) {
@@ -309,14 +671,15 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       const matchName = u.name.toLowerCase().includes(q);
       const matchNip = u.nip.toLowerCase().includes(q);
       const matchEmail = u.email.toLowerCase().includes(q);
-      if (!matchName && !matchNip && !matchEmail) return false;
+      const matchDiv = u.divisionName?.toLowerCase().includes(q);
+      const matchVendor = u.vendorName?.toLowerCase().includes(q);
+      if (!matchName && !matchNip && !matchEmail && !matchDiv && !matchVendor) return false;
     }
     return true;
   });
 
   return (
     <div className="space-y-6 pb-20">
-      
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -324,60 +687,676 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             Pusat Pengaturan Sistem (Administration)
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Konfigurasi master geofencing, kontrol keamanan akun, dan matriks hak akses RBAC
+            Pengelolaan kepegawaian, master bidang, vendor alih daya, geofencing, dan kontrol keamanan
           </p>
         </div>
 
-        {/* 3 Main Configuration Tabs */}
-        <div className="flex items-center gap-1.5 p-1 glass-pill rounded-xl text-xs font-semibold">
+        {/* 5 Main Navigation Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5 p-1 glass-pill rounded-xl text-xs font-semibold overflow-x-auto">
           <button
             type="button"
-            onClick={() => setActiveTab('geofence')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              activeTab === 'geofence'
+            onClick={() => setActiveTab('divisions')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'divisions'
                 ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <MapPin className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Master Geofencing</span>
+            <Layers className="w-3.5 h-3.5" />
+            <span>Master Bidang</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('vendors')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'vendors'
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Briefcase className="w-3.5 h-3.5" />
+            <span>Master Vendor</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('users')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'users'
                 ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Users className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Pengguna & Device</span>
+            <Users className="w-3.5 h-3.5" />
+            <span>Staf & Atasan</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('geofence')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'geofence'
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <MapPin className="w-3.5 h-3.5" />
+            <span>Master Geofencing</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('rbac')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'rbac'
                 ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+            <ShieldCheck className="w-3.5 h-3.5" />
             <span>Peran & RBAC</span>
           </button>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* TAB 1: MASTER LOKASI & GEOFENCING                                         */}
+      {/* TAB 1: MASTER BIDANG & SUBBAGIAN (DIVISIONS CRUD)                         */}
+      {/* ========================================================================= */}
+      {activeTab === 'divisions' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Master Bidang & Sub Bagian Dinas Pendidikan</span>
+                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                  {divisions.length} Divisi Resmi
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Struktur organisasi kedinasan, kode divisi, atasan penanggung jawab, dan pemetaan penempatan alih daya
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenAddDivision}
+              className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs self-start sm:self-auto"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tambah Bidang / Bagian</span>
+            </button>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3.5 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Cari nama bidang, kode divisi (BID-SD, SUB-KEU), atau nama penanggung jawab..."
+              value={divisionSearch}
+              onChange={(e) => setDivisionSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {/* Divisions Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredDivisions.map((div) => {
+              const assignedCount = users.filter((u) => u.divisionId === div.id || u.divisionName === div.name).length;
+              return (
+                <div
+                  key={div.id}
+                  className="p-5 glass-card flex flex-col justify-between space-y-4 group transition-all"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 font-bold text-xs">
+                          <Building2 className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                            {div.name}
+                          </h3>
+                          <span className="text-[10px] font-mono font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                            {div.code || 'DIV'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold shrink-0">
+                        {assignedCount} Staf
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                      {div.description || 'Unit kerja operasional di lingkungan Dinas Pendidikan Kab. Hulu Sungai Tengah.'}
+                    </p>
+
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-[10px]">Atasan / Penanggung Jawab:</span>
+                      </div>
+                      <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <UserCheck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        <span className="truncate">{div.supervisorName || 'Belum Ditetapkan'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditDivision(div)}
+                      className="text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Ubah Data</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDivision(div.id, div.name)}
+                      className="text-slate-400 hover:text-rose-600 flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Hapus Bidang"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Hapus</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: MASTER PERUSAHAAN PENYEDIA / VENDOR OUTSOURCING                    */}
+      {/* ========================================================================= */}
+      {activeTab === 'vendors' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Master Perusahaan Penyedia Jasa (Vendor Alih Daya)</span>
+                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                  {vendors.length} Vendor Rekanan
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Pengelolaan badan usaha (PT / CV penyedia tenaga kerja), nomor SPK/kontrak, masa berlaku, PIC, dan rekapitulasi penempatan
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenAddVendor}
+              className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs self-start sm:self-auto"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tambah Perusahaan Vendor</span>
+            </button>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3.5 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Cari nama perusahaan (PT/CV), kode vendor, nomor SPK, atau nama PIC..."
+              value={vendorSearch}
+              onChange={(e) => setVendorSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {/* Vendors Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredVendors.map((ven) => {
+              const totalAssigned =
+                ven.totalStaff ??
+                users.filter((u) => u.vendorName?.toLowerCase() === ven.name.toLowerCase()).length;
+              return (
+                <div
+                  key={ven.id}
+                  className="p-5 glass-card flex flex-col justify-between space-y-4 group transition-all"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 font-bold text-xs">
+                          <Briefcase className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                            {ven.name}
+                          </h3>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] font-mono font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.2 rounded">
+                              {ven.code || 'VND'}
+                            </span>
+                            <span
+                              className={`text-[9px] font-semibold px-1.5 py-0.2 rounded ${
+                                ven.status === 'Aktif'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                              }`}
+                            >
+                              {ven.status || 'Aktif'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold shrink-0">
+                        {totalAssigned} Petugas
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300 space-y-1.5">
+                      <div className="flex items-start gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="text-[10px] text-slate-400">Nomor Kontrak / SPK:</div>
+                          <div className="font-mono font-semibold text-slate-900 dark:text-white">
+                            {ven.contractNumber || 'SPK/DISDIK/2026/001'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          Masa Berlaku: {ven.contractStartDate || '2026-01-02'} s/d {ven.contractEndDate || '2026-12-31'}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                        <div className="flex items-center gap-1">
+                          <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-[11px] font-medium text-slate-800 dark:text-slate-200">
+                            PIC: {ven.picName || '-'}
+                          </span>
+                        </div>
+                        {ven.picPhone && (
+                          <div className="flex items-center gap-1 font-mono text-[10px] text-slate-500">
+                            <Phone className="w-3 h-3 text-slate-400" />
+                            <span>{ven.picPhone}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditVendor(ven)}
+                      className="text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Ubah Profil Vendor</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteVendor(ven.id, ven.name)}
+                      className="text-slate-400 hover:text-rose-600 flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Hapus Vendor"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Hapus</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: MANAJEMEN PENGGUNA, PENUGASAN ATASAN & RESET PASSWORD              */}
+      {/* ========================================================================= */}
+      {activeTab === 'users' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Manajemen Staf, Pengaturan Atasan & Keamanan Akun</span>
+                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                  {users.length} Akun Terdaftar
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Pendaftaran identitas, penetapan atasan langsung penilai, divisi penugasan, reset password, dan device binding (1 HP)
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setNewUserModalOpen(true)}
+              className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs self-start sm:self-auto"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Tambah Pengguna</span>
+            </button>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="sm:col-span-2">
+              <input
+                type="text"
+                placeholder="Cari nama pegawai, NIP, email, divisi, atau nama vendor..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="ALL">Semua Tingkat Peran</option>
+                <option value="outsourcing">Tenaga Outsourcing</option>
+                <option value="coordinator">Pengawas Lapangan</option>
+                <option value="supervisor">Supervisor Operasional</option>
+                <option value="admin">Super Admin</option>
+              </select>
+            </div>
+          </div>
+
+          {/* User Accounts Table */}
+          <div className="rounded-2xl glass-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-white/40 dark:border-white/10 bg-white/40 dark:bg-slate-800/40 backdrop-blur-md text-slate-600 dark:text-slate-300 font-semibold">
+                    <th className="py-3 px-4">Pengguna</th>
+                    <th className="py-3 px-4">NIP / ID</th>
+                    <th className="py-3 px-4">Peran (Role)</th>
+                    <th className="py-3 px-4">Divisi & Atasan</th>
+                    <th className="py-3 px-4">Vendor Penampung</th>
+                    <th className="py-3 px-4">Status & Device</th>
+                    <th className="py-3 px-4 text-right">Aksi Manajemen</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredUsers.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                      {/* Name & Avatar */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white text-xs shrink-0"
+                            style={{ backgroundColor: u.avatarColor || '#6366f1' }}
+                          >
+                            {u.initials || 'US'}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-slate-900 dark:text-white">
+                              {u.name}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              {u.email}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* NIP */}
+                      <td className="py-3 px-4 font-mono tabular-nums text-slate-600 dark:text-slate-300">
+                        {u.nip}
+                      </td>
+
+                      {/* Role Badge */}
+                      <td className="py-3 px-4">
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                            u.role === 'admin'
+                              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                              : u.role === 'supervisor'
+                              ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
+                              : u.role === 'coordinator'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                              : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                          }`}
+                        >
+                          {u.roleTitle}
+                        </span>
+                      </td>
+
+                      {/* Divisi & Atasan Langsung */}
+                      <td className="py-3 px-4">
+                        <div className="space-y-0.5">
+                          <div className="font-medium text-slate-900 dark:text-white">
+                            {u.divisionName || 'Dinas Pendidikan HST'}
+                          </div>
+                          <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                            <span className="text-slate-400">Atasan:</span>
+                            <span className="font-semibold text-indigo-600 dark:text-indigo-400 truncate max-w-[140px]">
+                              {getSupervisorName(u.supervisorId)}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Vendor Penyedia */}
+                      <td className="py-3 px-4">
+                        <div className="text-[11px] font-medium text-slate-800 dark:text-slate-200">
+                          {u.vendorName || '-'}
+                        </div>
+                      </td>
+
+                      {/* Status & Device Binding */}
+                      <td className="py-3 px-4">
+                        <div className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleUserStatus(u.id)}
+                            className={`text-[9px] font-semibold px-2 py-0.5 rounded-full transition-colors cursor-pointer inline-block ${
+                              u.status === 'Aktif'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                            }`}
+                          >
+                            {u.status}
+                          </button>
+                          {u.deviceBinding?.registered ? (
+                            <div className="text-[9px] text-slate-400 flex items-center gap-1">
+                              <Smartphone className="w-3 h-3 text-emerald-500 shrink-0" />
+                              <span className="truncate max-w-[100px]">{u.deviceBinding.deviceModel}</span>
+                            </div>
+                          ) : (
+                            <div className="text-[9px] text-amber-500 font-medium">Device: Bebas</div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditUser(u)}
+                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Penugasan Divisi, Atasan & Vendor"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenResetModal(u)}
+                            className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors cursor-pointer"
+                            title="Reset Kata Sandi Pengguna"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                          </button>
+
+                          {u.deviceBinding?.registered && (
+                            <button
+                              type="button"
+                              onClick={() => handleResetDeviceBinding(u)}
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer"
+                              title="Reset Kunci Perangkat (Ganti HP)"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Active Sessions & Security Enforcements */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Active Sessions Monitoring */}
+            <div className="p-5 glass-card space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Radio className="w-4 h-4 text-indigo-500 animate-pulse" />
+                  <span>Sesi Login Aktif Real-Time</span>
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {sessions.length} Sesi Terbuka
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {sessions.map((ses) => (
+                  <div
+                    key={ses.id}
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div>
+                      <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <span>{ses.userName}</span>
+                        {ses.isCurrentSession && (
+                          <span className="text-[9px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.2 rounded font-semibold">
+                            Sesi Anda
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        {ses.device} · {ses.ipAddress}
+                      </div>
+                    </div>
+
+                    {!ses.isCurrentSession && (
+                      <button
+                        type="button"
+                        onClick={() => handleRevokeSession(ses.id, ses.userName)}
+                        className="px-2.5 py-1 text-[11px] text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-medium"
+                      >
+                        <LogOut className="w-3 h-3" />
+                        <span>Revoke</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Authentication Policies */}
+            <div className="p-5 glass-card space-y-4">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-indigo-500" />
+                <span>Kebijakan Autentikasi Modern</span>
+              </h3>
+
+              <div className="space-y-3 text-xs">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div>
+                    <div className="font-semibold text-slate-800 dark:text-slate-200">
+                      Wajibkan Google Workspace SSO
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Login hanya diperbolehkan melalui domain email resmi perusahaan
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSecurityOption('requireGoogleSso')}
+                    className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                      securityConfig.requireGoogleSso ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        securityConfig.requireGoogleSso ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div>
+                    <div className="font-semibold text-slate-800 dark:text-slate-200">
+                      Two-Factor Authentication (2FA / TOTP)
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Verifikasi kode 6 digit Google Authenticator bagi tingkatan admin & supervisor
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSecurityOption('requireTwoFactorTotp')}
+                    className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                      securityConfig.requireTwoFactorTotp ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        securityConfig.requireTwoFactorTotp ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div>
+                    <div className="font-semibold text-slate-800 dark:text-slate-200">
+                      WebAuthn Biometrik (Fingerprint / Face ID)
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Sensor biometrik bawaan HP untuk membuka sesi tanpa password berulang
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSecurityOption('requireWebAuthnBiometric')}
+                    className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                      securityConfig.requireWebAuthnBiometric ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        securityConfig.requireWebAuthnBiometric ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: MASTER LOKASI & GEOFENCING                                         */}
       {/* ========================================================================= */}
       {activeTab === 'geofence' && (
-        <div className="space-y-6">
-          
-          {/* Section Header with Add Button */}
+        <div className="space-y-6 animate-in fade-in duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -399,7 +1378,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             </button>
           </div>
 
-          {/* Location Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {locations.map((loc) => (
               <div
@@ -472,104 +1450,68 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-              
-              {/* Kebijakan Penugasan */}
               <div className="space-y-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
                 <label className="font-semibold text-slate-800 dark:text-slate-200 block">
                   Kebijakan Penugasan Lokasi Staf:
                 </label>
-                
                 <div className="space-y-2">
-                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 cursor-pointer">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
                     <input
                       type="radio"
-                      name="assignmentPolicy"
-                      checked={assignmentPolicy === 'fixed'}
-                      onChange={() => setAssignmentPolicy('fixed')}
-                      className="mt-0.5 accent-indigo-600"
+                      name="policy"
+                      value="any_office"
+                      checked={assignmentPolicy === 'any_office'}
+                      onChange={() => setAssignmentPolicy('any_office')}
+                      className="accent-indigo-600"
                     />
-                    <div>
-                      <strong className="text-slate-900 dark:text-white block font-semibold">
-                        Fixed Location (Terkunci 1 Titik Kantor)
-                      </strong>
-                      <span className="text-[11px] text-slate-500">
-                        Staf hanya dapat melakukan clock-in pada kantor spesifik yang ditugaskan di profilnya.
-                      </span>
-                    </div>
+                    <span>Fleksibel (Boleh absen di lokasi kantor terdaftar mana pun)</span>
                   </label>
-
-                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 cursor-pointer">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
                     <input
                       type="radio"
-                      name="assignmentPolicy"
-                      checked={assignmentPolicy === 'roaming'}
-                      onChange={() => setAssignmentPolicy('roaming')}
-                      className="mt-0.5 accent-indigo-600"
+                      name="policy"
+                      value="strict_assigned"
+                      checked={assignmentPolicy === 'strict_assigned'}
+                      onChange={() => setAssignmentPolicy('strict_assigned')}
+                      className="accent-indigo-600"
                     />
-                    <div>
-                      <strong className="text-slate-900 dark:text-white block font-semibold">
-                        Roaming / Floating (Dapat Absen di Mana Saja Terdaftar)
-                      </strong>
-                      <span className="text-[11px] text-slate-500">
-                        Ideal untuk teknisi keliling, kurir, atau inspektur lapangan yang berpindah pos tugas.
-                      </span>
-                    </div>
+                    <span>Ketat Terikat (Hanya lokasi spesifik yang ditugaskan supervisor)</span>
                   </label>
                 </div>
               </div>
 
-              {/* Threshold Akurasi GPS */}
               <div className="space-y-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <label className="font-semibold text-slate-800 dark:text-slate-200">
-                    Threshold Akurasi Maksimal GPS:
-                  </label>
-                  <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold tabular-nums">
-                    &lt; {gpsThreshold} meter
+                <label className="font-semibold text-slate-800 dark:text-slate-200 block">
+                  Toleransi Akurasi Sensor GPS:
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={20}
+                    max={200}
+                    step={10}
+                    value={gpsThreshold}
+                    onChange={(e) => setGpsThreshold(Number(e.target.value))}
+                    className="flex-1 accent-indigo-600 cursor-pointer"
+                  />
+                  <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-2 py-1 rounded-lg">
+                    {gpsThreshold}m
                   </span>
                 </div>
-                <input
-                  type="range"
-                  min={15}
-                  max={50}
-                  step={5}
-                  value={gpsThreshold}
-                  onChange={(e) => setGpsThreshold(Number(e.target.value))}
-                  className="w-full accent-indigo-600 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
-                />
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Standar anti-mock: Jika akurasi sinyal di atas {gpsThreshold}m (misal saat sinyal tertutup kanopi gedung tebal), sistem menolak presensi dan meminta staf bergeser ke area terbuka.
+                <p className="text-[11px] text-slate-500">
+                  Mencegah GPS spoofing / fake mock location jika akurasi melebihi batas toleransi.
                 </p>
-
-                <div className="pt-2 flex items-center justify-between border-t border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-700 dark:text-slate-300 font-medium">
-                    Peringatan "Open-Sky" Otomatis
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setStrictOpenSky(!strictOpenSky)}
-                    className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                      strictOpenSky ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
-                    }`}
-                  >
-                    <div
-                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                        strictOpenSky ? 'translate-x-4' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="pt-2 flex justify-end">
               <button
                 type="button"
                 onClick={handleSaveGeofencePolicy}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
+                className="px-4 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>Simpan Aturan Geofence</span>
+                <span>Simpan Kebijakan Geofence</span>
               </button>
             </div>
           </div>
@@ -577,313 +1519,10 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: PENGATURAN PENGGUNA & KEAMANAN LOGIN (USER MANAGEMENT)             */}
-      {/* ========================================================================= */}
-      {activeTab === 'users' && (
-        <div className="space-y-6">
-          
-          {/* Top Section */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Manajemen Akun Pengguna & Device Binding</span>
-                <span className="text-xs font-mono font-normal text-slate-400">({users.length} Akun)</span>
-              </h2>
-              <p className="text-xs text-slate-500">
-                Pendaftaran identitas, kunci 1 Akun = 1 HP (Anti-Joki), dan kontrol sesi aktif
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setNewUserModalOpen(true)}
-              className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs self-start sm:self-auto"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Tambah Pengguna</span>
-            </button>
-          </div>
-
-          {/* Search & Filter Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div className="sm:col-span-2">
-              <input
-                type="text"
-                placeholder="Cari nama pengguna, NIP, atau email..."
-                value={userSearch}
-                onChange={(e) => setUserSearch(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-              >
-                <option value="ALL">Semua Tingkat Peran</option>
-                <option value="outsourcing">Tenaga Outsourcing</option>
-                <option value="coordinator">Pengawas Lapangan</option>
-                <option value="supervisor">Supervisor Operasional</option>
-                <option value="admin">Super Admin</option>
-              </select>
-            </div>
-          </div>
-
-          {/* User Accounts Table */}
-          <div className="rounded-2xl glass-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-white/40 dark:border-white/10 bg-white/40 dark:bg-slate-800/40 backdrop-blur-md text-slate-600 dark:text-slate-300 font-semibold">
-                    <th className="py-3 px-4">Pengguna</th>
-                    <th className="py-3 px-4">NIP / ID</th>
-                    <th className="py-3 px-4">Peran (Role)</th>
-                    <th className="py-3 px-4">Status Akun</th>
-                    <th className="py-3 px-4">Device Binding (1 HP)</th>
-                    <th className="py-3 px-4">Login Terakhir</th>
-                    <th className="py-3 px-4 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredUsers.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
-                      {/* Name & Avatar */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white text-xs shrink-0"
-                            style={{ backgroundColor: u.avatarColor }}
-                          >
-                            {u.initials}
-                          </div>
-                          <div>
-                            <div className="font-semibold text-slate-900 dark:text-white">
-                              {u.name}
-                            </div>
-                            <div className="text-[10px] text-slate-400">
-                              {u.email}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* NIP */}
-                      <td className="py-3 px-4 font-mono tabular-nums text-slate-600 dark:text-slate-300">
-                        {u.nip}
-                      </td>
-
-                      {/* Role Badge */}
-                      <td className="py-3 px-4">
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-                          u.role === 'admin'
-                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                            : u.role === 'supervisor'
-                            ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
-                            : u.role === 'coordinator'
-                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                        }`}>
-                          {u.roleTitle}
-                        </span>
-                      </td>
-
-                      {/* Status Toggle */}
-                      <td className="py-3 px-4">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleUserStatus(u.id)}
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full transition-colors cursor-pointer ${
-                            u.status === 'Aktif'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                          }`}
-                        >
-                          {u.status}
-                        </button>
-                      </td>
-
-                      {/* Device Binding */}
-                      <td className="py-3 px-4">
-                        {u.deviceBinding?.registered ? (
-                          <div className="space-y-0.5">
-                            <div className="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                              <Smartphone className="w-3 h-3 text-emerald-500 shrink-0" />
-                              <span className="truncate max-w-[130px]">{u.deviceBinding.deviceModel}</span>
-                            </div>
-                            <div className="text-[9px] font-mono text-slate-400">
-                              {u.deviceBinding.deviceUuid.substring(0, 14)}...
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-                            Belum Terikat
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Last Login */}
-                      <td className="py-3 px-4 font-mono text-[10px] text-slate-500 tabular-nums">
-                        {u.lastLogin}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3 px-4 text-right">
-                        {u.deviceBinding?.registered && (
-                          <button
-                            type="button"
-                            onClick={() => handleResetDeviceBinding(u)}
-                            className="px-2 py-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer flex items-center gap-1 ml-auto"
-                            title="Reset Kunci Perangkat jika staf mengganti HP"
-                          >
-                            <RotateCcw className="w-3 h-3 text-rose-500" />
-                            <span>Reset Device</span>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Active Sessions & Security Enforcements */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            {/* Active Sessions Monitoring */}
-            <div className="p-5 glass-card space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Radio className="w-4 h-4 text-indigo-500 animate-pulse" />
-                  <span>Sesi Login Aktif Real-Time</span>
-                </h3>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {sessions.length} Sesi Terbuka
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                {sessions.map((ses) => (
-                  <div
-                    key={ses.id}
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div>
-                      <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                        <span>{ses.userName}</span>
-                        {ses.isCurrentSession && (
-                          <span className="text-[9px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.2 rounded font-semibold">
-                            Sesi Anda
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                        {ses.device} · {ses.ipAddress}
-                      </div>
-                    </div>
-
-                    {!ses.isCurrentSession && (
-                      <button
-                        type="button"
-                        onClick={() => handleRevokeSession(ses.id, ses.userName)}
-                        className="px-2.5 py-1 text-[11px] text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-medium"
-                      >
-                        <LogOut className="w-3 h-3" />
-                        <span>Revoke</span>
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Authentication Policies (SSO, 2FA, Biometrics) */}
-            <div className="p-5 glass-card space-y-4">
-              <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-indigo-500" />
-                <span>Kebijakan Autentikasi Modern</span>
-              </h3>
-
-              <div className="space-y-3 text-xs">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                  <div>
-                    <div className="font-semibold text-slate-800 dark:text-slate-200">
-                      Wajibkan Google Workspace SSO
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      Login hanya diperbolehkan melalui domain email resmi perusahaan
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleSecurityOption('requireGoogleSso')}
-                    className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                      securityConfig.requireGoogleSso ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
-                    }`}
-                  >
-                    <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      securityConfig.requireGoogleSso ? 'translate-x-4' : 'translate-x-0'
-                    }`} />
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                  <div>
-                    <div className="font-semibold text-slate-800 dark:text-slate-200">
-                      Two-Factor Authentication (2FA / TOTP)
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      Verifikasi kode 6 digit Google Authenticator bagi tingkatan admin & supervisor
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleSecurityOption('requireTwoFactorTotp')}
-                    className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                      securityConfig.requireTwoFactorTotp ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
-                    }`}
-                  >
-                    <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      securityConfig.requireTwoFactorTotp ? 'translate-x-4' : 'translate-x-0'
-                    }`} />
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                  <div>
-                    <div className="font-semibold text-slate-800 dark:text-slate-200">
-                      WebAuthn Biometrik (Fingerprint / Face ID)
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      Sensor biometrik bawaan HP untuk membuka sesi tanpa password berulang
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleSecurityOption('requireWebAuthnBiometric')}
-                    className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                      securityConfig.requireWebAuthnBiometric ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
-                    }`}
-                  >
-                    <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      securityConfig.requireWebAuthnBiometric ? 'translate-x-4' : 'translate-x-0'
-                    }`} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 3: PENGATURAN PERAN & HAK AKSES (RBAC)                                 */}
+      {/* TAB 5: PENGATURAN PERAN & HAK AKSES (RBAC)                                 */}
       {/* ========================================================================= */}
       {activeTab === 'rbac' && (
-        <div className="space-y-6">
-          
-          {/* Header */}
+        <div className="space-y-6 animate-in fade-in duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -904,7 +1543,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             </button>
           </div>
 
-          {/* Dynamic RBAC Table */}
           <div className="rounded-2xl glass-card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
@@ -918,8 +1556,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  
-                  {/* Category A: Presensi */}
                   <tr className="bg-slate-50/70 dark:bg-slate-800/40">
                     <td colSpan={5} className="py-2 px-4 font-bold text-[11px] text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
                       A. Modul Presensi & Kehadiran Cerdas
@@ -952,7 +1588,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                     </tr>
                   ))}
 
-                  {/* Category B: Laporan Kinerja */}
                   <tr className="bg-slate-50/70 dark:bg-slate-800/40">
                     <td colSpan={5} className="py-2 px-4 font-bold text-[11px] text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
                       B. Modul Laporan Kinerja Harian
@@ -985,7 +1620,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                     </tr>
                   ))}
 
-                  {/* Category C: Penilaian KPI 5-Bintang */}
                   <tr className="bg-slate-50/70 dark:bg-slate-800/40">
                     <td colSpan={5} className="py-2 px-4 font-bold text-[11px] text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
                       C. Modul Penilaian KPI (4 Pilar, 11 Kompetensi)
@@ -1017,7 +1651,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                     </tr>
                   ))}
 
-                  {/* Category D: Administrasi & Konfigurasi */}
                   <tr className="bg-slate-50/70 dark:bg-slate-800/40">
                     <td colSpan={5} className="py-2 px-4 font-bold text-[11px] text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
                       D. Administrasi Sistem & Keamanan
@@ -1054,7 +1687,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             </div>
           </div>
 
-          {/* Supervisor-Subordinate Mapping Section */}
+          {/* Supervisor-Subordinate Mapping */}
           <div className="p-6 glass-card space-y-4">
             <div>
               <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
@@ -1085,7 +1718,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                     </span>
                   </div>
 
-                  {/* Staff Selection Checklist */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
                     {staffList.map((st) => {
                       const isAssigned = mapping.assignedStaffIds.includes(st.id);
@@ -1113,116 +1745,498 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               ))}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Rekomendasi Fitur Enterprise Modern */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                Fitur Enterprise Modern (Anti-Joki & Otomasi AI)
-              </h3>
+      {/* ========================================================================= */}
+      {/* MODAL 1: TAMBAH / UBAH MASTER BIDANG                                      */}
+      {/* ========================================================================= */}
+      {divisionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {editingDivision ? `Ubah Bidang: ${editingDivision.name}` : 'Tambah Bidang / Sub Bagian Baru'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDivisionModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/40">
-                <div>
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">
-                    Liveness Detection (Anti-Joki Foto)
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    Verifikasi kedipan mata & deteksi senyum langsung pada kamera WebRTC
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleToggleSecurityOption('livenessDetection')}
-                  className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                    securityConfig.livenessDetection ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
-                  }`}
-                >
-                  <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                    securityConfig.livenessDetection ? 'translate-x-4' : 'translate-x-0'
-                  }`} />
-                </button>
+            <form onSubmit={handleSaveDivision} className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama Bidang / Sub Bagian
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Bidang Pembinaan Sekolah Dasar"
+                  value={divName}
+                  onChange={(e) => setDivName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                />
               </div>
 
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/40">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">
-                    Deteksi Duplikasi Laporan Otomatis via AI
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    Tandai otomatis jika staf mengunggah foto pekerjaan identik dengan hari sebelumnya
-                  </div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Kode Singkatan (Div Code)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="BID-SD"
+                    value={divCode}
+                    onChange={(e) => setDivCode(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono uppercase"
+                  />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleToggleSecurityOption('duplicateReportAiDetection')}
-                  className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                    securityConfig.duplicateReportAiDetection ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
-                  }`}
-                >
-                  <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                    securityConfig.duplicateReportAiDetection ? 'translate-x-4' : 'translate-x-0'
-                  }`} />
-                </button>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Atasan / Penanggung Jawab
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Badaruddin, M.Pd"
+                    value={divSupervisor}
+                    onChange={(e) => setDivSupervisor(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/40">
-                <div>
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">
-                    PWA Offline-First & Stempel Kriptografis
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    Rekam presensi di basemen tanpa sinyal dan sinkronkan otomatis saat online
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleToggleSecurityOption('offlineCryptographicSync')}
-                  className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                    securityConfig.offlineCryptographicSync ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
-                  }`}
-                >
-                  <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                    securityConfig.offlineCryptographicSync ? 'translate-x-4' : 'translate-x-0'
-                  }`} />
-                </button>
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Deskripsi / Lingkup Tugas
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Penjelasan tupoksi unit kerja..."
+                  value={divDesc}
+                  onChange={(e) => setDivDesc(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
 
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/40">
-                <div>
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">
-                    Pengingat Laporan Otomatis Pukul 16:30
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    Kirim notifikasi ramah ke HP staf yang belum melengkapi laporan harian
-                  </div>
-                </div>
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => handleToggleSecurityOption('scheduled1630Reminder')}
-                  className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                    securityConfig.scheduled1630Reminder ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
-                  }`}
+                  onClick={() => setDivisionModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
                 >
-                  <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                    securityConfig.scheduled1630Reminder ? 'translate-x-4' : 'translate-x-0'
-                  }`} />
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingDivision}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold transition-colors cursor-pointer shadow-xs"
+                >
+                  {isSavingDivision ? 'Menyimpan...' : 'Simpan Data Bidang'}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 1: TAMBAH / UBAH LOKASI MASTER (GEOFENCE MAP PICKER)                */}
+      {/* MODAL 2: TAMBAH / UBAH MASTER VENDOR                                      */}
+      {/* ========================================================================= */}
+      {vendorModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {editingVendor ? `Ubah Vendor: ${editingVendor.name}` : 'Tambah Perusahaan Vendor Baru'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVendorModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveVendor} className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama Resmi Badan Usaha / Vendor
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: PT Handil Bakti Utama"
+                  value={venName}
+                  onChange={(e) => setVenName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Kode Vendor
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="VND-HBU"
+                    value={venCode}
+                    onChange={(e) => setVenCode(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono uppercase"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Status Kerjasama
+                  </label>
+                  <select
+                    value={venStatus}
+                    onChange={(e) => setVenStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="Aktif">Aktif (Berjalan)</option>
+                    <option value="Nonaktif">Nonaktif / Berakhir</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nomor Kontrak / SPK Pengadaan
+                </label>
+                <input
+                  type="text"
+                  placeholder="027/05/SPK-OUT/DISDIK-HST/2026"
+                  value={venContract}
+                  onChange={(e) => setVenContract(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Mulai Berlaku Kontrak
+                  </label>
+                  <input
+                    type="date"
+                    value={venStart}
+                    onChange={(e) => setVenStart(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Selesai Masa Kontrak
+                  </label>
+                  <input
+                    type="date"
+                    value={venEnd}
+                    onChange={(e) => setVenEnd(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Nama PIC / Penanggung Jawab
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="H. Fathurrahman"
+                    value={venPic}
+                    onChange={(e) => setVenPic(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Nomor WhatsApp / Telp PIC
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="081250001122"
+                    value={venPhone}
+                    onChange={(e) => setVenPhone(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Alamat Kantor Perusahaan
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Jl. Perintis Kemerdekaan No. 12, Barabai, HST..."
+                  value={venAddress}
+                  onChange={(e) => setVenAddress(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setVendorModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingVendor}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold transition-colors cursor-pointer shadow-xs"
+                >
+                  {isSavingVendor ? 'Menyimpan...' : 'Simpan Data Vendor'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: RESET PASSWORD PENGGUNA                                         */}
+      {/* ========================================================================= */}
+      {resetModalOpen && targetUserForReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-amber-500" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Reset Kata Sandi Akun
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmResetPassword} className="p-6 space-y-4 text-xs">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700 space-y-1">
+                <div className="text-[10px] text-slate-400">Target Pengguna:</div>
+                <div className="font-bold text-sm text-slate-900 dark:text-white">
+                  {targetUserForReset.name}
+                </div>
+                <div className="font-mono text-[11px] text-slate-500">
+                  NIP: {targetUserForReset.nip} · {targetUserForReset.email}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Kata Sandi Baru yang Ditetapkan
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={resetPasswordInput}
+                  onChange={(e) => setResetPasswordInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold text-sm tracking-wide"
+                />
+                <div className="flex items-center justify-between mt-1 text-[10px] text-slate-400">
+                  <span>Minimal 6 karakter</span>
+                  <button
+                    type="button"
+                    onClick={() => setResetPasswordInput('Password123!')}
+                    className="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                  >
+                    Gunakan Default (Password123!)
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-[11px] flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <span>
+                  Pengguna akan dapat langsung login menggunakan kata sandi baru ini. Disarankan meminta pengguna segera mengganti sandi melalui menu Profil setelah login.
+                </span>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setResetModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResettingPass}
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold transition-colors cursor-pointer shadow-xs"
+                >
+                  {isResettingPass ? 'Mereset...' : 'Terapkan Sandi Baru'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: EDIT PENUGASAN, ATASAN LANGSUNG & VENDOR                        */}
+      {/* ========================================================================= */}
+      {editUserModalOpen && targetUserForEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Edit Penugasan & Atasan: {targetUserForEdit.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditUserModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUserEdit} className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Bidang / Sub Bagian Penugasan
+                  </label>
+                  <select
+                    value={editUserDivisionId}
+                    onChange={(e) => setEditUserDivisionId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="">-- Pilih Bidang --</option>
+                    {divisions.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Atasan Langsung (Penilai KPI)
+                  </label>
+                  <select
+                    value={editUserSupervisorId}
+                    onChange={(e) => setEditUserSupervisorId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="">-- Belum Ditetapkan --</option>
+                    {supervisorCandidates.map((sup) => (
+                      <option key={sup.id} value={sup.id}>
+                        {sup.name} ({sup.roleTitle})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Perusahaan Penyedia (Vendor)
+                  </label>
+                  <select
+                    value={editUserVendorName}
+                    onChange={(e) => setEditUserVendorName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="">-- Pilih Vendor Rekanan --</option>
+                    {vendors.map((v) => (
+                      <option key={v.id} value={v.name}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Tingkat Peran (Role)
+                  </label>
+                  <select
+                    value={editUserRole}
+                    onChange={(e) => setEditUserRole(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="outsourcing">Tenaga Outsourcing</option>
+                    <option value="coordinator">Pengawas Lapangan</option>
+                    <option value="supervisor">Supervisor Operasional</option>
+                    <option value="admin">Super Admin</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Jabatan / Posisi Kerja Spesifik
+                </label>
+                <input
+                  type="text"
+                  value={editUserRoleTitle}
+                  onChange={(e) => setEditUserRoleTitle(e.target.value)}
+                  placeholder="Contoh: Tenaga Pramubakti Bidang SD"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditUserModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingUserEdit}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold transition-colors cursor-pointer shadow-xs"
+                >
+                  {isSavingUserEdit ? 'Menyimpan...' : 'Simpan Penugasan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: TAMBAH / UBAH LOKASI MASTER (GEOFENCE MAP PICKER)                */}
       {/* ========================================================================= */}
       {locModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh]">
-            
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
               <div className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
@@ -1247,7 +2261,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Gedung Workshop Logistik Slipi"
+                  placeholder="Contoh: Kantor Dinas Pendidikan Kab. HST"
                   value={locName}
                   onChange={(e) => setLocName(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
@@ -1261,14 +2275,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 <textarea
                   rows={2}
                   required
-                  placeholder="Jl. Nama Jalan No. XX, Kecamatan, Kota..."
+                  placeholder="Jl. Perintis Kemerdekaan No. 1, Barabai..."
                   value={locAddress}
                   onChange={(e) => setLocAddress(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
-              {/* Visual Map Picker */}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                   Visual Map Picker & Geofence Radius Circle
@@ -1307,12 +2320,11 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: TAMBAH USER BARU                                                 */}
+      {/* MODAL 6: PENDAFTARAN USER BARU                                            */}
       {/* ========================================================================= */}
       {newUserModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
@@ -1383,7 +2395,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 <input
                   type="email"
                   required
-                  placeholder="danang@mitradaya.co.id"
+                  placeholder="danang@disdikhst.go.id"
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
@@ -1396,7 +2408,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="Contoh: Petugas Kebersihan Area Basemen"
+                  placeholder="Contoh: Petugas Kebersihan Area Kantor"
                   value={newUserRoleTitle}
                   onChange={(e) => setNewUserRoleTitle(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"

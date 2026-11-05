@@ -27,6 +27,9 @@ interface StaffHomeViewProps {
   todayAttendance: AttendanceRecord | undefined;
   todayReports: DailyWorkReport[];
   allReports?: DailyWorkReport[];
+  staffList?: StaffProfile[];
+  activeStaffId?: string;
+  onSwitchStaff?: (staffId: string) => void;
   onClockIn: (selfieBase64: string, locationData: any) => void;
   onClockOut: (selfieBase64: string, locationData: any) => void;
   onSubmitReport: (newReport: Omit<DailyWorkReport, 'id' | 'createdAt'>) => void;
@@ -37,6 +40,9 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   todayAttendance,
   todayReports,
   allReports = [],
+  staffList = [],
+  activeStaffId,
+  onSwitchStaff,
   onClockIn,
   onClockOut,
   onSubmitReport,
@@ -90,28 +96,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
     setReportLocationData(locData);
   };
 
-  // Helper to load sample test photo for quick demonstration
-  const handleLoadSimulatedPhoto = (type: 'unique' | 'duplicate') => {
-    if (type === 'duplicate') {
-      // Load identical photo from rep-107 (Finance Onboarding PC)
-      const samplePrev = createWorkPhotoThumbnail('Deploy 4 Unit PC Onboarding', 'Pelayanan Pengguna');
-      setDocumentationPhoto(samplePrev);
-      setReportTitle('Pemeriksaan Lanjutan Kabel Port LAN Unit Finance');
-      setReportSummary('Pengecekan port switch dan penataan kabel workstation finance.');
-    } else {
-      // Fresh new unique task photo
-      const sampleNew = createWorkPhotoThumbnail('Pembersihan Filter Udara Ruang Server Baru', 'Pemeliharaan');
-      setDocumentationPhoto(sampleNew);
-      setReportTitle('Pembersihan Filter Chiller & Sirkulasi Udara Lt 8');
-      setReportSummary('Membersihkan filter debu AHU dan cek temperatur ruangan stabil 19°C.');
-    }
-    setReportLocationData({
-      latitude: staff.assignedLocation.latitude,
-      longitude: staff.assignedLocation.longitude,
-      accuracy: 10,
-      locationName: staff.assignedLocation.name,
-    });
-  };
+
 
   // Initiate Submission with AI Validation Step
   const handleSubmitReportForm = async (e: React.FormEvent) => {
@@ -223,13 +208,39 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-24 md:pb-8">
       
+      {/* Active Staff Identity Banner */}
+      <div className="p-3.5 glass-card border border-white/60 dark:border-white/10 shadow-xs flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span
+            className="w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-bold text-white shadow-md shadow-indigo-500/20 shrink-0"
+            style={{ backgroundColor: staff.avatarColor }}
+          >
+            {staff.initials}
+          </span>
+          <div>
+            <div className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">
+              {staff.name}
+            </div>
+            <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+              {staff.roleTitle} · <span className="font-mono text-indigo-600 dark:text-cyan-400 font-bold">{staff.nip}</span>
+            </div>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800/60">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            {staff.division.split(' ')[0]}
+          </span>
+        </div>
+      </div>
+
       {/* Friendly Reminder Banner before 17:00 */}
       {(!hasClockedIn || todayReports.length === 0) && (
-        <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-start gap-3">
-          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-900 dark:text-amber-200 space-y-0.5">
-            <span className="font-semibold">Pengingat Operasional Hari Ini:</span>
-            <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+        <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-900/60 flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-950 dark:text-amber-200 space-y-0.5">
+            <span className="font-bold">Pengingat Operasional Hari Ini:</span>
+            <p className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-300 font-medium">
               {!hasClockedIn
                 ? 'Anda belum melakukan Clock In masuk. Harap lakukan presensi selfie WebRTC di lokasi tugas.'
                 : 'Harap selesaikan dan kirim minimal 1 Laporan Kinerja Harian sebelum pukul 17:00 WIB.'}
@@ -252,20 +263,20 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               <h1 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
                 {staff.name}
               </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {staff.roleTitle} · {staff.nip}
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                {staff.roleTitle} · <span className="font-mono">{staff.nip}</span>
               </p>
             </div>
           </div>
-          <span className="text-[10px] font-mono px-2 py-1 rounded-full glass-pill text-slate-600 dark:text-slate-300">
+          <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full glass-pill text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
             {staff.vendorName}
           </span>
         </div>
 
         {/* Assigned Location Badge */}
-        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-white/50 dark:bg-slate-800/40 backdrop-blur-md text-xs text-slate-600 dark:text-slate-300 border border-white/40 dark:border-white/10">
+        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 backdrop-blur-md text-xs text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10 font-medium">
           <MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-          <span className="truncate">Lokasi Tugas: <strong>{staff.assignedLocation.name}</strong></span>
+          <span className="truncate">Lokasi Tugas: <strong className="text-slate-900 dark:text-white">{staff.assignedLocation.name}</strong></span>
         </div>
 
         {/* Floating Action Card for Smart Attendance */}
@@ -277,8 +288,8 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
             disabled={hasClockedIn}
             className={`p-3.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
               hasClockedIn
-                ? 'bg-emerald-500/15 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 backdrop-blur-md'
-                : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white border-white/20 shadow-lg shadow-indigo-500/25 active:scale-[0.98]'
+                ? 'bg-emerald-100/80 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300 font-bold backdrop-blur-md'
+                : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white border-indigo-700/50 shadow-lg shadow-indigo-500/25 active:scale-[0.98]'
             }`}
           >
             <div className="flex items-center gap-1.5">
@@ -287,7 +298,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 {hasClockedIn ? 'Sudah Clock In' : 'Clock In Masuk'}
               </span>
             </div>
-            <span className="text-[11px] font-mono tabular-nums opacity-90">
+            <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
               {hasClockedIn ? `${todayAttendance?.clockInTime} WIB` : 'Live Selfie + GPS'}
             </span>
           </button>
@@ -299,10 +310,10 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
             disabled={!hasClockedIn || hasClockedOut}
             className={`p-3.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
               hasClockedOut
-                ? 'bg-white/40 dark:bg-slate-800/40 border-white/30 dark:border-white/10 text-slate-500 backdrop-blur-md'
+                ? 'bg-slate-100 border-slate-300 dark:bg-slate-800/60 dark:border-slate-700 text-slate-800 dark:text-slate-300 font-bold backdrop-blur-md'
                 : hasClockedIn
-                ? 'bg-gradient-to-r from-slate-900 to-slate-800 dark:from-white dark:to-slate-100 text-white dark:text-slate-900 border-white/20 shadow-md active:scale-[0.98]'
-                : 'bg-white/20 dark:bg-slate-800/20 border-white/20 dark:border-white/5 text-slate-400 cursor-not-allowed opacity-60'
+                ? 'bg-gradient-to-r from-slate-900 to-slate-800 dark:from-white dark:to-slate-100 text-white dark:text-slate-900 border-slate-700 shadow-md active:scale-[0.98]'
+                : 'bg-slate-100/60 dark:bg-slate-800/20 border-slate-200 dark:border-white/5 text-slate-500 cursor-not-allowed opacity-60'
             }`}
           >
             <div className="flex items-center gap-1.5">
@@ -311,7 +322,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 {hasClockedOut ? 'Sudah Clock Out' : 'Clock Out Pulang'}
               </span>
             </div>
-            <span className="text-[11px] font-mono tabular-nums opacity-90">
+            <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
               {hasClockedOut ? `${todayAttendance?.clockOutTime} WIB` : 'Kunci Jam Kerja'}
             </span>
           </button>
@@ -321,14 +332,14 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
       {/* Target Counter & Work Hour Stats */}
       <div className="grid grid-cols-2 gap-3">
         <div className="p-4 glass-card">
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Laporan Hari Ini</div>
+          <div className="text-[11px] text-slate-700 dark:text-slate-300 font-bold">Laporan Hari Ini</div>
           <div className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">
-            {todayReports.length} <span className="text-xs text-slate-400 font-normal">/ target 1 selesai</span>
+            {todayReports.length} <span className="text-xs text-slate-600 dark:text-slate-400 font-semibold">/ target 1 selesai</span>
           </div>
         </div>
         <div className="p-4 glass-card">
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Durasi Kerja Aktif</div>
-          <div className="text-xl font-bold font-mono text-indigo-600 dark:text-cyan-400 mt-1">
+          <div className="text-[11px] text-slate-700 dark:text-slate-300 font-bold">Durasi Kerja Aktif</div>
+          <div className="text-xl font-bold font-mono text-indigo-700 dark:text-cyan-400 mt-1">
             {hasClockedIn ? '7j 35m' : 'Belum Dimulai'}
           </div>
         </div>
@@ -339,7 +350,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
             <span>Laporan Kinerja Hari Ini</span>
-            <span className="text-xs font-mono font-normal text-slate-400">
+            <span className="text-xs font-mono font-semibold text-slate-600 dark:text-slate-400">
               ({todayReports.length})
             </span>
           </h2>
@@ -347,7 +358,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           <button
             type="button"
             onClick={() => setShowReportForm(!showReportForm)}
-            className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+            className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Buat Laporan</span>
@@ -360,14 +371,14 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
             onSubmit={handleSubmitReportForm}
             className="p-5 glass-card space-y-4 animate-in slide-in-from-top-2 duration-200"
           >
-            <div className="flex items-center justify-between border-b border-white/40 dark:border-white/10 pb-2">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
               <span className="text-xs font-bold text-slate-900 dark:text-white">
                 Formulir Laporan Kinerja Baru
               </span>
               <button
                 type="button"
                 onClick={() => setShowReportForm(false)}
-                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                className="text-xs text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 font-medium cursor-pointer"
               >
                 Batal
               </button>
@@ -375,7 +386,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block font-bold text-slate-900 dark:text-slate-200 mb-1">
                   Judul Tugas / Pekerjaan
                 </label>
                 <input
@@ -384,19 +395,19 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                   placeholder="Contoh: Perbaikan Jaringan LAN Lantai 4"
                   value={reportTitle}
                   onChange={(e) => setReportTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block font-bold text-slate-900 dark:text-slate-200 mb-1">
                     Kategori
                   </label>
                   <select
                     value={reportCategory}
                     onChange={(e) => setReportCategory(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
                     <option value="Pemeliharaan">Pemeliharaan</option>
                     <option value="Inspeksi & Monitoring">Inspeksi & Monitoring</option>
@@ -407,13 +418,13 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block font-bold text-slate-900 dark:text-slate-200 mb-1">
                     Status Pekerjaan
                   </label>
                   <select
                     value={reportStatus}
                     onChange={(e) => setReportStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
                     <option value="Selesai">Selesai</option>
                     <option value="On-Progress">On-Progress</option>
@@ -423,31 +434,31 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block font-bold text-slate-900 dark:text-slate-200 mb-1">
                     Jam Mulai
                   </label>
                   <input
                     type="time"
                     value={reportStartTime}
                     onChange={(e) => setReportStartTime(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-medium"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block font-bold text-slate-900 dark:text-slate-200 mb-1">
                     Jam Selesai
                   </label>
                   <input
                     type="time"
                     value={reportEndTime}
                     onChange={(e) => setReportEndTime(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-medium"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block font-bold text-slate-900 dark:text-slate-200 mb-1">
                   Ringkasan Hasil Kerja
                 </label>
                 <textarea
@@ -456,7 +467,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                   placeholder="Uraikan tindakan yang dilakukan, perangkat yang diperbaiki, atau kendala lapangan..."
                   value={reportSummary}
                   onChange={(e) => setReportSummary(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
@@ -508,31 +519,6 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                   </button>
                 )}
 
-                {/* Quick Simulation Options for Testing the AI Hash Detection */}
-                <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1.5">
-                    <span className="font-medium text-slate-500 dark:text-slate-400">Uji Coba Cepat AI (Demo Simulasi):</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleLoadSimulatedPhoto('unique')}
-                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-slate-700 dark:text-slate-300 hover:text-emerald-700 text-[11px] font-medium flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                    >
-                      <Sparkles className="w-3 h-3 text-emerald-500" />
-                      <span>Uji Foto Baru (Unik)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleLoadSimulatedPhoto('duplicate')}
-                      className="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-700 dark:text-slate-300 hover:text-rose-700 text-[11px] font-medium flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                    >
-                      <AlertTriangle className="w-3 h-3 text-rose-500" />
-                      <span>Uji Foto Duplikat (96%)</span>
-                    </button>
-                  </div>
-                </div>
-
                 <p className="text-[10px] text-slate-400">
                   Foto wajib diambil langsung. Sistem AI akan mengekstrak hash sidik jari visual untuk mendeteksi penipuan foto lama atau duplikat.
                 </p>
@@ -583,7 +569,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
         {/* Today's Reports Feed */}
         {todayReports.length === 0 ? (
-          <div className="p-8 text-center glass-card text-xs text-slate-400">
+          <div className="p-8 text-center glass-card text-xs text-slate-600 dark:text-slate-400 font-medium">
             Belum ada laporan kerja yang dikirim hari ini. Tekan tombol "Buat Laporan" di atas untuk menambahkan aktivitas.
           </div>
         ) : (
@@ -595,7 +581,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                    <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
                       {report.category}
                     </span>
                     <h3 className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">
@@ -604,12 +590,12 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                   </div>
 
                   <div className="flex flex-col items-end gap-1">
-                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0 ${
                       report.supervisorApproval === 'Disetujui'
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300'
                         : report.supervisorApproval === 'Revisi'
-                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                        ? 'bg-rose-100 text-rose-900 dark:bg-rose-950/60 dark:text-rose-300'
+                        : 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300'
                     }`}>
                       {report.supervisorApproval === 'Disetujui'
                         ? 'Disetujui Atasan'
@@ -620,26 +606,26 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
                     {/* AI Integrity Pill */}
                     {report.aiDuplicateFlag?.isDuplicate ? (
-                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 font-bold flex items-center gap-1">
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 dark:bg-rose-950/70 dark:text-rose-300 font-bold flex items-center gap-1 border border-rose-300 dark:border-rose-800">
                         <AlertTriangle className="w-2.5 h-2.5" />
                         AI Flag: Duplikat {report.aiDuplicateFlag.similarityScore}%
                       </span>
                     ) : (
-                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 font-medium flex items-center gap-1">
-                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300 font-bold flex items-center gap-1 border border-emerald-300 dark:border-emerald-800">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700 dark:text-emerald-400" />
                         AI: Foto Unik
                       </span>
                     )}
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-normal">
                   {report.summary}
                 </p>
 
                 {/* Documentation thumbnail */}
                 {report.documentationPhotoUrl && (
-                  <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
+                  <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-300 dark:border-slate-800">
                     <img
                       src={report.documentationPhotoUrl}
                       alt={report.title}
@@ -648,16 +634,16 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[11px] text-slate-400">
-                  <span className="font-mono tabular-nums">
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800/80 text-[11px] text-slate-700 dark:text-slate-400 font-medium">
+                  <span className="font-mono tabular-nums font-semibold">
                     {report.startTime} - {report.endTime} WIB
                   </span>
-                  <span>{report.locationCoords.locationName}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-300">{report.locationCoords.locationName}</span>
                 </div>
 
                 {report.supervisorNotes && (
-                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-800">
-                    <strong>Catatan Atasan:</strong> {report.supervisorNotes}
+                  <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-xs text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                    <strong className="text-slate-900 dark:text-white">Catatan Atasan:</strong> {report.supervisorNotes}
                   </div>
                 )}
               </div>

@@ -51,9 +51,99 @@ import { SystemSettingsView } from './views/SystemSettingsView';
 import { AuditLogView } from './views/AuditLogView';
 import { PrintReportModal } from './components/PrintReportModal';
 import { GoogleDriveSyncModal } from './components/GoogleDriveSyncModal';
-import { NotificationDrawer } from './components/NotificationDrawer';
 import { SecurityMfaModal } from './components/SecurityMfaModal';
+import { NotificationDrawer } from './components/NotificationDrawer';
+import { AiAnalyticsChatModal } from './components/AiAnalyticsChatModal';
+import { CustomLocationModal } from './components/CustomLocationModal';
+import { AuthView } from './views/AuthView';
+import { AuthUser, Division, Vendor } from './types';
+import {
+  apiFetchDivisions,
+  apiFetchVendors,
+  apiFetchAllUsers,
+  apiSubmitAttendance,
+  apiSubmitReport,
+  apiApproveReport,
+  apiSubmitEvaluation,
+} from './services/api';
+import { useSessionTimeout } from './hooks/useSessionTimeout';
+import { SessionTimeoutModal } from './components/SessionTimeoutModal';
+import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { ProfileModal } from './components/ProfileModal';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
+
+const FALLBACK_DIVISIONS: Division[] = [
+  {
+    id: 'div-kadis',
+    name: 'Pucuk Pimpinan SKPD',
+    code: 'KADIS',
+    description: 'Pimpinan tertinggi Dinas Pendidikan Kabupaten Hulu Sungai Tengah.',
+    supervisorName: 'H. Muhammad Anhar, S.STP, ME'
+  },
+  {
+    id: 'div-sekretariat',
+    name: 'Sekretariat Dinas Pendidikan',
+    code: 'SEKRETARIAT',
+    description: 'Pengkoordinasian program, administrasi keuangan, kepegawaian, dan rumah tangga dinas.',
+    supervisorName: 'Salihin, S.Pd.SD'
+  },
+  {
+    id: 'div-renlap',
+    name: 'Sub Bagian Perencanaan dan Pelaporan',
+    code: 'SUB-RENLAP',
+    description: 'Penyusunan rencana kerja, evaluasi program, pelaporan kinerja dinas, dan dukungan TI.',
+    supervisorName: 'Muhammad Sugeng Wahyudi, A.Md'
+  },
+  {
+    id: 'div-keuangan',
+    name: 'Sub Bagian Keuangan',
+    code: 'SUB-KEU',
+    description: 'Pengelolaan administrasi keuangan, penatausahaan kas, dan pelaporan SPJ dinas.',
+    supervisorName: 'Hj. Rabiatul Adawiyah, SE'
+  },
+  {
+    id: 'div-umpeg',
+    name: 'Sub Bagian Umum dan Kepegawaian',
+    code: 'SUB-UMPEG',
+    description: 'Pelayanan administrasi umum, ketertiban, kepegawaian, pengamanan kantor, dan kebersihan.',
+    supervisorName: 'Ahmad Humaidi, S.Pd.'
+  },
+  {
+    id: 'div-arsip',
+    name: 'Unit Kerja Kearsipan & Arsiparis',
+    code: 'ARSIP',
+    description: 'Tata kelola kearsipan naskah dinas, dokumen fisik, dan digitalisasi dokumen dinas.',
+    supervisorName: 'Petugas Arsip'
+  },
+  {
+    id: 'div-sd',
+    name: 'Bidang Pembinaan Sekolah Dasar',
+    code: 'BID-SD',
+    description: 'Pembinaan kurikulum, peserta didik, GTK, dan kelembagaan Sekolah Dasar se-Kab. HST.',
+    supervisorName: 'Badaruddin, M.Pd'
+  },
+  {
+    id: 'div-smp',
+    name: 'Bidang Pembinaan SMP',
+    code: 'BID-SMP',
+    description: 'Pembinaan kurikulum, peserta didik, GTK, dan kelembagaan Sekolah Menengah Pertama se-Kab. HST.',
+    supervisorName: 'Alamsyah Mappaompo, S.Pd. MM'
+  },
+  {
+    id: 'div-sarpras',
+    name: 'Bidang Sarana Prasarana dan Kelembagaan',
+    code: 'BID-SARPRAS',
+    description: 'Pembangunan, pemeliharaan, pengadaan sarpras PAUD, SD, SMP, dan inventarisasi aset dinas.',
+    supervisorName: 'Bayhaki Novie, S.Pd'
+  },
+  {
+    id: 'div-paud',
+    name: 'Bidang PAUD dan Pendidikan Masyarakat',
+    code: 'BID-PAUD',
+    description: 'Pembinaan PAUD, TK, Pendidikan Kesetaraan, Sanggar Kegiatan Belajar (SKB), dan Dikmas.',
+    supervisorName: 'Andry Rachmat Hidayat, S.Kom'
+  }
+];
 
 export default function App() {
   // Theme & Accessibility State
@@ -73,10 +163,81 @@ export default function App() {
     });
   };
 
-  // Active Role & Navigation
-  const [currentRole, setCurrentRole] = useState<UserRole>('outsourcing');
+  // Authenticated User State & Master Divisions
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    const saved = localStorage.getItem('ot_session_user');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  });
+
+  const [divisions, setDivisions] = useState<Division[]>(FALLBACK_DIVISIONS);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  useEffect(() => {
+    apiFetchDivisions().then((divs) => {
+      if (divs && divs.length > 0) setDivisions(divs);
+    });
+    apiFetchVendors().then((vens) => {
+      if (vens && vens.length > 0) setVendors(vens);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (currentUser && currentUser.role !== 'outsourcing') {
+      apiFetchAllUsers().then((usrs) => {
+        if (usrs && usrs.length > 0) setUsers(usrs);
+      });
+    }
+  }, [currentUser]);
+
+  // Active Role & Navigation (Derived from Authenticated User)
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
+    const saved = localStorage.getItem('ot_session_user');
+    if (saved) {
+      try {
+        return JSON.parse(saved).role || 'outsourcing';
+      } catch (e) {}
+    }
+    return 'outsourcing';
+  });
   const [mobileTab, setMobileTab] = useState<string>('beranda');
   const [adminTab, setAdminTab] = useState<string>('monitoring-presensi');
+
+  const handleLoginSuccess = (user: AuthUser, token: string) => {
+    setCurrentUser(user);
+    setCurrentRole(user.role);
+    localStorage.setItem('ot_session_user', JSON.stringify(user));
+    localStorage.setItem('ot_session_token', token);
+    if (user.role === 'outsourcing') {
+      setActiveStaffId(user.id);
+      setMobileTab('beranda');
+    } else {
+      setAdminTab('persetujuan-laporan');
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('ot_session_user');
+    localStorage.removeItem('ot_session_token');
+    showToast('Anda telah keluar dari akun.', 'info');
+  };
+
+  // 15-Minute Inactivity Auto-Logout Protocol (with 60-second warning modal)
+  const { showWarningModal, remainingSeconds, stayLoggedIn, logoutNow } = useSessionTimeout({
+    timeoutMinutes: 15,
+    warningThresholdSeconds: 60,
+    onTimeout: () => {
+      handleLogout();
+      showToast('Sesi Anda telah berakhir otomatis karena 15 menit tidak ada aktivitas.', 'warning');
+    },
+    enabled: Boolean(currentUser),
+  });
 
   // Modals state
   const [printModalOpen, setPrintModalOpen] = useState(false);
@@ -84,19 +245,64 @@ export default function App() {
   const [notificationDrawerOpen, setNotificationDrawerOpen] = useState(false);
   const [securityModalOpen, setSecurityModalOpen] = useState(false);
 
-  // Core Data State (Stored in React State for interactive demonstration)
-  const [staffList, setStaffList] = useState<StaffProfile[]>(MOCK_STAFF);
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() =>
-    generateInitialAttendance()
-  );
-  const [dailyReports, setDailyReports] = useState<DailyWorkReport[]>(() =>
-    generateInitialReports()
-  );
-  const [weeklyEvaluations, setWeeklyEvaluations] = useState<WeeklyEvaluation[]>(() =>
-    generateInitialEvaluations()
-  );
-  const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(INITIAL_AUDIT_LOGS);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  // Core Data State (Stored in LocalStorage & React State for full interactive persistence)
+  const [activeStaffId, setActiveStaffId] = useState<string>(() => {
+    return localStorage.getItem('ot_active_staff_id') || 'staff-1';
+  });
+  const [staffList, setStaffList] = useState<StaffProfile[]>(() => {
+    const saved = localStorage.getItem('ot_staff_list');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return MOCK_STAFF;
+  });
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => {
+    const saved = localStorage.getItem('ot_attendance_records');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return generateInitialAttendance();
+  });
+  const [dailyReports, setDailyReports] = useState<DailyWorkReport[]>(() => {
+    const saved = localStorage.getItem('ot_daily_reports');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return generateInitialReports();
+  });
+  const [weeklyEvaluations, setWeeklyEvaluations] = useState<WeeklyEvaluation[]>(() => {
+    const saved = localStorage.getItem('ot_weekly_evaluations');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return generateInitialEvaluations();
+  });
+  const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(() => {
+    const saved = localStorage.getItem('ot_audit_logs');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return INITIAL_AUDIT_LOGS;
+  });
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+    const saved = localStorage.getItem('ot_notifications');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return INITIAL_NOTIFICATIONS;
+  });
 
   // ================= PUSAT PENGATURAN SISTEM (PERSISTENT STATE) =================
   const [locations, setLocations] = useState<OfficeLocation[]>(() => {
@@ -183,6 +389,31 @@ export default function App() {
     return INITIAL_SECURITY_CONFIG;
   });
 
+  // Gemini AI Analytics & Custom Location Modal States
+  const [aiChatOpen, setAiChatOpen] = useState<boolean>(false);
+  const [customLocationStaff, setCustomLocationStaff] = useState<StaffProfile | null>(null);
+
+  const handleStaffLocationUpdated = (staffId: string, newLocation: OfficeLocation, note?: string) => {
+    setStaffList((prev) =>
+      prev.map((s) => {
+        if (s.id === staffId || s.nip === staffId) {
+          return {
+            ...s,
+            assignedLocation: newLocation,
+            customLocation: newLocation,
+            workspaceNote: note || s.workspaceNote,
+          };
+        }
+        return s;
+      })
+    );
+    addAuditLog(
+      'Pembaruan Lokasi Kerja Staf',
+      `Titik tugas dan ruang kerja untuk staf ${staffId} disetel ke ${newLocation.name} (Radius: ${newLocation.radiusMeters}m).`,
+      'Pengaturan'
+    );
+  };
+
   // Visual Toast Feedback Notification
   const [toast, setToast] = useState<{
     id: number;
@@ -241,15 +472,84 @@ export default function App() {
     addAuditLog('Pembaruan Kebijakan Keamanan', `Konfigurasi SSO/2FA/Biometrik diperbarui.`, 'Pengaturan');
   };
 
-  // Active outsourcing staff profile for staff role (Budi Santoso)
-  const currentStaff = staffList[0];
+  // Auto-sync Core Data to LocalStorage
+  useEffect(() => {
+    localStorage.setItem('ot_active_staff_id', activeStaffId);
+  }, [activeStaffId]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_staff_list', JSON.stringify(staffList));
+  }, [staffList]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_attendance_records', JSON.stringify(attendanceRecords));
+  }, [attendanceRecords]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_daily_reports', JSON.stringify(dailyReports));
+  }, [dailyReports]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_weekly_evaluations', JSON.stringify(weeklyEvaluations));
+  }, [weeklyEvaluations]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_audit_logs', JSON.stringify(auditLogs));
+  }, [auditLogs]);
+
+  useEffect(() => {
+    localStorage.setItem('ot_notifications', JSON.stringify(notifications));
+  }, [notifications]);
+
+  // Active outsourcing staff profile for staff role (Locked to authenticated user)
+  const currentStaff = useMemo<StaffProfile>(() => {
+    if (currentUser && currentUser.role === 'outsourcing') {
+      const match = staffList.find(
+        (s) => s.id === currentUser.id || s.nip === currentUser.nip || s.email === currentUser.email
+      );
+      if (match) return match;
+      return {
+        id: currentUser.id,
+        nip: currentUser.nip,
+        name: currentUser.name,
+        email: currentUser.email,
+        phone: currentUser.phone || '',
+        division: currentUser.divisionName,
+        vendorName: currentUser.vendorName || 'PT Indo Tekno Prima',
+        roleTitle: currentUser.roleTitle,
+        assignedLocation: PRIMARY_OFFICES[0],
+        avatarColor: currentUser.avatarColor || '#4f46e5',
+        initials: currentUser.initials || 'OT',
+        joinDate: '2024-01-01',
+        status: 'Aktif' as const,
+      };
+    }
+    return staffList.find((s) => s.id === activeStaffId) || staffList[0];
+  }, [currentUser, staffList, activeStaffId]);
+
+  // Filtered staff list for Supervisor (strictly shows staff in their division)
+  const filteredStaffList = useMemo<StaffProfile[]>(() => {
+    if (currentUser?.role === 'supervisor') {
+      const match = staffList.filter((s) => {
+        if (currentUser.divisionId === 'div-all') return true;
+        if (currentUser.divisionId === 'div-it' && s.id === 'usr-os-001') return true;
+        if (currentUser.divisionId === 'div-sec' && s.id === 'usr-os-002') return true;
+        if (currentUser.divisionId === 'div-cln' && s.id === 'usr-os-003') return true;
+        if (currentUser.divisionId === 'div-drv' && s.id === 'usr-os-004') return true;
+        if (currentUser.divisionId === 'div-adm' && s.id === 'usr-os-005') return true;
+        return s.division.toLowerCase().includes(currentUser.divisionName.toLowerCase());
+      });
+      return match.length > 0 ? match : staffList;
+    }
+    return staffList;
+  }, [currentUser, staffList]);
 
   // Derived Monthly Aggregates
   const monthlyAggregates = useMemo(() => {
     return computeMonthlyAggregates(staffList, weeklyEvaluations, '2026-10');
   }, [staffList, weeklyEvaluations]);
 
-  // Today's attendance for Budi Santoso
+  // Today's attendance for active staff
   const todayDateStr = '2026-10-09';
   const staffTodayAttendance = attendanceRecords.find(
     (a) => a.staffId === currentStaff.id && a.date === todayDateStr
@@ -338,6 +638,17 @@ export default function App() {
       return [newRecord, ...filtered];
     });
 
+    // Background sync to SQLite server
+    apiSubmitAttendance({
+      staffId: currentStaff.id,
+      date: todayDateStr,
+      clockInTime: timeStr,
+      selfieUrl: selfieBase64,
+      locationCoords: locationData,
+      status: 'Hadir',
+      verifiedBy: 'Sistem Geofence WebRTC',
+    }).catch((err) => console.warn('Sync attendance failed:', err));
+
     if (!locationData.withinRadius) {
       addAuditLog(
         'Pelanggaran Geofence: Presensi di Luar Radius',
@@ -382,6 +693,17 @@ export default function App() {
       })
     );
 
+    // Background sync to SQLite server
+    apiSubmitAttendance({
+      staffId: currentStaff.id,
+      date: todayDateStr,
+      clockOutTime: timeStr,
+      selfieUrl: selfieBase64,
+      locationCoords: locationData,
+      status: 'Hadir',
+      verifiedBy: 'Sistem Geofence WebRTC',
+    }).catch((err) => console.warn('Sync clock-out failed:', err));
+
     addAuditLog(
       'Presensi Pulang (Clock Out)',
       `Berhasil clock-out pada ${timeStr} WIB. Jam kerja harian terkunci.`,
@@ -407,6 +729,19 @@ export default function App() {
     };
 
     setDailyReports((prev) => [newReport, ...prev]);
+
+    // Background sync to SQLite server
+    apiSubmitReport({
+      staffId: newReport.staffId,
+      title: newReport.title,
+      description: newReport.summary,
+      summary: newReport.summary,
+      category: newReport.category,
+      photoUrl: newReport.documentationPhotoUrl,
+      documentationPhotoUrl: newReport.documentationPhotoUrl,
+      locationCoords: newReport.locationCoords,
+      aiDuplicateFlag: newReport.aiDuplicateFlag,
+    }).catch((err) => console.warn('Sync report failed:', err));
 
     if (newReport.aiDuplicateFlag?.isDuplicate) {
       addAuditLog(
@@ -454,6 +789,11 @@ export default function App() {
       })
     );
 
+    // Background sync to SQLite server
+    apiApproveReport(reportId, 'Disetujui', notes).catch((err) =>
+      console.warn('Sync approval failed:', err)
+    );
+
     const report = dailyReports.find((r) => r.id === reportId);
     addAuditLog(
       'Persetujuan Laporan Kinerja',
@@ -483,6 +823,11 @@ export default function App() {
         }
         return r;
       })
+    );
+
+    // Background sync to SQLite server
+    apiApproveReport(reportId, 'Revisi', notes).catch((err) =>
+      console.warn('Sync revision request failed:', err)
     );
 
     const report = dailyReports.find((r) => r.id === reportId);
@@ -527,6 +872,11 @@ export default function App() {
       return [newEval, ...filtered];
     });
 
+    // Background sync to SQLite server
+    apiSubmitEvaluation(newEval).catch((err) =>
+      console.warn('Sync evaluation failed:', err)
+    );
+
     const evaluatedStaff = staffList.find((s) => s.id === evalData.staffId);
     addAuditLog(
       'Pemberian Evaluasi Mingguan (4 Pilar)',
@@ -552,32 +902,76 @@ export default function App() {
     );
   };
 
+  // If user is not logged in, render the secure Auth View
+  if (!currentUser) {
+    return (
+      <div className={`min-h-screen ${darkMode ? 'dark' : ''}`}>
+        <AuthView
+          divisions={divisions}
+          onLoginSuccess={handleLoginSuccess}
+          onShowToast={showToast}
+          darkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode(!darkMode)}
+        />
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 max-w-sm sm:max-w-md animate-in slide-in-from-bottom-5 fade-in duration-200">
+            <div
+              className={`p-3.5 rounded-2xl shadow-xl border backdrop-blur-md flex items-center justify-between gap-3 text-xs ${
+                toast.type === 'success'
+                  ? 'bg-slate-900/95 text-white border-slate-700/80 shadow-emerald-950/20'
+                  : toast.type === 'warning'
+                  ? 'bg-amber-950/95 text-amber-100 border-amber-800 shadow-amber-950/30'
+                  : 'bg-slate-900/95 text-slate-100 border-slate-700 shadow-slate-950/30'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                {toast.type === 'success' && (
+                  <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                )}
+                {toast.type === 'warning' && (
+                  <div className="p-1 rounded-lg bg-amber-500/20 text-amber-400">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                )}
+                {toast.type === 'info' && (
+                  <div className="p-1 rounded-lg bg-indigo-500/20 text-indigo-400">
+                    <Info className="w-4 h-4" />
+                  </div>
+                )}
+                <span className="font-medium leading-snug">{toast.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setToast(null)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer shrink-0"
+                aria-label="Tutup notifikasi"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+        <PwaInstallBanner />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`min-h-full flex flex-col relative transition-colors ${
         highContrast ? 'contrast-125 saturate-110 font-medium' : ''
       }`}
     >
-      {/* Dynamic Ambient Glowing Orbs for Material Glass Refraction */}
-      {glassMode && (
-        <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
-          {/* Luminous Indigo Orb (top-left) */}
-          <div className="absolute -top-36 -left-36 w-96 sm:w-[34rem] h-96 sm:h-[34rem] rounded-full bg-gradient-to-br from-indigo-500/25 via-blue-500/20 to-purple-500/10 blur-3xl animate-float-slow" />
-          {/* Luminous Cyan/Sky Orb (top-right) */}
-          <div className="absolute top-1/4 -right-36 w-96 sm:w-[32rem] h-96 sm:h-[32rem] rounded-full bg-gradient-to-bl from-cyan-400/25 via-indigo-500/15 to-transparent blur-3xl animate-float-delayed" />
-          {/* Luminous Violet/Fuchsia Orb (bottom-left) */}
-          <div className="absolute -bottom-40 left-1/4 w-96 sm:w-[36rem] h-96 sm:h-[36rem] rounded-full bg-gradient-to-tr from-violet-600/20 via-fuchsia-500/10 to-indigo-500/15 blur-3xl animate-float-slow" />
-          {/* Luminous Emerald/Teal Accent Orb (mid-right) */}
-          <div className="absolute top-2/3 right-1/4 w-80 h-80 rounded-full bg-gradient-to-r from-emerald-400/15 via-teal-500/10 to-transparent blur-3xl" />
-          
-          {/* Micro-grid texture for depth */}
-          <div className="absolute inset-0 bg-[radial-gradient(rgba(99,102,241,0.06)_1px,transparent_1px)] dark:bg-[radial-gradient(rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:20px_20px] opacity-70" />
-        </div>
-      )}
+      {/* Soothing Ambient Background (Calm & Non-Glaring) */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 ambient-calm" aria-hidden="true" />
 
       {/* Top Header */}
       <Header
         currentRole={currentRole}
+        currentUser={currentUser}
+        onLogout={handleLogout}
         onRoleChange={(role) => setCurrentRole(role)}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
@@ -589,6 +983,8 @@ export default function App() {
         onOpenNotifications={() => setNotificationDrawerOpen(true)}
         onOpenCloudSync={() => setCloudSyncOpen(true)}
         onOpenSecurityModal={() => setSecurityModalOpen(true)}
+        onOpenAiChat={() => setAiChatOpen(true)}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
       />
 
       {/* Main Layout Area */}
@@ -607,7 +1003,7 @@ export default function App() {
         )}
 
         {/* Content Viewport */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 pb-28 md:pb-8">
           {/* ================= OUTSOURCING STAFF VIEW (MOBILE ERGONOMIC) ================= */}
           {currentRole === 'outsourcing' && (
             <div>
@@ -617,6 +1013,8 @@ export default function App() {
                   todayAttendance={staffTodayAttendance}
                   todayReports={staffTodayReports}
                   allReports={dailyReports}
+                  staffList={staffList}
+                  activeStaffId={currentStaff.id}
                   onClockIn={handleClockIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
@@ -629,6 +1027,8 @@ export default function App() {
                   todayAttendance={staffTodayAttendance}
                   todayReports={staffTodayReports}
                   allReports={dailyReports}
+                  staffList={staffList}
+                  activeStaffId={currentStaff.id}
                   onClockIn={handleClockIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
@@ -704,12 +1104,15 @@ export default function App() {
                   attendanceRecords={attendanceRecords}
                   dailyReports={dailyReports}
                   onOpenPrintModal={() => setPrintModalOpen(true)}
+                  onConfigureLocation={(staff) => setCustomLocationStaff(staff)}
+                  onOpenAiChat={() => setAiChatOpen(true)}
                 />
               )}
 
               {adminTab === 'persetujuan-laporan' && (
                 <SupervisorEvaluationView
-                  staffList={staffList}
+                  currentUser={currentUser}
+                  staffList={filteredStaffList}
                   dailyReports={dailyReports}
                   weeklyEvaluations={weeklyEvaluations}
                   attendanceRecords={attendanceRecords}
@@ -721,7 +1124,8 @@ export default function App() {
 
               {adminTab === 'evaluasi-mingguan' && (
                 <SupervisorEvaluationView
-                  staffList={staffList}
+                  currentUser={currentUser}
+                  staffList={filteredStaffList}
                   dailyReports={dailyReports}
                   weeklyEvaluations={weeklyEvaluations}
                   attendanceRecords={attendanceRecords}
@@ -733,11 +1137,12 @@ export default function App() {
 
               {adminTab === 'analitik-bulanan' && (
                 <AnalyticsMonthlyView
-                  staffList={staffList}
+                  staffList={filteredStaffList}
                   monthlyAggregates={monthlyAggregates}
                   weeklyEvaluations={weeklyEvaluations}
                   attendanceRecords={attendanceRecords}
                   onOpenPrintModal={() => setPrintModalOpen(true)}
+                  onOpenAiChat={() => setAiChatOpen(true)}
                 />
               )}
 
@@ -752,6 +1157,10 @@ export default function App() {
                   staffList={staffList}
                   users={users}
                   onUpdateUsers={handleUpdateUsers}
+                  divisions={divisions}
+                  onUpdateDivisions={(newDivs) => setDivisions(newDivs)}
+                  vendors={vendors}
+                  onUpdateVendors={(newVens) => setVendors(newVens)}
                   sessions={sessions}
                   onUpdateSessions={handleUpdateSessions}
                   geofenceConfig={geofenceConfig}
@@ -770,22 +1179,33 @@ export default function App() {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Rendered on mobile for Outsourcing role) */}
-      {currentRole === 'outsourcing' && (
-        <MobileNavBar
-          activeTab={mobileTab}
-          onTabChange={(t) => setMobileTab(t)}
-          glassMode={glassMode}
-        />
-      )}
+      {/* Mobile Bottom Navigation Bar (Rendered on mobile for ALL roles) */}
+      <MobileNavBar
+        currentRole={currentRole}
+        activeTab={currentRole === 'outsourcing' ? mobileTab : adminTab}
+        onTabChange={(tab) => {
+          if (currentRole === 'outsourcing') {
+            setMobileTab(tab);
+          } else {
+            setAdminTab(tab);
+          }
+        }}
+        pendingReportsCount={pendingReportsCount}
+        geofenceBreachCount={geofenceBreachCount}
+        glassMode={glassMode}
+      />
 
       {/* Printable PDF Modal */}
       <PrintReportModal
         isOpen={printModalOpen}
         onClose={() => setPrintModalOpen(false)}
-        staffList={staffList}
+        staffList={filteredStaffList}
         attendanceRecords={attendanceRecords}
         monthlyAggregates={monthlyAggregates}
+        dailyReports={dailyReports}
+        weeklyEvaluations={weeklyEvaluations}
+        divisions={divisions}
+        currentDivisionId={currentUser?.divisionId}
       />
 
       {/* Google Drive Cloud Sync Modal */}
@@ -827,6 +1247,46 @@ export default function App() {
       <SecurityMfaModal
         isOpen={securityModalOpen}
         onClose={() => setSecurityModalOpen(false)}
+      />
+
+      {/* Gemini AI Analytics Chat Modal */}
+      <AiAnalyticsChatModal
+        isOpen={aiChatOpen}
+        onClose={() => setAiChatOpen(false)}
+        currentUserRole={currentRole}
+        currentUserName={currentUser?.name}
+      />
+
+      {/* Setting Ruang Kerja & Titik Geofence Khusus */}
+      <CustomLocationModal
+        isOpen={Boolean(customLocationStaff)}
+        staff={customLocationStaff}
+        onClose={() => setCustomLocationStaff(null)}
+        onLocationUpdated={handleStaffLocationUpdated}
+        onShowToast={showToast}
+      />
+
+      {/* PWA Mobile & Desktop Install Prompt */}
+      <PwaInstallBanner />
+
+      {/* 15-Minute Session Inactivity Timeout Countdown */}
+      <SessionTimeoutModal
+        isOpen={showWarningModal}
+        remainingSeconds={remainingSeconds}
+        onStayLoggedIn={stayLoggedIn}
+        onLogoutNow={logoutNow}
+      />
+
+      {/* User Profile & Password Change Modal */}
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        currentUser={currentUser}
+        onUserUpdated={(updated) => {
+          setCurrentUser(updated);
+          localStorage.setItem('ot_session_user', JSON.stringify(updated));
+        }}
+        onShowToast={showToast}
       />
 
       {/* Floating Modern Toast Notification */}

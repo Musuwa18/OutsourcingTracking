@@ -40,8 +40,8 @@ export const StarRating: React.FC<StarRatingProps> = ({
     <div className="flex flex-col gap-1">
       {label && (
         <div className="flex items-center justify-between text-xs">
-          <span className="font-medium text-slate-700 dark:text-slate-300">{label}</span>
-          <span className="font-mono text-slate-500 tabular-nums">
+          <span className="font-semibold text-slate-900 dark:text-slate-200">{label}</span>
+          <span className="font-mono text-slate-600 dark:text-slate-400 font-medium tabular-nums">
             {activeValue > 0 ? `${activeValue}/5` : '-'}
           </span>
         </div>
@@ -78,7 +78,7 @@ export const StarRating: React.FC<StarRatingProps> = ({
         })}
 
         {showDescriptor && activeValue > 0 && (
-          <span className="ml-2 text-xs font-medium text-slate-600 dark:text-slate-400 transition-opacity">
+          <span className="ml-2 text-xs font-semibold text-slate-800 dark:text-slate-300 transition-opacity">
             {DESCRIPTORS[activeValue]}
           </span>
         )}

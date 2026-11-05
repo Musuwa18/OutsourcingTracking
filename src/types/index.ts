@@ -1,5 +1,49 @@
 export type UserRole = 'outsourcing' | 'supervisor' | 'admin';
 
+export interface Division {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  supervisorName?: string;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  code: string;
+  contractNumber?: string;
+  contractStart?: string;
+  contractEnd?: string;
+  picName?: string;
+  picPhone?: string;
+  address?: string;
+  status: 'Aktif' | 'Nonaktif';
+  staffCount?: number;
+  createdAt?: string;
+}
+
+export interface AuthUser {
+  id: string;
+  nip: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  divisionId: string;
+  divisionName: string;
+  roleTitle: string;
+  phone?: string;
+  vendorName?: string;
+  avatarColor?: string;
+  initials?: string;
+  deviceId?: string | null;
+  biometricKey?: string | null;
+  customLocation?: OfficeLocation | null;
+  assignedLocation?: OfficeLocation;
+  workspaceNote?: string;
+  supervisorId?: string;
+}
+
 export interface OfficeLocation {
   id: string;
   name: string;
@@ -19,10 +63,21 @@ export interface StaffProfile {
   vendorName: string;
   roleTitle: string;
   assignedLocation: OfficeLocation;
+  customLocation?: OfficeLocation | null;
+  workspaceNote?: string;
+  supervisorId?: string;
   avatarColor: string;
   initials: string;
   joinDate: string;
   status: 'Aktif' | 'Cuti' | 'Nonaktif';
+}
+
+export interface AiChatMessage {
+  id: string;
+  sender: 'user' | 'ai';
+  text: string;
+  model?: string;
+  timestamp: string;
 }
 
 export interface AttendanceRecord {
@@ -165,6 +220,11 @@ export interface UserAccount {
   role: 'outsourcing' | 'coordinator' | 'supervisor' | 'admin';
   roleTitle: string;
   status: 'Aktif' | 'Tangguhkan';
+  divisionId?: string;
+  divisionName?: string;
+  vendorName?: string;
+  supervisorId?: string;
+  phone?: string;
   deviceBinding: {
     registered: boolean;
     deviceModel: string;

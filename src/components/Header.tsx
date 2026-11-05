@@ -11,11 +11,18 @@ import {
   Eye,
   Lock,
   Sparkles,
+  MoreVertical,
+  LogOut,
+  Download,
 } from 'lucide-react';
-import { UserRole, NotificationItem } from '../types';
+import { UserRole, NotificationItem, AuthUser } from '../types';
+import { usePwa } from '../context/PwaContext';
 
 interface HeaderProps {
   currentRole: UserRole;
+  currentUser?: AuthUser | null;
+  onLogout?: () => void;
+  onOpenProfile?: () => void;
   onRoleChange: (role: UserRole) => void;
   darkMode: boolean;
   onToggleDarkMode: () => void;
@@ -27,10 +34,14 @@ interface HeaderProps {
   onOpenNotifications: () => void;
   onOpenCloudSync: () => void;
   onOpenSecurityModal: () => void;
+  onOpenAiChat?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentRole,
+  currentUser,
+  onLogout,
+  onOpenProfile,
   onRoleChange,
   darkMode,
   onToggleDarkMode,
@@ -42,8 +53,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNotifications,
   onOpenCloudSync,
   onOpenSecurityModal,
+  onOpenAiChat,
 }) => {
-  const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+
+  const { isInstallable, isInstalled, promptInstall } = usePwa();
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -103,167 +117,146 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Center / Action Controls */}
         <div className="flex items-center gap-1.5 sm:gap-2.5">
           
-          {/* Quick Role Switcher Button */}
-          <div className="relative">
+          {/* PWA Install Button in Header */}
+          {isInstallable && !isInstalled && (
             <button
               type="button"
-              onClick={() => setRoleDropdownOpen(!roleDropdownOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-xl border border-white/40 dark:border-white/10 bg-white/60 dark:bg-slate-800/60 hover:bg-white/90 dark:hover:bg-slate-800 backdrop-blur-md transition-all cursor-pointer shadow-xs"
-              aria-label="Pilih Peran Pengguna"
+              onClick={promptInstall}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-cyan-400 text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer shadow-2xs"
+              title="Pasang Aplikasi OutsourceTrack di Perangkat (PWA)"
             >
-              <div className="w-2 h-2 rounded-full bg-indigo-500" />
-              <div className="text-left hidden md:block">
-                <div className="font-semibold text-slate-800 dark:text-slate-200 leading-none">
-                  {currentRoleInfo.title}
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  {currentRoleInfo.badge}
-                </div>
-              </div>
-              <span className="md:hidden font-medium text-slate-700 dark:text-slate-300">
-                {currentRoleInfo.badge}
-              </span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            </button>
-
-            {/* Dropdown Menu */}
-            {roleDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-64 glass-dock rounded-2xl shadow-2xl border border-white/50 dark:border-white/10 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Ganti Akun & Hak Akses
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onRoleChange('outsourcing');
-                    setRoleDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
-                    currentRole === 'outsourcing'
-                      ? 'bg-indigo-500/15 dark:bg-indigo-500/25 text-indigo-900 dark:text-indigo-200 font-semibold border border-indigo-500/20'
-                      : 'hover:bg-white/40 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  <User className="w-4 h-4 text-indigo-500 shrink-0" />
-                  <div>
-                    <div>Budi Santoso</div>
-                    <div className="text-[10px] text-slate-400 font-normal">Tenaga Outsourcing (Mobile View)</div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onRoleChange('supervisor');
-                    setRoleDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
-                    currentRole === 'supervisor'
-                      ? 'bg-indigo-500/15 dark:bg-indigo-500/25 text-indigo-900 dark:text-indigo-200 font-semibold border border-indigo-500/20'
-                      : 'hover:bg-white/40 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  <Users className="w-4 h-4 text-amber-500 shrink-0" />
-                  <div>
-                    <div>Hendra Wijaya, S.T.</div>
-                    <div className="text-[10px] text-slate-400 font-normal">Atasan / Supervisor Operasional</div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onRoleChange('admin');
-                    setRoleDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
-                    currentRole === 'admin'
-                      ? 'bg-indigo-500/15 dark:bg-indigo-500/25 text-indigo-900 dark:text-indigo-200 font-semibold border border-indigo-500/20'
-                      : 'hover:bg-white/40 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <div>
-                    <div>Dian Paramita, S.Kom.</div>
-                    <div className="text-[10px] text-slate-400 font-normal">Admin Utama & HR Governance</div>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Material Glass Aesthetic Toggle Button */}
-          {onToggleGlassMode && (
-            <button
-              type="button"
-              onClick={onToggleGlassMode}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                glassMode
-                  ? 'bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-cyan-500/20 text-indigo-700 dark:text-cyan-300 border border-indigo-400/35 dark:border-cyan-400/30 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-              title="Aktifkan / Nonaktifkan Tampilan Material Glass & Ambient Glow"
-              aria-label="Toggle Tampilan Material Glass"
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${glassMode ? 'text-indigo-500 dark:text-cyan-400 animate-pulse' : 'text-slate-400'}`} />
-              <span className="hidden lg:inline text-[11px]">Material Glass</span>
+              <Download className="w-3.5 h-3.5 text-indigo-600 dark:text-cyan-400" />
+              <span>Install App</span>
             </button>
           )}
 
-          {/* Cloud Sync Button */}
+          {/* Authenticated User Profile Chip (Clickable for Profile & Password) */}
           <button
             type="button"
-            onClick={onOpenCloudSync}
-            className="p-2 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
-            title="Sinkronisasi Google Drive Cloud"
-            aria-label="Google Drive Cloud Sync"
+            onClick={onOpenProfile}
+            title="Klik untuk membuka Pengaturan Profil & Ganti Kata Sandi"
+            className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 text-xs rounded-xl border border-white/50 dark:border-white/10 bg-white/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-800 backdrop-blur-md shadow-2xs transition-all cursor-pointer text-left group"
           >
-            <Cloud className="w-4 h-4" />
+            <span
+              className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shadow-2xs shrink-0 group-hover:scale-105 transition-transform"
+              style={{ backgroundColor: currentUser?.avatarColor || '#4f46e5' }}
+            >
+              {currentUser?.initials || 'OT'}
+            </span>
+            <div className="text-left hidden md:block">
+              <div className="font-bold text-slate-900 dark:text-white leading-tight group-hover:text-indigo-600 dark:group-hover:text-cyan-400 transition-colors">
+                {currentUser?.name || currentRoleInfo.title}
+              </div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                {currentUser?.divisionName || currentRoleInfo.badge}
+              </div>
+            </div>
+            <span className="md:hidden font-semibold text-slate-800 dark:text-slate-200">
+              {currentUser?.name.split(' ')[0] || currentRoleInfo.badge}
+            </span>
           </button>
 
-          {/* Security & MFA Settings Modal Trigger */}
-          <button
-            type="button"
-            onClick={onOpenSecurityModal}
-            className="p-2 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
-            title="Autentikasi Google & Pengaturan Keamanan MFA"
-            aria-label="Pengaturan Keamanan dan MFA"
-          >
-            <Lock className="w-4 h-4" />
-          </button>
+          {/* Dedicated Logout Button */}
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="px-2.5 py-1.5 rounded-xl border border-rose-200/80 dark:border-rose-900/60 bg-rose-50/80 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0"
+              title="Keluar dari Akun (Logout)"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+              <span className="hidden sm:inline">Keluar</span>
+            </button>
+          )}
 
-          {/* Accessibility High Contrast Mode */}
-          <button
-            type="button"
-            onClick={onToggleHighContrast}
-            className={`p-2 rounded-xl transition-colors cursor-pointer ${
-              highContrast
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60'
-            }`}
-            title="Mode Kontras Tinggi (Aksesibilitas)"
-            aria-label="Toggle Mode Kontras Tinggi"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
+          {/* Gemini AI Analytics Chat Trigger Button */}
+          {onOpenAiChat && (
+            <button
+              type="button"
+              onClick={onOpenAiChat}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-2xs"
+              title="Tanyakan Analisis Data Kinerja & Presensi ke Gemini AI"
+              aria-label="Buka AI Analytics Chat"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
+              <span className="text-[11px] font-medium hidden xs:inline">AI Chat</span>
+            </button>
+          )}
 
-          {/* Dark Mode Toggle */}
+          {/* Desktop-only secondary utility buttons */}
+          <div className="hidden sm:flex items-center gap-1 sm:gap-1.5">
+            {/* Material Glass Aesthetic Toggle Button */}
+            {onToggleGlassMode && (
+              <button
+                type="button"
+                onClick={onToggleGlassMode}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  glassMode
+                    ? 'bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-cyan-500/20 text-indigo-700 dark:text-cyan-300 border border-indigo-400/35 dark:border-cyan-400/30 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60'
+                }`}
+                title="Aktifkan / Nonaktifkan Tampilan Material Glass & Ambient Glow"
+                aria-label="Toggle Tampilan Material Glass"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${glassMode ? 'text-indigo-500 dark:text-cyan-400 animate-pulse' : 'text-slate-400'}`} />
+                <span className="hidden lg:inline text-[11px]">Material Glass</span>
+              </button>
+            )}
+
+            {/* Cloud Sync Button */}
+            <button
+              type="button"
+              onClick={onOpenCloudSync}
+              className="p-2 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
+              title="Sinkronisasi Google Drive Cloud"
+              aria-label="Google Drive Cloud Sync"
+            >
+              <Cloud className="w-4 h-4" />
+            </button>
+
+            {/* Security & MFA Settings Modal Trigger */}
+            <button
+              type="button"
+              onClick={onOpenSecurityModal}
+              className="p-2 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
+              title="Autentikasi Google & Pengaturan Keamanan MFA"
+              aria-label="Pengaturan Keamanan dan MFA"
+            >
+              <Lock className="w-4 h-4" />
+            </button>
+
+            {/* Accessibility High Contrast Mode */}
+            <button
+              type="button"
+              onClick={onToggleHighContrast}
+              className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                highContrast
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60'
+              }`}
+              title="Mode Kontras Tinggi (Aksesibilitas)"
+              aria-label="Toggle Mode Kontras Tinggi"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Dark Mode Toggle (Always Visible) */}
           <button
             type="button"
             onClick={onToggleDarkMode}
-            className="p-2 text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
+            className="p-2 text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-800/80 rounded-xl transition-colors cursor-pointer"
             title="Ganti Mode Gelap / Terang"
             aria-label="Toggle Tema Gelap"
           >
-            {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+            {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
           </button>
 
-          {/* Notification Button */}
+          {/* Notification Button (Always Visible) */}
           <button
             type="button"
             onClick={onOpenNotifications}
-            className="relative p-2 text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60 rounded-xl transition-colors cursor-pointer"
+            className="relative p-2 text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-800/80 rounded-xl transition-colors cursor-pointer"
             title="Notifikasi Sistem"
             aria-label="Buka Notifikasi"
           >
@@ -272,6 +265,101 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />
             )}
           </button>
+
+          {/* Mobile More Options Dropdown Button (sm:hidden) */}
+          <div className="relative sm:hidden">
+            <button
+              type="button"
+              onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+              className="p-2 text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-800/80 rounded-xl transition-colors cursor-pointer"
+              title="Menu Pengaturan Cepat"
+              aria-label="Buka Menu Lainnya"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {moreMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 glass-dock rounded-2xl shadow-2xl border border-white/60 dark:border-white/10 p-2 z-50 animate-in fade-in zoom-in-95 duration-100 space-y-1">
+                <div className="px-3 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Pengaturan Cepat
+                </div>
+
+                {onOpenAiChat && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenAiChat();
+                      setMoreMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 hover:bg-white/70 dark:hover:bg-white/10 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/30 cursor-pointer font-medium"
+                  >
+                    <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <span>Gemini AI Analytics</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenCloudSync();
+                    setMoreMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 hover:bg-white/70 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 cursor-pointer font-medium"
+                >
+                  <Cloud className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span>Google Drive Sync</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenSecurityModal();
+                    setMoreMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2.5 hover:bg-white/70 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 cursor-pointer font-medium"
+                >
+                  <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Keamanan & MFA</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggleHighContrast();
+                    setMoreMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between hover:bg-white/70 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 cursor-pointer font-medium"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Eye className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>Kontras Tinggi</span>
+                  </div>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${highContrast ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                    {highContrast ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+
+                {onToggleGlassMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onToggleGlassMode();
+                      setMoreMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between hover:bg-white/70 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 cursor-pointer font-medium"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
+                      <span>Material Glass</span>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${glassMode ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                      {glassMode ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

@@ -1,0 +1,1893 @@
+/**
+ * SQLite Database & Storage Engine for OutsourceTrack & KPI Pro
+ * Mendukung built-in node:sqlite (Node.js v22+) dengan fallback file-based JSON.
+ * Disesuaikan khusus untuk Dinas Pendidikan Kabupaten Hulu Sungai Tengah.
+ */
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..');
+
+const DATA_DIR = path.join(ROOT_DIR, 'data');
+const UPLOADS_DIR = path.join(ROOT_DIR, 'uploads');
+const ATTENDANCE_UPLOADS = path.join(UPLOADS_DIR, 'attendance');
+const REPORTS_UPLOADS = path.join(UPLOADS_DIR, 'reports');
+const DB_PATH = path.join(DATA_DIR, 'outsource_track.db');
+
+// Pastikan direktori fisik selalu siap
+for (const dir of [DATA_DIR, UPLOADS_DIR, ATTENDANCE_UPLOADS, REPORTS_UPLOADS]) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+// Inisialisasi Database Engine (Built-in node:sqlite jika ada, atau fallback JSON)
+let dbEngine = null;
+let isNodeSqlite = false;
+
+try {
+  const { DatabaseSync } = await import('node:sqlite');
+  dbEngine = new DatabaseSync(DB_PATH);
+  isNodeSqlite = true;
+  console.log(`[Database] Menggunakan Node.js built-in SQLite: ${DB_PATH}`);
+} catch (err) {
+  console.warn(`[Database] node:sqlite tidak aktif/didukung di versi Node ini. Menggunakan Fallback Storage JSON: ${DATA_DIR}`);
+}
+
+// Inisialisasi Tabel SQLite
+if (isNodeSqlite && dbEngine) {
+  dbEngine.exec(`
+    CREATE TABLE IF NOT EXISTS divisions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      code TEXT NOT NULL,
+      description TEXT,
+      supervisor_name TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      nip TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL,
+      division_id TEXT NOT NULL,
+      division_name TEXT NOT NULL,
+      role_title TEXT NOT NULL,
+      phone TEXT,
+      vendor_name TEXT,
+      avatar_color TEXT,
+      initials TEXT,
+      device_id TEXT,
+      biometric_key TEXT,
+      custom_location_json TEXT,
+      supervisor_id TEXT,
+      workspace_note TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS attendance (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL,
+      staff_name TEXT NOT NULL,
+      division_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      clock_in_time TEXT NOT NULL,
+      clock_out_time TEXT,
+      status TEXT NOT NULL,
+      selfie_url TEXT,
+      latitude REAL,
+      longitude REAL,
+      accuracy REAL,
+      location_name TEXT,
+      is_geofence_valid INTEGER,
+      distance_meters REAL,
+      device_fingerprint TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS daily_reports (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL,
+      staff_name TEXT NOT NULL,
+      division_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL,
+      start_time TEXT,
+      end_time TEXT,
+      summary TEXT NOT NULL,
+      status TEXT NOT NULL,
+      documentation_photo_url TEXT,
+      image_hash TEXT,
+      ai_duplicate_flag_json TEXT,
+      location_coords_json TEXT,
+      supervisor_approval TEXT NOT NULL,
+      supervisor_notes TEXT,
+      approved_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS evaluations (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL,
+      staff_name TEXT NOT NULL,
+      supervisor_id TEXT NOT NULL,
+      division_id TEXT NOT NULL,
+      week_number INTEGER NOT NULL,
+      month_year TEXT NOT NULL,
+      scores_json TEXT NOT NULL,
+      average_score REAL NOT NULL,
+      predicate TEXT NOT NULL,
+      recommendation TEXT,
+      notes TEXT,
+      evaluated_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS vendors (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      code TEXT NOT NULL,
+      contract_number TEXT,
+      contract_start TEXT,
+      contract_end TEXT,
+      pic_name TEXT,
+      pic_phone TEXT,
+      address TEXT,
+      status TEXT DEFAULT 'Aktif',
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  // Migrasi aman untuk kolom baru users jika database sudah ada sebelumnya
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN custom_location_json TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN supervisor_id TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN workspace_note TEXT;`);
+  } catch (e) {}
+}
+
+// Fallback JSON in-memory store jika sqlite bawaan tidak aktif
+const FALLBACK_FILE = path.join(DATA_DIR, 'outsource_store.json');
+let fallbackStore = {
+  divisions: [],
+  users: [],
+  attendance: [],
+  daily_reports: [],
+  evaluations: []
+};
+
+if (!isNodeSqlite && fs.existsSync(FALLBACK_FILE)) {
+  try {
+    fallbackStore = JSON.parse(fs.readFileSync(FALLBACK_FILE, 'utf-8'));
+  } catch (e) {
+    console.error('[Storage Fallback] Gagal membaca berkas JSON fallback:', e);
+  }
+}
+
+function persistFallback() {
+  if (!isNodeSqlite) {
+    fs.writeFileSync(FALLBACK_FILE, JSON.stringify(fallbackStore, null, 2), 'utf-8');
+  }
+}
+
+// ======================== HELPER FUNCTIONS ========================
+
+export function hashPassword(plainText) {
+  return crypto.createHash('sha256').update(plainText).digest('hex');
+}
+
+/**
+ * Menyimpan Base64 Data URL menjadi berkas fisik foto di direktori uploads
+ */
+export function saveBase64Image(base64OrUrl, subfolder = 'attendance') {
+  if (!base64OrUrl) return '';
+  if (base64OrUrl.startsWith('/uploads/')) return base64OrUrl;
+
+  const matches = base64OrUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+  if (!matches || matches.length !== 3) {
+    return base64OrUrl;
+  }
+
+  const ext = matches[1].includes('png') ? 'png' : 'jpg';
+  const buffer = Buffer.from(matches[2], 'base64');
+  const filename = `${subfolder}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+  const targetDir = path.join(UPLOADS_DIR, subfolder);
+
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  const filePath = path.join(targetDir, filename);
+  try {
+    fs.writeFileSync(filePath, buffer);
+    return `/uploads/${subfolder}/${filename}`;
+  } catch (err) {
+    console.error(`[Storage] Gagal menulis berkas foto ke ${filePath}:`, err);
+    return base64OrUrl;
+  }
+}
+
+// ======================== MASTER DATA RESMI DISDIK HST ========================
+
+export const INITIAL_DIVISIONS = [
+  {
+    id: 'div-kadis',
+    name: 'Pucuk Pimpinan SKPD',
+    code: 'KADIS',
+    description: 'Pimpinan tertinggi Dinas Pendidikan Kabupaten Hulu Sungai Tengah.',
+    supervisorName: 'H. Muhammad Anhar, S.STP, ME'
+  },
+  {
+    id: 'div-sekretariat',
+    name: 'Sekretariat Dinas Pendidikan',
+    code: 'SEKRETARIAT',
+    description: 'Pengkoordinasian program, administrasi keuangan, kepegawaian, dan rumah tangga dinas.',
+    supervisorName: 'Salihin, S.Pd.SD'
+  },
+  {
+    id: 'div-renlap',
+    name: 'Sub Bagian Perencanaan dan Pelaporan',
+    code: 'SUB-RENLAP',
+    description: 'Penyusunan rencana kerja, evaluasi program, pelaporan kinerja dinas, dan dukungan TI.',
+    supervisorName: 'Muhammad Sugeng Wahyudi, A.Md'
+  },
+  {
+    id: 'div-keuangan',
+    name: 'Sub Bagian Keuangan',
+    code: 'SUB-KEU',
+    description: 'Pengelolaan administrasi keuangan, penatausahaan kas, dan pelaporan SPJ dinas.',
+    supervisorName: 'Hj. Rabiatul Adawiyah, SE'
+  },
+  {
+    id: 'div-umpeg',
+    name: 'Sub Bagian Umum dan Kepegawaian',
+    code: 'SUB-UMPEG',
+    description: 'Pelayanan administrasi umum, ketertiban, kepegawaian, pengamanan kantor, dan kebersihan.',
+    supervisorName: 'Ahmad Humaidi, S.Pd.'
+  },
+  {
+    id: 'div-arsip',
+    name: 'Unit Kerja Kearsipan & Arsiparis',
+    code: 'ARSIP',
+    description: 'Tata kelola kearsipan naskah dinas, dokumen fisik, dan digitalisasi dokumen dinas.',
+    supervisorName: 'Petugas Arsip'
+  },
+  {
+    id: 'div-sd',
+    name: 'Bidang Pembinaan Sekolah Dasar',
+    code: 'BID-SD',
+    description: 'Pembinaan kurikulum, peserta didik, GTK, dan kelembagaan Sekolah Dasar se-Kab. HST.',
+    supervisorName: 'Badaruddin, M.Pd'
+  },
+  {
+    id: 'div-smp',
+    name: 'Bidang Pembinaan SMP',
+    code: 'BID-SMP',
+    description: 'Pembinaan kurikulum, peserta didik, GTK, dan kelembagaan Sekolah Menengah Pertama se-Kab. HST.',
+    supervisorName: 'Alamsyah Mappaompo, S.Pd. MM'
+  },
+  {
+    id: 'div-sarpras',
+    name: 'Bidang Sarana Prasarana dan Kelembagaan',
+    code: 'BID-SARPRAS',
+    description: 'Pembangunan, pemeliharaan, pengadaan sarpras PAUD, SD, SMP, dan inventarisasi aset dinas.',
+    supervisorName: 'Bayhaki Novie, S.Pd'
+  },
+  {
+    id: 'div-paud',
+    name: 'Bidang PAUD dan Pendidikan Masyarakat',
+    code: 'BID-PAUD',
+    description: 'Pembinaan PAUD, TK, Pendidikan Kesetaraan, Sanggar Kegiatan Belajar (SKB), dan Dikmas.',
+    supervisorName: 'Andry Rachmat Hidayat, S.Kom'
+  }
+];
+
+const DEFAULT_PASSWORD_HASH = hashPassword('Password123!');
+
+export const INITIAL_USERS = [
+  // 1. Pucuk Pimpinan & Super Admin
+  {
+    id: 'usr-pimp-001',
+    nip: '19820916 2000121 002',
+    name: 'H. Muhammad Anhar, S.STP, ME',
+    email: 'kadin@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'admin',
+    divisionId: 'div-kadis',
+    divisionName: 'Pucuk Pimpinan SKPD',
+    roleTitle: 'Kepala Dinas Pendidikan',
+    phone: '0811-5000-001',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#0f172a',
+    initials: 'MA',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: null,
+    workspaceNote: 'Ruang Kepala Dinas - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-pimp-002',
+    nip: '19780502200604 1 017',
+    name: 'Salihin, S.Pd.SD',
+    email: 'sekretaris@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-sekretariat',
+    divisionName: 'Sekretariat Dinas Pendidikan',
+    roleTitle: 'Sekretaris Dinas (Eselon III.a)',
+    phone: '0811-5000-002',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#1e293b',
+    initials: 'SL',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-pimp-001',
+    workspaceNote: 'Ruang Sekretaris - Kantor Disdik HST'
+  },
+
+  // 2. Kasubag & Unit Kerja Sekretariat (Atasan Langsung)
+  {
+    id: 'usr-spv-renlap',
+    nip: '19821218 2006041 008',
+    name: 'Muhammad Sugeng Wahyudi, A.Md',
+    email: 'renlap@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-renlap',
+    divisionName: 'Sub Bagian Perencanaan dan Pelaporan',
+    roleTitle: 'Kepala Sub Bagian Perencanaan dan Pelaporan',
+    phone: '0812-5100-1008',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#3b82f6',
+    initials: 'SW',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-pimp-002',
+    workspaceNote: 'Ruang Renlap - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-keu',
+    nip: '19730609199503 2 002',
+    name: 'Hj. Rabiatul Adawiyah, SE',
+    email: 'keuangan@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-keuangan',
+    divisionName: 'Sub Bagian Keuangan',
+    roleTitle: 'Kepala Sub Bagian Keuangan',
+    phone: '0812-5100-2002',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#059669',
+    initials: 'RA',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-pimp-002',
+    workspaceNote: 'Ruang Keuangan - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-umpeg',
+    nip: '19860620 2010011 008',
+    name: 'Ahmad Humaidi, S.Pd.',
+    email: 'umpeg@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-umpeg',
+    divisionName: 'Sub Bagian Umum dan Kepegawaian',
+    roleTitle: 'Kepala Sub Bagian Umum dan Kepegawaian',
+    phone: '0812-5100-3008',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#d97706',
+    initials: 'AH',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-pimp-002',
+    workspaceNote: 'Ruang Umum & Kepegawaian - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-arsip',
+    nip: 'arsiparis',
+    name: 'Petugas Arsip',
+    email: 'arsip@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-arsip',
+    divisionName: 'Unit Kerja Kearsipan & Arsiparis',
+    roleTitle: 'Pramubakti Arsiparis / Koordinator Kearsipan',
+    phone: '0813-5100-4001',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#6366f1',
+    initials: 'PA',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-umpeg',
+    workspaceNote: 'Ruang Arsip Dokumen - Kantor Disdik HST'
+  },
+
+  // 3. Bidang Pembinaan SD (Kabid & Kasi)
+  {
+    id: 'usr-spv-kabid-sd',
+    nip: '19800202 200604 1 028',
+    name: 'Badaruddin, M.Pd',
+    email: 'kabid.sd@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-sd',
+    divisionName: 'Bidang Pembinaan Sekolah Dasar',
+    roleTitle: 'Kepala Bidang Pembinaan Sekolah Dasar (Eselon III.b)',
+    phone: '0812-5100-5028',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#2563eb',
+    initials: 'BD',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-pimp-002',
+    workspaceNote: 'Ruang Bidang SD - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-kasi-sd-gtk',
+    nip: '19850902 2014061 002',
+    name: 'Miseransyah, S.Pd.I',
+    email: 'miseransyah@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-sd',
+    divisionName: 'Bidang Pembinaan Sekolah Dasar',
+    roleTitle: 'Kepala Seksi GTK dan Kelembagaan SD',
+    phone: '0813-5100-6002',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#0284c7',
+    initials: 'MS',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kabid-sd',
+    workspaceNote: 'Ruang Seksi GTK SD - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-kasi-sd-kur',
+    nip: '197504241998031 006',
+    name: 'Ruswan, S.Pd.',
+    email: 'ruswan@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-sd',
+    divisionName: 'Bidang Pembinaan Sekolah Dasar',
+    roleTitle: 'Kepala Seksi Kurikulum dan Peserta Didik SD',
+    phone: '0813-5100-7006',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#0d9488',
+    initials: 'RS',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kabid-sd',
+    workspaceNote: 'Ruang Kurikulum SD - Kantor Disdik HST'
+  },
+
+  // 4. Bidang Pembinaan SMP (Kabid & Kasi)
+  {
+    id: 'usr-spv-kabid-smp',
+    nip: '19780414 200604 1 023',
+    name: 'Alamsyah Mappaompo, S.Pd. MM',
+    email: 'kabid.smp@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-smp',
+    divisionName: 'Bidang Pembinaan SMP',
+    roleTitle: 'Kepala Bidang Pembinaan SMP (Eselon III.b)',
+    phone: '0812-5100-8023',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#7c3aed',
+    initials: 'AM',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-pimp-002',
+    workspaceNote: 'Ruang Bidang SMP - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-kasi-smp-gtk',
+    nip: '19880704 201101 2 010',
+    name: 'Dewi Susanti, S.Pd',
+    email: 'dewi.susanti@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-smp',
+    divisionName: 'Bidang Pembinaan SMP',
+    roleTitle: 'Kepala Seksi Bidang Pembinaan GTK & Peserta Didik SMP',
+    phone: '0813-5100-9010',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#9333ea',
+    initials: 'DS',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kabid-smp',
+    workspaceNote: 'Ruang Seksi GTK SMP - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-kasi-smp-kur',
+    nip: '19830216 200604 2 009',
+    name: 'Rusnida Erliyanti, S.Pd',
+    email: 'rusnida@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-smp',
+    divisionName: 'Bidang Pembinaan SMP',
+    roleTitle: 'Kepala Seksi Kurikulum Sekolah Menengah Pertama',
+    phone: '0813-5100-1009',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#c026d3',
+    initials: 'RE',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kabid-smp',
+    workspaceNote: 'Ruang Kurikulum SMP - Kantor Disdik HST'
+  },
+
+  // 5. Bidang Sarana Prasarana dan Kelembagaan (Kabid, Kasi, Penelaah)
+  {
+    id: 'usr-spv-kabid-sarpras',
+    nip: '19831110 2005011 007',
+    name: 'Bayhaki Novie, S.Pd',
+    email: 'kabid.sarpras@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-sarpras',
+    divisionName: 'Bidang Sarana Prasarana dan Kelembagaan',
+    roleTitle: 'Kepala Bidang Sarana Prasarana dan Kelembagaan (Eselon III.b)',
+    phone: '0812-5100-1107',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#ea580c',
+    initials: 'BN',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-pimp-002',
+    workspaceNote: 'Ruang Bidang Sarpras - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-kasi-sarpras-sd',
+    nip: '19851207 2005011 002',
+    name: 'Muhammad Fahdi Royansyah',
+    email: 'fahdi.royansyah@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-sarpras',
+    divisionName: 'Bidang Sarana Prasarana dan Kelembagaan',
+    roleTitle: 'Kepala Seksi Sarana dan Prasarana SD',
+    phone: '0813-5100-1202',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#d97706',
+    initials: 'FR',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kabid-sarpras',
+    workspaceNote: 'Ruang Sarpras SD - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-kasi-sarpras-smp',
+    nip: '19860206 2005011 002',
+    name: 'Muhammad Kharies Setiawan, SE',
+    email: 'kharies@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-sarpras',
+    divisionName: 'Bidang Sarana Prasarana dan Kelembagaan',
+    roleTitle: 'Kasi Sarana Prasarana PAUD dan SMP',
+    phone: '0813-5100-1302',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#b45309',
+    initials: 'KS',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kabid-sarpras',
+    workspaceNote: 'Ruang Sarpras PAUD/SMP - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-penelaah-sarpras',
+    nip: '19870606 2011011 008',
+    name: 'M. Abdillah, S.Pd.',
+    email: 'abdillah@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-sarpras',
+    divisionName: 'Bidang Sarana Prasarana dan Kelembagaan',
+    roleTitle: 'Penelaah Teknis Kebijakan Sarpras',
+    phone: '0813-5100-1408',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#78350f',
+    initials: 'MA',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kabid-sarpras',
+    workspaceNote: 'Ruang Teknis Sarpras - Kantor Disdik HST'
+  },
+
+  // 6. Bidang PAUD dan Pendidikan Masyarakat (Kabid & Kasi)
+  {
+    id: 'usr-spv-kabid-paud',
+    nip: '19851208 2010011 007',
+    name: 'Andry Rachmat Hidayat, S.Kom',
+    email: 'kabid.paud@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-paud',
+    divisionName: 'Bidang PAUD dan Pendidikan Masyarakat',
+    roleTitle: 'Kepala Bidang PAUD dan Pendidikan Masyarakat (Eselon III.b)',
+    phone: '0812-5100-1507',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#047857',
+    initials: 'AH',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-pimp-002',
+    workspaceNote: 'Ruang Bidang PAUD - Kantor Disdik HST'
+  },
+  {
+    id: 'usr-spv-kasi-paud',
+    nip: '19880509 201503 2 005',
+    name: 'Fatmahidayani Hejna, S.Pd',
+    email: 'fatma.hejna@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'supervisor',
+    divisionId: 'div-paud',
+    divisionName: 'Bidang PAUD dan Pendidikan Masyarakat',
+    roleTitle: 'Kepala Seksi Kurikulum PAUD dan Pedidikan Masyarakat',
+    phone: '0813-5100-1605',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#059669',
+    initials: 'FH',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kabid-paud',
+    workspaceNote: 'Ruang Kurikulum PAUD - Kantor Disdik HST'
+  },
+
+  // 7. Tenaga Outsourcing (Alih Daya) Disdik HST & Pengaturan Ruang Kerja
+  {
+    id: 'usr-os-001',
+    nip: 'OS-TI-001',
+    name: 'Budi Santoso',
+    email: 'budi.it@outsource.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'outsourcing',
+    divisionId: 'div-renlap',
+    divisionName: 'Sub Bagian Perencanaan dan Pelaporan',
+    roleTitle: 'Teknisi IT Support & Jaringan',
+    phone: '0812-3456-7891',
+    vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    avatarColor: '#4f46e5',
+    initials: 'BS',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null, // Default: Kantor Disdik HST
+    supervisorId: 'usr-spv-renlap',
+    workspaceNote: 'Ruang Server & Helpdesk TI Disdik HST'
+  },
+  {
+    id: 'usr-os-002',
+    nip: 'OS-SEC-002',
+    name: 'Reza Pratama',
+    email: 'reza.sec@outsource.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'outsourcing',
+    divisionId: 'div-umpeg',
+    divisionName: 'Sub Bagian Umum dan Kepegawaian',
+    roleTitle: 'Petugas Pengamanan (Security Regu A)',
+    phone: '0813-9876-5432',
+    vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    avatarColor: '#d97706',
+    initials: 'RP',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null, // Default: Kantor Disdik HST
+    supervisorId: 'usr-spv-umpeg',
+    workspaceNote: 'Pos Jaga Gerbang Utama & Area Depan Disdik HST'
+  },
+  {
+    id: 'usr-os-003',
+    nip: 'OS-CLN-003',
+    name: 'Siti Nurhaliza',
+    email: 'siti.clean@outsource.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'outsourcing',
+    divisionId: 'div-umpeg',
+    divisionName: 'Sub Bagian Umum dan Kepegawaian',
+    roleTitle: 'Tenaga Kebersihan Lingkungan (Cleaning Service)',
+    phone: '0857-1234-5678',
+    vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    avatarColor: '#059669',
+    initials: 'SN',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null, // Default: Kantor Disdik HST
+    supervisorId: 'usr-spv-umpeg',
+    workspaceNote: 'Gedung Induk & Ruang Rapat Pimpinan Disdik HST'
+  },
+  {
+    id: 'usr-os-004',
+    nip: 'OS-DRV-004',
+    name: 'Ahmad Fauzi',
+    email: 'ahmad.drv@outsource.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'outsourcing',
+    divisionId: 'div-sekretariat',
+    divisionName: 'Sekretariat Dinas Pendidikan',
+    roleTitle: 'Pengemudi Operasional Dinas',
+    phone: '0878-8765-4321',
+    vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    avatarColor: '#dc2626',
+    initials: 'AF',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null, // Default: Kantor Disdik HST
+    supervisorId: 'usr-spv-umpeg',
+    workspaceNote: 'Pool Kendaraan Dinas & Pelayanan Operasional'
+  },
+  {
+    id: 'usr-os-005',
+    nip: 'OS-ADM-005',
+    name: 'Dewi Lestari',
+    email: 'dewi.adm@outsource.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'outsourcing',
+    divisionId: 'div-sd',
+    divisionName: 'Bidang Pembinaan Sekolah Dasar',
+    roleTitle: 'Staf Administrasi & Verifikasi Berkas SD',
+    phone: '0821-4567-8901',
+    vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    avatarColor: '#db2777',
+    initials: 'DL',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kasi-sd-gtk',
+    workspaceNote: 'Front Office Pelayanan Bidang Pembinaan SD'
+  },
+  // Khusus: Staf dengan Lokasi Kerja Berbeda (SKB Murakata)
+  {
+    id: 'usr-os-006',
+    nip: 'OS-SKB-006',
+    name: 'Muhammad Rizky',
+    email: 'rizky.skb@outsource.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'outsourcing',
+    divisionId: 'div-paud',
+    divisionName: 'Bidang PAUD dan Pendidikan Masyarakat',
+    roleTitle: 'Pramubakti & Teknisi Fasilitas SKB',
+    phone: '0812-7788-9900',
+    vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    avatarColor: '#0891b2',
+    initials: 'MR',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: JSON.stringify({
+      id: 'loc-skb-hst',
+      name: 'Sanggar Kegiatan Belajar (SKB) Disdik HST',
+      address: 'Jl. Murakata, Barabai, Kab. Hulu Sungai Tengah, Kalimantan Selatan',
+      latitude: -2.58550,
+      longitude: 115.37820,
+      radiusMeters: 90
+    }),
+    supervisorId: 'usr-spv-kabid-paud',
+    workspaceNote: 'Kompleks Gedung SKB Murakata Barabai'
+  },
+  // Khusus: Staf dengan Lokasi Kerja Berbeda (Gedung Kesenian & Workshop)
+  {
+    id: 'usr-os-007',
+    nip: 'OS-KSN-007',
+    name: 'Fajar Hidayat',
+    email: 'fajar.kesenian@outsource.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'outsourcing',
+    divisionId: 'div-sarpras',
+    divisionName: 'Bidang Sarana Prasarana dan Kelembagaan',
+    roleTitle: 'Petugas Pemelihara Sarana Gedung Kesenian',
+    phone: '0852-3344-5566',
+    vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    avatarColor: '#7c3aed',
+    initials: 'FH',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: JSON.stringify({
+      id: 'loc-kesenian-hst',
+      name: 'Gedung Kesenian & Workshop Disdik HST',
+      address: 'Kawasan Sarana Pembelajaran Terpadu, Barabai, Kab. Hulu Sungai Tengah',
+      latitude: -2.59320,
+      longitude: 115.37110,
+      radiusMeters: 85
+    }),
+    supervisorId: 'usr-spv-kabid-sarpras',
+    workspaceNote: 'Gedung Kesenian Barabai & Workshop Alat Peraga'
+  },
+  {
+    id: 'usr-os-008',
+    nip: 'OS-SMP-008',
+    name: 'Indra Saputra',
+    email: 'indra.smp@outsource.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'outsourcing',
+    divisionId: 'div-smp',
+    divisionName: 'Bidang Pembinaan SMP',
+    roleTitle: 'Operator Layanan Data & Dokumen SMP',
+    phone: '0877-6655-4433',
+    vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    avatarColor: '#6366f1',
+    initials: 'IS',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kasi-smp-gtk',
+    workspaceNote: 'Ruang Layanan Administrasi SMP Disdik HST'
+  },
+  {
+    id: 'usr-os-009',
+    nip: 'OS-ARS-009',
+    name: 'Nurul Hasanah',
+    email: 'nurul.arsip@outsource.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'outsourcing',
+    divisionId: 'div-arsip',
+    divisionName: 'Unit Kerja Kearsipan & Arsiparis',
+    roleTitle: 'Pramubakti Digitalisasi Arsip & Dokumen',
+    phone: '0823-9988-7766',
+    vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    avatarColor: '#ec4899',
+    initials: 'NH',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-arsip',
+    workspaceNote: 'Ruang Digitalisasi Naskah Dinas'
+  },
+  {
+    id: 'usr-os-010',
+    nip: 'OS-LOG-010',
+    name: 'Hendra Setiawan',
+    email: 'hendra.log@outsource.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'outsourcing',
+    divisionId: 'div-sarpras',
+    divisionName: 'Bidang Sarana Prasarana dan Kelembagaan',
+    roleTitle: 'Petugas Pengelolaan Gudang & Aset Sarpras',
+    phone: '0812-4433-2211',
+    vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    avatarColor: '#b45309',
+    initials: 'HS',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: 'usr-spv-kasi-sarpras-sd',
+    workspaceNote: 'Gudang Sarana & Inventaris Aset Disdik HST'
+  },
+
+  // 8. Super Admin IT
+  {
+    id: 'usr-adm-001',
+    nip: 'ADMIN-HST',
+    name: 'Admin Sistem Disdik HST',
+    email: 'admin@disdikhst.go.id',
+    passwordHash: DEFAULT_PASSWORD_HASH,
+    role: 'admin',
+    divisionId: 'div-renlap',
+    divisionName: 'Sub Bagian Perencanaan dan Pelaporan',
+    roleTitle: 'Super Administrator & Analis Sistem TI',
+    phone: '0811-5000-999',
+    vendorName: 'Dinas Pendidikan Kab. HST',
+    avatarColor: '#0f172a',
+    initials: 'AD',
+    deviceId: null,
+    biometricKey: null,
+    customLocationJson: null,
+    supervisorId: null,
+    workspaceNote: 'Control Center Aplikasi - Kantor Disdik HST'
+  }
+];
+
+export const INITIAL_VENDORS = [
+  {
+    id: 'ven-001',
+    name: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+    code: 'HBU-HST',
+    contractNumber: 'SPK/027/DISDIK-HST/2026',
+    contractStart: '2026-01-02',
+    contractEnd: '2026-12-31',
+    picName: 'H. Akhmad Zaini, S.E.',
+    picPhone: '0812-5100-8899',
+    address: 'Jl. Murakata No. 45, Barabai, Kab. Hulu Sungai Tengah',
+    status: 'Aktif'
+  },
+  {
+    id: 'ven-002',
+    name: 'CV Murakata Sarana Mandiri',
+    code: 'MSM-HST',
+    contractNumber: 'SPK/028/DISDIK-HST/2026',
+    contractStart: '2026-01-02',
+    contractEnd: '2026-12-31',
+    picName: 'M. Noor Irfan, S.T.',
+    picPhone: '0852-4800-1122',
+    address: 'Jl. Perintis Kemerdekaan No. 12, Barabai',
+    status: 'Aktif'
+  }
+];
+
+// ======================== SEEDING / SINKRONISASI DATABASE ========================
+
+export function seedDatabaseIfEmpty() {
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+
+  if (isNodeSqlite && dbEngine) {
+    // Sinkronisasi Tabel Vendors
+    try {
+      const hasVen = dbEngine.prepare("SELECT id FROM vendors LIMIT 1").get();
+      if (!hasVen) {
+        const insertVen = dbEngine.prepare(
+          'INSERT OR REPLACE INTO vendors (id, name, code, contract_number, contract_start, contract_end, pic_name, pic_phone, address, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        for (const v of INITIAL_VENDORS) {
+          insertVen.run(v.id, v.name, v.code, v.contractNumber, v.contractStart, v.contractEnd, v.picName, v.picPhone, v.address, v.status, now);
+        }
+      }
+    } catch (e) {
+      console.warn('[Database] Gagal seeding vendors:', e.message);
+    }
+
+    // Sinkronisasi Tabel Divisions (Upsert/Replace)
+    const insertDiv = dbEngine.prepare(
+      'INSERT OR REPLACE INTO divisions (id, name, code, description, supervisor_name, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    for (const d of INITIAL_DIVISIONS) {
+      insertDiv.run(d.id, d.name, d.code, d.description, d.supervisorName, now);
+    }
+
+    // Periksa apakah pengguna resmi Disdik HST sudah masuk
+    const hasKadis = dbEngine.prepare("SELECT id FROM users WHERE nip = '19820916 2000121 002'").get();
+    if (!hasKadis) {
+      console.log('[Database] Melakukan migrasi dan seeding pengguna resmi Disdik HST...');
+      const insertUser = dbEngine.prepare(
+        `INSERT OR REPLACE INTO users (
+          id, nip, name, email, password_hash, role, division_id, division_name,
+          role_title, phone, vendor_name, avatar_color, initials, device_id, biometric_key,
+          custom_location_json, supervisor_id, workspace_note, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+
+      for (const u of INITIAL_USERS) {
+        insertUser.run(
+          u.id,
+          u.nip,
+          u.name,
+          u.email,
+          u.passwordHash,
+          u.role,
+          u.divisionId,
+          u.divisionName,
+          u.roleTitle,
+          u.phone,
+          u.vendorName,
+          u.avatarColor,
+          u.initials,
+          u.deviceId,
+          u.biometricKey,
+          u.customLocationJson || null,
+          u.supervisorId || null,
+          u.workspaceNote || null,
+          now
+        );
+      }
+
+      // Seed sampel presensi hari ini di HST
+      const insertAtt = dbEngine.prepare(
+        `INSERT OR IGNORE INTO attendance (
+          id, staff_id, staff_name, division_id, date, clock_in_time, clock_out_time, status,
+          selfie_url, latitude, longitude, accuracy, location_name, is_geofence_valid, distance_meters, device_fingerprint, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+
+      insertAtt.run('att-hst-1', 'usr-os-001', 'Budi Santoso', 'div-renlap', today, '07:42 WITA', '-', 'Hadir', '', -2.59112, 115.37353, 12, 'Kantor Disdik Kab. HST', 1, 14.5, 'dev-pixel7-bud', now);
+      insertAtt.run('att-hst-2', 'usr-os-002', 'Reza Pratama', 'div-umpeg', today, '06:55 WITA', '-', 'Hadir', '', -2.59112, 115.37353, 8, 'Kantor Disdik Kab. HST', 1, 9.2, 'dev-samsung-rez', now);
+      insertAtt.run('att-hst-3', 'usr-os-003', 'Siti Nurhaliza', 'div-umpeg', today, '06:30 WITA', '-', 'Hadir', '', -2.59112, 115.37353, 15, 'Kantor Disdik Kab. HST', 1, 18.0, 'dev-oppo-sit', now);
+      insertAtt.run('att-hst-4', 'usr-os-004', 'Ahmad Fauzi', 'div-sekretariat', today, '08:15 WITA', '-', 'Terlambat', '', -2.59112, 115.37353, 18, 'Kantor Disdik Kab. HST', 1, 24.1, 'dev-xiaomi-ahm', now);
+      insertAtt.run('att-hst-5', 'usr-os-006', 'Muhammad Rizky', 'div-paud', today, '07:35 WITA', '-', 'Hadir', '', -2.58550, 115.37820, 10, 'Sanggar Kegiatan Belajar (SKB) Disdik HST', 1, 11.4, 'dev-vivo-riz', now);
+      insertAtt.run('att-hst-6', 'usr-os-007', 'Fajar Hidayat', 'div-sarpras', today, '07:40 WITA', '-', 'Hadir', '', -2.59320, 115.37110, 14, 'Gedung Kesenian & Workshop Disdik HST', 1, 15.2, 'dev-infinix-faj', now);
+
+      console.log('[Database] Sinkronisasi data resmi Disdik HST selesai.');
+    }
+  } else {
+    fallbackStore.divisions = INITIAL_DIVISIONS;
+    fallbackStore.users = INITIAL_USERS;
+    persistFallback();
+  }
+}
+
+// ======================== API REPOSITORY METHODS ========================
+
+export function getUserByEmailOrNip(emailOrNip) {
+  if (isNodeSqlite && dbEngine) {
+    const row = dbEngine.prepare(
+      'SELECT * FROM users WHERE email = ? OR nip = ? COLLATE NOCASE'
+    ).get(emailOrNip, emailOrNip);
+    if (!row) return null;
+    return mapUserRow(row);
+  } else {
+    const u = fallbackStore.users.find(
+      (user) => user.email.toLowerCase() === emailOrNip.toLowerCase() || user.nip.toLowerCase() === emailOrNip.toLowerCase()
+    );
+    return u || null;
+  }
+}
+
+export function getUserById(id) {
+  if (isNodeSqlite && dbEngine) {
+    const row = dbEngine.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!row) return null;
+    return mapUserRow(row);
+  } else {
+    return fallbackStore.users.find((u) => u.id === id) || null;
+  }
+}
+
+function mapUserRow(row) {
+  let customLocation = null;
+  if (row.custom_location_json) {
+    try {
+      customLocation = JSON.parse(row.custom_location_json);
+    } catch (e) {}
+  }
+  return {
+    id: row.id,
+    nip: row.nip,
+    name: row.name,
+    email: row.email,
+    passwordHash: row.password_hash,
+    role: row.role,
+    divisionId: row.division_id,
+    divisionName: row.division_name,
+    roleTitle: row.role_title,
+    phone: row.phone,
+    vendorName: row.vendor_name,
+    avatarColor: row.avatar_color,
+    initials: row.initials,
+    deviceId: row.device_id,
+    biometricKey: row.biometric_key,
+    customLocation,
+    assignedLocation: customLocation, // jika null, client fallback ke Kantor Disdik HST
+    supervisorId: row.supervisor_id,
+    workspaceNote: row.workspace_note
+  };
+}
+
+export function createUser(userData) {
+  const id = `usr-${userData.role === 'outsourcing' ? 'os' : 'spv'}-${Date.now()}`;
+  const now = new Date().toISOString();
+  const initials = userData.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+  const avatarColors = ['#4f46e5', '#059669', '#d97706', '#dc2626', '#db2777', '#3b82f6'];
+  const avatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+
+  const userObj = {
+    id,
+    nip: userData.nip,
+    name: userData.name,
+    email: userData.email,
+    passwordHash: hashPassword(userData.password),
+    role: userData.role,
+    divisionId: userData.divisionId,
+    divisionName: userData.divisionName,
+    roleTitle: userData.roleTitle,
+    phone: userData.phone || '',
+    vendorName: userData.vendorName || 'Dinas Pendidikan Kab. HST',
+    avatarColor,
+    initials,
+    deviceId: userData.deviceId || null,
+    biometricKey: userData.biometricKey || null,
+    customLocation: userData.customLocation || null,
+    supervisorId: userData.supervisorId || null,
+    workspaceNote: userData.workspaceNote || null,
+    createdAt: now
+  };
+
+  const customLocationJson = userData.customLocation ? JSON.stringify(userData.customLocation) : null;
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `INSERT INTO users (
+        id, nip, name, email, password_hash, role, division_id, division_name,
+        role_title, phone, vendor_name, avatar_color, initials, device_id, biometric_key,
+        custom_location_json, supervisor_id, workspace_note, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      userObj.id,
+      userObj.nip,
+      userObj.name,
+      userObj.email,
+      userObj.passwordHash,
+      userObj.role,
+      userObj.divisionId,
+      userObj.divisionName,
+      userObj.roleTitle,
+      userObj.phone,
+      userObj.vendorName,
+      userObj.avatarColor,
+      userObj.initials,
+      userObj.deviceId,
+      userObj.biometricKey,
+      customLocationJson,
+      userObj.supervisorId,
+      userObj.workspaceNote,
+      now
+    );
+  } else {
+    fallbackStore.users.push(userObj);
+    persistFallback();
+  }
+
+  return userObj;
+}
+
+export function updateUserDevice(userId, deviceId, biometricKey = null) {
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare('UPDATE users SET device_id = ?, biometric_key = COALESCE(?, biometric_key) WHERE id = ?').run(
+      deviceId, biometricKey, userId
+    );
+  } else {
+    const user = fallbackStore.users.find((u) => u.id === userId);
+    if (user) {
+      user.deviceId = deviceId;
+      if (biometricKey) user.biometricKey = biometricKey;
+      persistFallback();
+    }
+  }
+}
+
+export function updateUserLocation(userId, customLocation, workspaceNote) {
+  const customLocationJson = customLocation ? JSON.stringify(customLocation) : null;
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      'UPDATE users SET custom_location_json = ?, workspace_note = COALESCE(?, workspace_note) WHERE id = ?'
+    ).run(customLocationJson, workspaceNote || null, userId);
+  } else {
+    const user = fallbackStore.users.find((u) => u.id === userId);
+    if (user) {
+      user.customLocation = customLocation;
+      if (workspaceNote) user.workspaceNote = workspaceNote;
+      persistFallback();
+    }
+  }
+}
+
+export function updateUserSupervisor(userId, supervisorId) {
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare('UPDATE users SET supervisor_id = ? WHERE id = ?').run(supervisorId, userId);
+  } else {
+    const user = fallbackStore.users.find((u) => u.id === userId);
+    if (user) {
+      user.supervisorId = supervisorId;
+      persistFallback();
+    }
+  }
+}
+
+export function listUsersByDivision(divisionId) {
+  if (isNodeSqlite && dbEngine) {
+    const rows = divisionId === 'div-all' || !divisionId
+      ? dbEngine.prepare('SELECT * FROM users').all()
+      : dbEngine.prepare('SELECT * FROM users WHERE division_id = ?').all(divisionId);
+    
+    return rows.map((r) => mapUserRow(r));
+  } else {
+    return fallbackStore.users
+      .filter((u) => !divisionId || divisionId === 'div-all' || u.divisionId === divisionId)
+      .map(({ passwordHash, ...safeUser }) => safeUser);
+  }
+}
+
+// DIVISIONS
+export function listDivisions() {
+  if (isNodeSqlite && dbEngine) {
+    const rows = dbEngine.prepare('SELECT * FROM divisions ORDER BY name ASC').all();
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      code: r.code,
+      description: r.description,
+      supervisorName: r.supervisor_name
+    }));
+  } else {
+    return fallbackStore.divisions;
+  }
+}
+
+export function createDivision(data) {
+  const id = data.id || `div-${Date.now()}`;
+  const now = new Date().toISOString();
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      'INSERT INTO divisions (id, name, code, description, supervisor_name, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(id, data.name, data.code || 'DIV', data.description || '', data.supervisorName || '', now);
+  } else {
+    fallbackStore.divisions.push({
+      id,
+      name: data.name,
+      code: data.code || 'DIV',
+      description: data.description || '',
+      supervisorName: data.supervisorName || ''
+    });
+    persistFallback();
+  }
+  return { id, ...data };
+}
+
+export function updateDivision(id, data) {
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      'UPDATE divisions SET name = ?, code = ?, description = ?, supervisor_name = ? WHERE id = ?'
+    ).run(data.name, data.code, data.description || '', data.supervisorName || '', id);
+
+    // Sinkronisasi update nama divisi pada pengguna yang terkait
+    if (data.name) {
+      dbEngine.prepare('UPDATE users SET division_name = ? WHERE division_id = ?').run(data.name, id);
+    }
+  } else {
+    const d = fallbackStore.divisions.find((div) => div.id === id);
+    if (d) {
+      d.name = data.name;
+      d.code = data.code;
+      d.description = data.description || '';
+      d.supervisorName = data.supervisorName || '';
+      persistFallback();
+    }
+  }
+  return { id, ...data };
+}
+
+export function deleteDivision(id) {
+  if (isNodeSqlite && dbEngine) {
+    // Cek apakah masih ada staf pada divisi ini
+    const staffCount = dbEngine.prepare('SELECT COUNT(*) as cnt FROM users WHERE division_id = ?').get(id)?.cnt || 0;
+    if (staffCount > 0) {
+      throw new Error(`Tidak dapat menghapus bidang/subbagian ini karena masih terdapat ${staffCount} staf/pegawai terdaftar.`);
+    }
+    dbEngine.prepare('DELETE FROM divisions WHERE id = ?').run(id);
+  } else {
+    fallbackStore.divisions = fallbackStore.divisions.filter((d) => d.id !== id);
+    persistFallback();
+  }
+  return true;
+}
+
+// VENDORS (PERUSAHAAN PENYEDIA OUTSOURCING)
+export function listVendors() {
+  if (isNodeSqlite && dbEngine) {
+    const rows = dbEngine.prepare('SELECT * FROM vendors ORDER BY name ASC').all();
+    const staffCounts = dbEngine.prepare("SELECT vendor_name, COUNT(*) as count FROM users WHERE role = 'outsourcing' GROUP BY vendor_name").all();
+    const countMap = {};
+    for (const sc of staffCounts) {
+      if (sc.vendor_name) countMap[sc.vendor_name] = sc.count;
+    }
+
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      code: r.code,
+      contractNumber: r.contract_number,
+      contractStart: r.contract_start,
+      contractEnd: r.contract_end,
+      picName: r.pic_name,
+      picPhone: r.pic_phone,
+      address: r.address,
+      status: r.status || 'Aktif',
+      staffCount: countMap[r.name] || 0,
+      createdAt: r.created_at
+    }));
+  } else {
+    return (fallbackStore.vendors || []).map((v) => ({ ...v, staffCount: 0 }));
+  }
+}
+
+export function createVendor(data) {
+  const id = `ven-${Date.now()}`;
+  const now = new Date().toISOString();
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `INSERT INTO vendors (id, name, code, contract_number, contract_start, contract_end, pic_name, pic_phone, address, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      data.name,
+      data.code || 'VEN',
+      data.contractNumber || '',
+      data.contractStart || '',
+      data.contractEnd || '',
+      data.picName || '',
+      data.picPhone || '',
+      data.address || '',
+      data.status || 'Aktif',
+      now
+    );
+  } else {
+    if (!fallbackStore.vendors) fallbackStore.vendors = [];
+    fallbackStore.vendors.push({ id, ...data, createdAt: now });
+    persistFallback();
+  }
+  return { id, ...data, createdAt: now, staffCount: 0 };
+}
+
+export function updateVendor(id, data) {
+  if (isNodeSqlite && dbEngine) {
+    // Ambil nama lama untuk sinkronisasi nama vendor jika berubah
+    const oldVen = dbEngine.prepare('SELECT name FROM vendors WHERE id = ?').get(id);
+    dbEngine.prepare(
+      `UPDATE vendors SET name = ?, code = ?, contract_number = ?, contract_start = ?, contract_end = ?, pic_name = ?, pic_phone = ?, address = ?, status = ? WHERE id = ?`
+    ).run(
+      data.name,
+      data.code,
+      data.contractNumber || '',
+      data.contractStart || '',
+      data.contractEnd || '',
+      data.picName || '',
+      data.picPhone || '',
+      data.address || '',
+      data.status || 'Aktif',
+      id
+    );
+
+    if (oldVen && oldVen.name && data.name && oldVen.name !== data.name) {
+      dbEngine.prepare('UPDATE users SET vendor_name = ? WHERE vendor_name = ?').run(data.name, oldVen.name);
+    }
+  } else {
+    if (!fallbackStore.vendors) fallbackStore.vendors = [];
+    const v = fallbackStore.vendors.find((item) => item.id === id);
+    if (v) {
+      Object.assign(v, data);
+      persistFallback();
+    }
+  }
+  return { id, ...data };
+}
+
+export function deleteVendor(id) {
+  if (isNodeSqlite && dbEngine) {
+    const ven = dbEngine.prepare('SELECT name FROM vendors WHERE id = ?').get(id);
+    if (ven) {
+      const staffCount = dbEngine.prepare('SELECT COUNT(*) as cnt FROM users WHERE vendor_name = ?').get(ven.name)?.cnt || 0;
+      if (staffCount > 0) {
+        throw new Error(`Tidak dapat menghapus perusahaan ini karena masih terdapat ${staffCount} staf alih daya tertaut.`);
+      }
+    }
+    dbEngine.prepare('DELETE FROM vendors WHERE id = ?').run(id);
+  } else {
+    if (fallbackStore.vendors) {
+      fallbackStore.vendors = fallbackStore.vendors.filter((v) => v.id !== id);
+      persistFallback();
+    }
+  }
+  return true;
+}
+
+// USER MANAGEMENT & PROFILE
+export function listAllUsers() {
+  if (isNodeSqlite && dbEngine) {
+    const rows = dbEngine.prepare('SELECT * FROM users ORDER BY name ASC').all();
+    return rows.map((r) => mapUserRow(r));
+  } else {
+    return fallbackStore.users.map(({ passwordHash, ...u }) => u);
+  }
+}
+
+export function resetUserPassword(userId, newPassword = 'Password123!') {
+  const newHash = hashPassword(newPassword);
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, userId);
+  } else {
+    const u = fallbackStore.users.find((user) => user.id === userId);
+    if (u) {
+      u.passwordHash = newHash;
+      persistFallback();
+    }
+  }
+  return true;
+}
+
+export function changeUserPassword(userId, oldPassword, newPassword) {
+  if (!newPassword || newPassword.length < 6) {
+    throw new Error('Kata sandi baru minimal 6 karakter.');
+  }
+
+  if (isNodeSqlite && dbEngine) {
+    const user = dbEngine.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId);
+    if (!user) throw new Error('Pengguna tidak ditemukan.');
+    const oldHash = hashPassword(oldPassword);
+    if (user.password_hash !== oldHash) {
+      throw new Error('Kata sandi lama tidak sesuai.');
+    }
+    const newHash = hashPassword(newPassword);
+    dbEngine.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, userId);
+  } else {
+    const u = fallbackStore.users.find((user) => user.id === userId);
+    if (!u) throw new Error('Pengguna tidak ditemukan.');
+    if (u.passwordHash !== hashPassword(oldPassword)) {
+      throw new Error('Kata sandi lama tidak sesuai.');
+    }
+    u.passwordHash = hashPassword(newPassword);
+    persistFallback();
+  }
+  return true;
+}
+
+export function updateUserProfile(userId, profileData) {
+  if (isNodeSqlite && dbEngine) {
+    const updates = [];
+    const values = [];
+
+    if (profileData.name) {
+      updates.push('name = ?');
+      values.push(profileData.name);
+    }
+    if (profileData.phone !== undefined) {
+      updates.push('phone = ?');
+      values.push(profileData.phone);
+    }
+    if (profileData.vendorName) {
+      updates.push('vendor_name = ?');
+      values.push(profileData.vendorName);
+    }
+    if (profileData.roleTitle) {
+      updates.push('role_title = ?');
+      values.push(profileData.roleTitle);
+    }
+    if (profileData.divisionId) {
+      updates.push('division_id = ?');
+      values.push(profileData.divisionId);
+    }
+    if (profileData.divisionName) {
+      updates.push('division_name = ?');
+      values.push(profileData.divisionName);
+    }
+    if (profileData.supervisorId !== undefined) {
+      updates.push('supervisor_id = ?');
+      values.push(profileData.supervisorId);
+    }
+    if (profileData.role) {
+      updates.push('role = ?');
+      values.push(profileData.role);
+    }
+    if (profileData.workspaceNote !== undefined) {
+      updates.push('workspace_note = ?');
+      values.push(profileData.workspaceNote);
+    }
+
+    if (updates.length > 0) {
+      values.push(userId);
+      dbEngine.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    }
+
+    return getUserById(userId);
+  } else {
+    const u = fallbackStore.users.find((user) => user.id === userId);
+    if (u) {
+      Object.assign(u, profileData);
+      persistFallback();
+    }
+    return u;
+  }
+}
+
+export function deleteUser(userId) {
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  } else {
+    fallbackStore.users = fallbackStore.users.filter((u) => u.id !== userId);
+    persistFallback();
+  }
+  return true;
+}
+
+// ATTENDANCE
+export function saveAttendance(attData) {
+  const id = attData.id || `att-${Date.now()}`;
+  const now = new Date().toISOString();
+  const selfieUrl = saveBase64Image(attData.selfieUrl, 'attendance');
+
+  let staffName = attData.staffName;
+  let divisionId = attData.divisionId;
+  if (!staffName || !divisionId) {
+    const user = getUserById(attData.staffId);
+    if (user) {
+      staffName = staffName || user.name;
+      divisionId = divisionId || user.divisionId;
+    }
+  }
+
+  const lat = attData.locationCoords?.latitude ?? attData.latitude ?? null;
+  const lon = attData.locationCoords?.longitude ?? attData.longitude ?? null;
+  const acc = attData.locationCoords?.accuracy ?? attData.accuracy ?? null;
+  const locName = attData.locationCoords?.locationName ?? attData.locationName ?? 'Lokasi Terdaftar';
+  const isGeoValid = (attData.locationCoords?.withinRadius ?? attData.isGeofenceValid ?? true) ? 1 : 0;
+  const dist = attData.locationCoords?.distanceMeters ?? attData.distanceMeters ?? 0;
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `INSERT INTO attendance (
+        id, staff_id, staff_name, division_id, date, clock_in_time, clock_out_time, status,
+        selfie_url, latitude, longitude, accuracy, location_name, is_geofence_valid, distance_meters, device_fingerprint, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      attData.staffId || null,
+      staffName || 'Tenaga Outsourcing',
+      divisionId || 'div-umpeg',
+      attData.date || new Date().toISOString().slice(0, 10),
+      attData.clockInTime || null,
+      attData.clockOutTime || null,
+      attData.status || 'Hadir',
+      selfieUrl || null,
+      lat,
+      lon,
+      acc,
+      locName,
+      isGeoValid,
+      dist,
+      attData.deviceFingerprint || '',
+      now
+    );
+  } else {
+    fallbackStore.attendance.push({
+      ...attData,
+      id,
+      selfieUrl,
+      createdAt: now
+    });
+    persistFallback();
+  }
+
+  return { ...attData, id, selfieUrl, staffName, divisionId };
+}
+
+export function listAttendance(filters = {}) {
+  const { staffId, divisionId, date } = filters;
+  if (isNodeSqlite && dbEngine) {
+    let query = 'SELECT * FROM attendance WHERE 1=1';
+    const params = [];
+    if (staffId) {
+      query += ' AND staff_id = ?';
+      params.push(staffId);
+    }
+    if (divisionId && divisionId !== 'div-all') {
+      query += ' AND division_id = ?';
+      params.push(divisionId);
+    }
+    if (date) {
+      query += ' AND date = ?';
+      params.push(date);
+    }
+    query += ' ORDER BY created_at DESC';
+
+    const rows = dbEngine.prepare(query).all(...params);
+    return rows.map((r) => ({
+      id: r.id,
+      staffId: r.staff_id,
+      staffName: r.staff_name,
+      divisionId: r.division_id,
+      date: r.date,
+      clockInTime: r.clock_in_time,
+      clockOutTime: r.clock_out_time,
+      status: r.status,
+      selfieUrl: r.selfie_url,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      accuracy: r.accuracy,
+      locationName: r.location_name,
+      isGeofenceValid: Boolean(r.is_geofence_valid),
+      distanceMeters: r.distance_meters,
+      deviceFingerprint: r.device_fingerprint,
+      createdAt: r.created_at
+    }));
+  } else {
+    return fallbackStore.attendance.filter((r) => {
+      if (staffId && r.staffId !== staffId) return false;
+      if (divisionId && divisionId !== 'div-all' && r.divisionId !== divisionId) return false;
+      if (date && r.date !== date) return false;
+      return true;
+    });
+  }
+}
+
+// DAILY REPORTS
+export function saveDailyReport(repData) {
+  const id = repData.id || `rep-${Date.now()}`;
+  const now = new Date().toISOString();
+  const rawPhoto = repData.photoUrl || repData.documentationPhotoUrl;
+  const photoUrl = saveBase64Image(rawPhoto, 'reports');
+
+  let staffName = repData.staffName;
+  let divisionId = repData.divisionId;
+  if (!staffName || !divisionId) {
+    const user = getUserById(repData.staffId);
+    if (user) {
+      staffName = staffName || user.name;
+      divisionId = divisionId || user.divisionId;
+    }
+  }
+
+  const title = repData.title || 'Laporan Pekerjaan';
+  const category = repData.category || 'Pemeliharaan';
+  const date = repData.date || new Date().toISOString().slice(0, 10);
+  const startTime = repData.startTime || '08:00';
+  const endTime = repData.endTime || '16:00';
+  const summary = repData.description || repData.summary || '';
+  const status = repData.status || 'Selesai';
+  const imageHash = repData.imageHash || '';
+  const aiDuplicateJson = JSON.stringify(repData.aiDuplicateFlag || {});
+  const locCoordsJson = JSON.stringify(repData.locationCoords || {});
+  const supervisorApproval = repData.supervisorApproval || 'Pending';
+  const supervisorNotes = repData.supervisorNotes || null;
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `INSERT INTO daily_reports (
+        id, staff_id, staff_name, division_id, date, title, category, start_time, end_time,
+        summary, status, documentation_photo_url, image_hash, ai_duplicate_flag_json, location_coords_json,
+        supervisor_approval, supervisor_notes, approved_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      repData.staffId || null,
+      staffName || 'Tenaga Outsourcing',
+      divisionId || 'div-umpeg',
+      date,
+      title,
+      category,
+      startTime,
+      endTime,
+      summary,
+      status,
+      photoUrl,
+      imageHash,
+      aiDuplicateJson,
+      locCoordsJson,
+      supervisorApproval,
+      supervisorNotes,
+      null,
+      now
+    );
+  } else {
+    fallbackStore.daily_reports.push({
+      ...repData,
+      id,
+      documentationPhotoUrl: photoUrl,
+      createdAt: now
+    });
+    persistFallback();
+  }
+
+  return { ...repData, id, documentationPhotoUrl: photoUrl, staffName, divisionId };
+}
+
+export function listDailyReports(filters = {}) {
+  const { staffId, divisionId } = filters;
+  if (isNodeSqlite && dbEngine) {
+    let query = 'SELECT * FROM daily_reports WHERE 1=1';
+    const params = [];
+    if (staffId) {
+      query += ' AND staff_id = ?';
+      params.push(staffId);
+    }
+    if (divisionId && divisionId !== 'div-all') {
+      query += ' AND division_id = ?';
+      params.push(divisionId);
+    }
+    query += ' ORDER BY created_at DESC';
+
+    const rows = dbEngine.prepare(query).all(...params);
+    return rows.map((r) => ({
+      id: r.id,
+      staffId: r.staff_id,
+      staffName: r.staff_name,
+      divisionId: r.division_id,
+      date: r.date,
+      title: r.title,
+      category: r.category,
+      startTime: r.start_time,
+      endTime: r.end_time,
+      summary: r.summary,
+      status: r.status,
+      documentationPhotoUrl: r.documentation_photo_url,
+      imageHash: r.image_hash,
+      aiDuplicateFlag: r.ai_duplicate_flag_json ? JSON.parse(r.ai_duplicate_flag_json) : null,
+      locationCoords: r.location_coords_json ? JSON.parse(r.location_coords_json) : null,
+      supervisorApproval: r.supervisor_approval,
+      supervisorNotes: r.supervisor_notes,
+      approvedAt: r.approved_at,
+      createdAt: r.created_at
+    }));
+  } else {
+    return fallbackStore.daily_reports.filter((r) => {
+      if (staffId && r.staffId !== staffId) return false;
+      if (divisionId && divisionId !== 'div-all' && r.divisionId !== divisionId) return false;
+      return true;
+    });
+  }
+}
+
+export function approveReport(reportId, approvalStatus, supervisorNotes) {
+  const now = new Date().toISOString();
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      'UPDATE daily_reports SET supervisor_approval = ?, supervisor_notes = ?, approved_at = ? WHERE id = ?'
+    ).run(approvalStatus, supervisorNotes, now, reportId);
+  } else {
+    const report = fallbackStore.daily_reports.find((r) => r.id === reportId);
+    if (report) {
+      report.supervisorApproval = approvalStatus;
+      report.supervisorNotes = supervisorNotes;
+      report.approvedAt = now;
+      persistFallback();
+    }
+  }
+}
+
+// EVALUATIONS
+export function saveEvaluation(evalData) {
+  const id = evalData.id || `eval-${Date.now()}`;
+  const now = new Date().toISOString();
+
+  let staffName = evalData.staffName;
+  let divisionId = evalData.divisionId;
+  if (!staffName || !divisionId) {
+    const user = getUserById(evalData.staffId);
+    if (user) {
+      staffName = staffName || user.name;
+      divisionId = divisionId || user.divisionId;
+    }
+  }
+
+  const supervisorId = evalData.supervisorId || 'usr-spv-umpeg';
+  const weekNumber = Number(evalData.weekNumber) || 1;
+  const monthYear = evalData.monthYear || evalData.month || '2026-10';
+  const averageScore = Number(evalData.averageScore || evalData.overallWeeklyScore) || 4.5;
+  const predicate = evalData.predicate || 'Sangat Baik (A)';
+  const recommendation = evalData.recommendation || 'Direkomendasikan Perpanjang Penuh';
+  const notes = evalData.notes || evalData.supervisorNotes || '';
+  const scoresJson = JSON.stringify(evalData.scores || evalData.pillarScores || {});
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `INSERT INTO evaluations (
+        id, staff_id, staff_name, supervisor_id, division_id, week_number, month_year,
+        scores_json, average_score, predicate, recommendation, notes, evaluated_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      evalData.staffId || null,
+      staffName || 'Tenaga Outsourcing',
+      supervisorId,
+      divisionId || 'div-umpeg',
+      weekNumber,
+      monthYear,
+      scoresJson,
+      averageScore,
+      predicate,
+      recommendation,
+      notes,
+      now,
+      now
+    );
+  } else {
+    fallbackStore.evaluations.push({
+      ...evalData,
+      id,
+      evaluatedAt: now,
+      createdAt: now
+    });
+    persistFallback();
+  }
+
+  return { ...evalData, id };
+}
+
+export function listEvaluations(filters = {}) {
+  const { staffId, divisionId } = filters;
+  if (isNodeSqlite && dbEngine) {
+    let query = 'SELECT * FROM evaluations WHERE 1=1';
+    const params = [];
+    if (staffId) {
+      query += ' AND staff_id = ?';
+      params.push(staffId);
+    }
+    if (divisionId && divisionId !== 'div-all') {
+      query += ' AND division_id = ?';
+      params.push(divisionId);
+    }
+    query += ' ORDER BY created_at DESC';
+
+    const rows = dbEngine.prepare(query).all(...params);
+    return rows.map((r) => ({
+      id: r.id,
+      staffId: r.staff_id,
+      staffName: r.staff_name,
+      supervisorId: r.supervisor_id,
+      divisionId: r.division_id,
+      weekNumber: r.week_number,
+      monthYear: r.month_year,
+      scores: JSON.parse(r.scores_json || '{}'),
+      averageScore: r.average_score,
+      predicate: r.predicate,
+      recommendation: r.recommendation,
+      notes: r.notes,
+      evaluatedAt: r.evaluated_at,
+      createdAt: r.created_at
+    }));
+  } else {
+    return fallbackStore.evaluations.filter((r) => {
+      if (staffId && r.staffId !== staffId) return false;
+      if (divisionId && divisionId !== 'div-all' && r.divisionId !== divisionId) return false;
+      return true;
+    });
+  }
+}
+
+// AI ANALYTICS CONTEXT SUMMARY
+export function getLiveAnalyticsContext() {
+  if (isNodeSqlite && dbEngine) {
+    const totalStaff = dbEngine.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'outsourcing'").get().count;
+    const totalSupervisors = dbEngine.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'supervisor'").get().count;
+    const divisions = dbEngine.prepare('SELECT name, code FROM divisions').all();
+    const attendanceToday = dbEngine.prepare(
+      "SELECT staff_name, status, clock_in_time, is_geofence_valid, distance_meters, location_name FROM attendance ORDER BY created_at DESC LIMIT 30"
+    ).all();
+    const reportsSummary = dbEngine.prepare(
+      "SELECT staff_name, title, category, supervisor_approval, image_hash FROM daily_reports ORDER BY created_at DESC LIMIT 30"
+    ).all();
+    const evalsSummary = dbEngine.prepare(
+      "SELECT staff_name, average_score, predicate, recommendation FROM evaluations ORDER BY created_at DESC LIMIT 30"
+    ).all();
+
+    return {
+      totalStaff,
+      totalSupervisors,
+      divisions,
+      attendanceToday,
+      reportsSummary,
+      evalsSummary
+    };
+  } else {
+    return {
+      totalStaff: fallbackStore.users.filter((u) => u.role === 'outsourcing').length,
+      totalSupervisors: fallbackStore.users.filter((u) => u.role === 'supervisor').length,
+      divisions: fallbackStore.divisions,
+      attendanceToday: fallbackStore.attendance.slice(0, 30),
+      reportsSummary: fallbackStore.daily_reports.slice(0, 30),
+      evalsSummary: fallbackStore.evaluations.slice(0, 30)
+    };
+  }
+}
+
+// Jalankan inisialisasi awal
+seedDatabaseIfEmpty();
