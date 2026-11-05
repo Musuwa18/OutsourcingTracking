@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   BarChart3,
   Download,
@@ -9,7 +9,18 @@ import {
   FileCheck2,
   Calendar,
   Sparkles,
-  HelpCircle,
+  Search,
+  Filter,
+  X,
+  Users,
+  RotateCcw,
+  ArrowUpDown,
+  Building2,
+  CheckCircle2,
+  ChevronDown,
+  Briefcase,
+  Star,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { StaffProfile, MonthlyAggregate, WeeklyEvaluation, AttendanceRecord } from '../types';
 import { RadarChart } from '../components/RadarChart';
@@ -34,17 +45,62 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
 }) => {
   const [selectedStaffId, setSelectedStaffId] = useState(staffList[0]?.id || '');
   const [selectedMonth, setSelectedMonth] = useState('2026-10');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDivision, setSelectedDivision] = useState('ALL');
+  const [sortBy, setSortBy] = useState<'kpi_desc' | 'kpi_asc' | 'name_asc' | 'name_desc'>('kpi_desc');
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
-  const staffMap = new Map(staffList.map((s) => [s.id, s]));
-  const currentStaff = staffMap.get(selectedStaffId) || staffList[0];
-  const currentAggregate = monthlyAggregates.find((m) => m.staffId === selectedStaffId) || monthlyAggregates[0];
+  // Daftar unik divisi untuk filter
+  const divisions = useMemo(() => {
+    return ['ALL', ...Array.from(new Set(staffList.map((s) => s.division).filter(Boolean)))];
+  }, [staffList]);
 
-  // Evaluations for this staff
+  // Map agregat KPI per staffId untuk lookup cepat
+  const aggMap = useMemo(() => {
+    const map = new Map<string, MonthlyAggregate>();
+    monthlyAggregates.forEach((m) => map.set(m.staffId, m));
+    return map;
+  }, [monthlyAggregates]);
+
+  // Filter & Urutkan daftar pegawai (untuk ratusan data)
+  const filteredAndSortedStaff = useMemo(() => {
+    let list = staffList.filter((st) => {
+      const matchDivision = selectedDivision === 'ALL' || st.division === selectedDivision;
+      if (!matchDivision) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      return (
+        st.name.toLowerCase().includes(q) ||
+        (st.nip && st.nip.toLowerCase().includes(q)) ||
+        (st.division && st.division.toLowerCase().includes(q)) ||
+        (st.role && st.role.toLowerCase().includes(q)) ||
+        (st.vendorName && st.vendorName.toLowerCase().includes(q))
+      );
+    });
+
+    // Pengurutan dinamis
+    return list.sort((a, b) => {
+      const scoreA = aggMap.get(a.id)?.averageScore ?? 0;
+      const scoreB = aggMap.get(b.id)?.averageScore ?? 0;
+
+      if (sortBy === 'kpi_desc') return scoreB - scoreA;
+      if (sortBy === 'kpi_asc') return scoreA - scoreB;
+      if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
+      if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
+      return 0;
+    });
+  }, [staffList, selectedDivision, searchQuery, sortBy, aggMap]);
+
+  const staffMap = useMemo(() => new Map(staffList.map((s) => [s.id, s])), [staffList]);
+  const currentStaff = staffMap.get(selectedStaffId) || filteredAndSortedStaff[0] || staffList[0];
+  const currentAggregate = aggMap.get(currentStaff?.id) || monthlyAggregates[0];
+
+  // Evaluasi mingguan untuk staf terpilih
   const staffEvals = weeklyEvaluations.filter(
-    (e) => e.staffId === selectedStaffId && e.month === selectedMonth
+    (e) => e.staffId === currentStaff?.id && e.month === selectedMonth
   );
 
-  // Latest evaluation ratings for Radar Chart
+  // Rating 11 parameter untuk Spider Radar Chart
   const latestEval = staffEvals[staffEvals.length - 1];
   const radarRatings = latestEval?.ratings || {
     qualityOfWork: 4.5,
@@ -60,7 +116,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
     problemSolving: 4.5,
   };
 
-  // Predicate color scheme
+  // Predicate color scheme badge
   const getPredicateStyle = (predicate: string) => {
     switch (predicate) {
       case 'Sangat Baik / Unggul':
@@ -78,9 +134,99 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
     exportMonthlyKpiToCSV(monthlyAggregates, staffMap);
   };
 
+  // Komponen Reusable Daftar Vertikal Pegawai
+  const renderStaffVerticalList = (onSelectCallback?: () => void) => (
+    <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
+      {filteredAndSortedStaff.length > 0 ? (
+        filteredAndSortedStaff.map((st) => {
+          const isSelected = st.id === currentStaff?.id;
+          const agg = aggMap.get(st.id);
+          const score = agg?.averageScore !== undefined ? agg.averageScore.toFixed(2) : '-';
+
+          return (
+            <button
+              key={st.id}
+              type="button"
+              onClick={() => {
+                setSelectedStaffId(st.id);
+                if (onSelectCallback) onSelectCallback();
+              }}
+              className={`w-full p-2.5 rounded-xl text-left transition-all cursor-pointer border flex items-center justify-between gap-3 group ${
+                isSelected
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-md shadow-indigo-500/10 ring-2 ring-indigo-500/30'
+                  : 'bg-white/80 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-700/60 hover:border-indigo-300 dark:hover:border-indigo-600'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-2xs"
+                  style={{ backgroundColor: st.avatarColor || '#6366f1' }}
+                >
+                  {st.initials}
+                </div>
+                <div className="min-w-0">
+                  <div className="font-bold text-xs truncate leading-tight">
+                    {st.name}
+                  </div>
+                  <div
+                    className={`text-[10px] truncate mt-0.5 ${
+                      isSelected
+                        ? 'text-slate-300 dark:text-slate-600'
+                        : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {st.division || 'Disdik HST'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Nilai KPI & Predikat Ringkas */}
+              <div className="flex flex-col items-end shrink-0">
+                <div
+                  className={`flex items-center gap-1 font-mono text-xs font-extrabold tabular-nums ${
+                    isSelected
+                      ? 'text-amber-300 dark:text-amber-500'
+                      : 'text-indigo-600 dark:text-indigo-400'
+                  }`}
+                >
+                  <Star className="w-3 h-3 fill-current" />
+                  <span>{score}</span>
+                </div>
+                {agg?.predicate && (
+                  <span
+                    className={`text-[9px] font-semibold px-1.5 py-0.2 rounded mt-0.5 truncate max-w-[85px] ${
+                      isSelected
+                        ? 'bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {agg.predicate.split(' / ')[0]}
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })
+      ) : (
+        <div className="p-6 rounded-xl text-center bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+          <p>Tidak ada pegawai yang cocok dengan kata kunci atau filter.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery('');
+              setSelectedDivision('ALL');
+            }}
+            className="mt-2 text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
+          >
+            Reset Pencarian
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
-      
+    <div className="space-y-6 pb-20">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -124,194 +270,406 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
         </div>
       </div>
 
-      {/* Staff Selector Pills / Strip */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {staffList.map((st) => {
-          const isSelected = st.id === selectedStaffId;
-          const agg = monthlyAggregates.find((m) => m.staffId === st.id);
-
-          return (
-            <button
-              key={st.id}
-              type="button"
-              onClick={() => setSelectedStaffId(st.id)}
-              className={`px-3.5 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
-                isSelected
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-xs font-bold'
-                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-800 hover:border-indigo-400 font-semibold'
-              }`}
+      {/* MOBILE ADAPTIVE BAR: Muncul di Layar Ponsel & Tablet (< lg) */}
+      <div className="block lg:hidden">
+        <div className="p-3.5 rounded-2xl glass-card flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-xs shrink-0"
+              style={{ backgroundColor: currentStaff?.avatarColor || '#6366f1' }}
             >
-              <div
-                className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold text-white shadow-2xs"
-                style={{ backgroundColor: st.avatarColor }}
-              >
-                {st.initials}
+              {currentStaff?.initials}
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] text-slate-400 font-semibold uppercase">Pegawai Terpilih:</div>
+              <div className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                {currentStaff?.name}
               </div>
-              <span>{st.name}</span>
-              <span className="font-mono text-[11px] opacity-90 tabular-nums font-bold">
-                ({agg?.averageScore.toFixed(2)}★)
-              </span>
-            </button>
-          );
-        })}
+              <div className="text-[10px] text-slate-500 truncate">
+                {currentStaff?.division} · {currentAggregate?.averageScore.toFixed(2)}★
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileDrawerOpen(true)}
+            className="px-3 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Pilih Pegawai ({staffList.length})</span>
+            <ChevronDown className="w-3.5 h-3.5 ml-0.5" />
+          </button>
+        </div>
       </div>
 
-      {/* Grid: Radar Chart & Monthly Scoreboard */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Left Column: Spider Radar Chart */}
-        <div className="lg:col-span-7 p-6 glass-card space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Grafik Radar Kompetensi (Spider Chart)</span>
-                <span className="text-xs font-mono font-normal text-slate-400">11 Parameter</span>
+      {/* MAIN SPLIT-VIEW (MASTER - DETAIL) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* ========================================================================= */}
+        {/* PANEL KIRI (MASTER LIST): TAMPIL VERTICAL DI DESKTOP                       */}
+        {/* ========================================================================= */}
+        <div className="hidden lg:flex lg:col-span-4 flex-col glass-card p-4 rounded-2xl space-y-3 sticky top-4 max-h-[calc(100vh-6rem)]">
+          {/* Header Panel Kiri */}
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                Daftar Pegawai
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Pemetaan visual kelebihan & area perbaikan untuk {currentStaff?.name}
-              </p>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full glass-pill text-slate-600 dark:text-slate-300">
-              Oktober 2026
+            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+              {filteredAndSortedStaff.length} / {staffList.length}
             </span>
           </div>
 
-          {/* SVG Radar Chart */}
-          <div className="py-2 flex items-center justify-center">
-            <RadarChart ratings={radarRatings} size={360} />
+          {/* Pencarian Cepat Nama / NIP */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Cari nama, NIP, atau divisi..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
 
-          {/* Strengths & Growth Areas Guidance */}
-          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
-            <div className="p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40">
-              <span className="font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> Keunggulan Utama:
-              </span>
-              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1">
-                Ketelitian penanganan insiden, kedisiplinan jam kerja, dan respon pelayanan pengguna sangat tinggi.
-              </p>
+          {/* Kontrol Filter & Urutan */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {/* Filter Bidang */}
+            <div>
+              <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Bidang / Unit:</label>
+              <select
+                value={selectedDivision}
+                onChange={(e) => setSelectedDivision(e.target.value)}
+                className="w-full px-2 py-1.5 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="ALL">Semua Bidang</option>
+                {divisions
+                  .filter((d) => d !== 'ALL')
+                  .map((div) => (
+                    <option key={div} value={div}>
+                      {div}
+                    </option>
+                  ))}
+              </select>
             </div>
 
-            <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/40">
-              <span className="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1">
-                <TrendingUp className="w-3.5 h-3.5" /> Fokus Peningkatan:
-              </span>
-              <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
-                Peningkatan kecepatan pelaporan administrasi dan komunikasi proaktif lintas departemen.
-              </p>
+            {/* Urutkan */}
+            <div>
+              <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Urutkan Berdasarkan:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="w-full px-2 py-1.5 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="kpi_desc">KPI Tertinggi (★)</option>
+                <option value="kpi_asc">KPI Terendah (★)</option>
+                <option value="name_asc">Nama A → Z</option>
+                <option value="name_desc">Nama Z → A</option>
+              </select>
             </div>
           </div>
+
+          {/* Reset Filter Jika Aktif */}
+          {(searchQuery || selectedDivision !== 'ALL' || sortBy !== 'kpi_desc') && (
+            <div className="flex items-center justify-between text-[10px] text-slate-500 px-0.5">
+              <span>Filter diterapkan</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedDivision('ALL');
+                  setSortBy('kpi_desc');
+                }}
+                className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline flex items-center gap-0.5 cursor-pointer"
+              >
+                <RotateCcw className="w-2.5 h-2.5" />
+                <span>Reset</span>
+              </button>
+            </div>
+          )}
+
+          {/* Daftar Vertikal Scrollable */}
+          {renderStaffVerticalList()}
         </div>
 
-        {/* Right Column: Aggregation Summary & Contract Decision */}
-        <div className="lg:col-span-5 space-y-4">
-          
-          {/* Final Score Card */}
-          <div className="p-5 glass-card space-y-4">
-            <div className="flex items-start justify-between">
+        {/* ========================================================================= */}
+        {/* PANEL KANAN (DETAIL): GRAFIK SPIDER CHART & SKOR KINERJA                   */}
+        {/* ========================================================================= */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Header Banner Staf Terpilih */}
+          <div className="p-5 rounded-2xl glass-card border border-white/60 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white text-base shrink-0 shadow-md"
+                style={{ backgroundColor: currentStaff?.avatarColor || '#6366f1' }}
+              >
+                {currentStaff?.initials}
+              </div>
               <div>
-                <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-                  Nilai Akhir Bulanan
-                </span>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-4xl font-extrabold font-mono text-slate-900 dark:text-white tabular-nums">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
+                    {currentStaff?.name}
+                  </h2>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
+                    {currentStaff?.nip}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-1">
+                  <span className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
+                    <Building2 className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>{currentStaff?.division}</span>
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{currentStaff?.vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)'}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Skor Cepat */}
+            <div className="flex items-center gap-3 sm:border-l sm:border-slate-200 dark:sm:border-slate-700 sm:pl-4">
+              <div>
+                <div className="text-[10px] font-bold uppercase text-slate-400">Capaian Bulanan</div>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-2xl font-extrabold font-mono text-slate-900 dark:text-white tabular-nums">
                     {currentAggregate?.averageScore.toFixed(2)}
                   </span>
                   <span className="text-xs text-slate-400">/ 5.00★</span>
                 </div>
               </div>
 
-              {/* Predicate Badge */}
               <div
-                className={`px-3 py-1.5 rounded-xl border text-xs font-bold ${getPredicateStyle(
+                className={`px-3 py-1 rounded-xl border text-xs font-bold ${getPredicateStyle(
                   currentAggregate?.predicate || ''
                 )}`}
               >
                 {currentAggregate?.predicate}
               </div>
             </div>
-
-            {/* Weekly Progression W1 -> W4 */}
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Perkembangan Nilai Mingguan:
-              </div>
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                {[1, 2, 3, 4].map((w, idx) => {
-                  const score = currentAggregate?.weekScores[idx];
-                  return (
-                    <div
-                      key={w}
-                      className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800"
-                    >
-                      <div className="text-[10px] text-slate-400">Minggu {w}</div>
-                      <div className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5 tabular-nums">
-                        {score !== null && score !== undefined ? `${score.toFixed(2)}★` : '-'}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 4 Pillars Breakdown */}
-            <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
-              <div className="font-bold text-slate-900 dark:text-slate-100">
-                Rata-rata 4 Pilar Kompetensi:
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-slate-700 dark:text-slate-300 font-medium">Pilar 1: Kualitas & Produktivitas</span>
-                  <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
-                    {currentAggregate?.pillarScores.quality.toFixed(2)}★
-                  </strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-700 dark:text-slate-300 font-medium">Pilar 2: Sikap & Profesionalisme</span>
-                  <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
-                    {currentAggregate?.pillarScores.professionalism.toFixed(2)}★
-                  </strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-700 dark:text-slate-300 font-medium">Pilar 3: Kompetensi Interpersonal</span>
-                  <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
-                    {currentAggregate?.pillarScores.interpersonal.toFixed(2)}★
-                  </strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-700 dark:text-slate-300 font-medium">Pilar 4: Adaptabilitas & Masalah</span>
-                  <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
-                    {currentAggregate?.pillarScores.adaptability.toFixed(2)}★
-                  </strong>
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* Contract Renewal Advisory Card */}
-          <div className="p-5 glass-card space-y-3">
-            <div className="flex items-center gap-2">
-              <Award className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                Rekomendasi Perpanjangan Kontrak
-              </h3>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 space-y-1">
-              <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200">
-                {currentAggregate?.contractRecommendation}
+          {/* Grid: Radar Spider Chart & Detail Pilar */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Column: Spider Radar Chart */}
+            <div className="lg:col-span-7 p-6 glass-card space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2 uppercase tracking-wider">
+                    <span>Grafik Radar Kompetensi (Spider Chart)</span>
+                    <span className="text-[10px] font-mono font-normal text-slate-400">(11 Parameter)</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Visualisasi kekuatan & area pengembangan kerja
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full glass-pill text-slate-600 dark:text-slate-300">
+                  Oktober 2026
+                </span>
               </div>
-              <p className="text-[11px] text-indigo-800 dark:text-indigo-300 leading-relaxed">
-                Berdasarkan capaian KPI bulanan ({currentAggregate?.averageScore.toFixed(2)}★) dan kepatuhan presensi geofence, tenaga alih daya ini dinilai layak melanjutkan masa kontrak pada periode berikutnya.
-              </p>
+
+              {/* SVG Radar Chart */}
+              <div className="py-2 flex items-center justify-center">
+                <RadarChart ratings={radarRatings} size={340} />
+              </div>
+
+              {/* Strengths & Growth Areas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+                <div className="p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40">
+                  <span className="font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" /> Keunggulan Utama:
+                  </span>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1 leading-relaxed">
+                    Ketelitian penanganan tugas, kedisiplinan jam kerja, dan respon pelayanan kedinasan sangat tinggi.
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/40">
+                  <span className="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                    <TrendingUp className="w-3.5 h-3.5" /> Fokus Peningkatan:
+                  </span>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1 leading-relaxed">
+                    Peningkatan kecepatan pelaporan administrasi harian dan komunikasi proaktif lintas bidang.
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="text-[11px] text-slate-400 leading-relaxed">
-              *Evaluasi ini menjadi dokumen bukti akuntabilitas resmi dalam rapat koordinasi vendor tahunan PT Mitra Daya Pratama.
+            {/* Right Column: Pilar & Evaluasi Keputusan */}
+            <div className="lg:col-span-5 space-y-4">
+              {/* Perkembangan Mingguan & Rata-rata 4 Pilar */}
+              <div className="p-5 glass-card space-y-4">
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Perkembangan Nilai Mingguan:
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                    {[1, 2, 3, 4].map((w, idx) => {
+                      const score = currentAggregate?.weekScores[idx];
+                      return (
+                        <div
+                          key={w}
+                          className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800"
+                        >
+                          <div className="text-[10px] text-slate-400">Minggu {w}</div>
+                          <div className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5 tabular-nums">
+                            {score !== null && score !== undefined ? `${score.toFixed(2)}★` : '-'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4 Pillars Breakdown */}
+                <div className="space-y-2 pt-3 border-t border-slate-200/80 dark:border-slate-800 text-xs">
+                  <div className="font-bold text-slate-900 dark:text-slate-100">
+                    Rata-rata 4 Pilar Kompetensi:
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Pilar 1: Kualitas & Hasil</span>
+                      <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
+                        {currentAggregate?.pillarScores.quality.toFixed(2)}★
+                      </strong>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Pilar 2: Sikap & Profesionalisme</span>
+                      <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
+                        {currentAggregate?.pillarScores.professionalism.toFixed(2)}★
+                      </strong>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Pilar 3: Hubungan Interpersonal</span>
+                      <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
+                        {currentAggregate?.pillarScores.interpersonal.toFixed(2)}★
+                      </strong>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Pilar 4: Adaptabilitas Masalah</span>
+                      <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
+                        {currentAggregate?.pillarScores.adaptability.toFixed(2)}★
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rekomendasi Perpanjangan Kontrak */}
+              <div className="p-5 glass-card space-y-3">
+                <div className="flex items-center gap-2">
+                  <Award className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Rekomendasi Kontrak
+                  </h3>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 space-y-1">
+                  <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200">
+                    {currentAggregate?.contractRecommendation}
+                  </div>
+                  <p className="text-[11px] text-indigo-800 dark:text-indigo-300 leading-relaxed">
+                    Berdasarkan capaian KPI bulanan ({currentAggregate?.averageScore.toFixed(2)}★) dan kepatuhan presensi, personel alih daya ini dinilai layak melanjutkan masa penugasan.
+                  </p>
+                </div>
+
+                <div className="text-[10px] text-slate-400 leading-relaxed">
+                  *Dokumen akuntabilitas resmi dalam rapat monitoring evaluasi tahunan dengan pihak penyedia jasa alih daya.
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* MOBILE BOTTOM SHEET / DRAWER PEMILIH PEGAWAI                              */}
+      {/* ========================================================================= */}
+      {mobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200 lg:hidden">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl border-t border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Sheet Handle & Header */}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 space-y-3">
+              <div className="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Pilih Pegawai Outsourcing
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Menampilkan {filteredAndSortedStaff.length} dari {staffList.length} pegawai
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Pencarian di Mobile Sheet */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Cari nama, NIP, atau divisi..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              {/* Filter Bidang & Urutkan di Mobile Sheet */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <select
+                  value={selectedDivision}
+                  onChange={(e) => setSelectedDivision(e.target.value)}
+                  className="px-2 py-1.5 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                >
+                  <option value="ALL">Semua Bidang</option>
+                  {divisions
+                    .filter((d) => d !== 'ALL')
+                    .map((div) => (
+                      <option key={div} value={div}>
+                        {div}
+                      </option>
+                    ))}
+                </select>
+
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="px-2 py-1.5 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                >
+                  <option value="kpi_desc">KPI Tertinggi</option>
+                  <option value="kpi_asc">KPI Terendah</option>
+                  <option value="name_asc">Nama A-Z</option>
+                  <option value="name_desc">Nama Z-A</option>
+                </select>
+              </div>
+            </div>
+
+            {/* List Item Vertikal di Mobile Sheet */}
+            <div className="p-4 overflow-y-auto flex-1">
+              {renderStaffVerticalList(() => setMobileDrawerOpen(false))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

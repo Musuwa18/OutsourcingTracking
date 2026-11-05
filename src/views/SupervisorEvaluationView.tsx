@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Star,
   CheckCircle2,
@@ -11,6 +11,12 @@ import {
   Send,
   User,
   ExternalLink,
+  Search,
+  ChevronDown,
+  Check,
+  X,
+  Filter,
+  Building2,
 } from 'lucide-react';
 import {
   StaffProfile,
@@ -67,6 +73,47 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
   const [selectedStaffId, setSelectedStaffId] = useState(staffList[0]?.id || '');
   const [selectedWeek, setSelectedWeek] = useState<number>(2);
   const [evaluationDate, setEvaluationDate] = useState('2026-10-09'); // Friday
+
+  // Searchable Staff Picker State (Scalable for hundreds of staff)
+  const [isStaffPickerOpen, setIsStaffPickerOpen] = useState(false);
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [selectedStaffDivisionFilter, setSelectedStaffDivisionFilter] = useState('ALL');
+  const staffPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (staffPickerRef.current && !staffPickerRef.current.contains(event.target as Node)) {
+        setIsStaffPickerOpen(false);
+      }
+    };
+    if (isStaffPickerOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isStaffPickerOpen]);
+
+  const staffDivisions = useMemo(() => {
+    return ['ALL', ...Array.from(new Set(staffList.map((s) => s.division).filter(Boolean)))];
+  }, [staffList]);
+
+  const filteredStaffForPicker = useMemo(() => {
+    return staffList.filter((st) => {
+      const matchDivision =
+        selectedStaffDivisionFilter === 'ALL' || st.division === selectedStaffDivisionFilter;
+      if (!matchDivision) return false;
+      if (!staffSearchQuery.trim()) return true;
+      const q = staffSearchQuery.toLowerCase();
+      return (
+        st.name.toLowerCase().includes(q) ||
+        (st.nip && st.nip.toLowerCase().includes(q)) ||
+        (st.division && st.division.toLowerCase().includes(q)) ||
+        (st.role && st.role.toLowerCase().includes(q)) ||
+        (st.vendorName && st.vendorName.toLowerCase().includes(q))
+      );
+    });
+  }, [staffList, selectedStaffDivisionFilter, staffSearchQuery]);
 
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
 
@@ -214,21 +261,139 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
               {/* Staff & Week Selection */}
               <div className="p-5 glass-card space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                  <div>
+                  {/* Searchable Staff Combobox (Scalable for 100+ Staff) */}
+                  <div className="relative" ref={staffPickerRef}>
                     <label className="block font-bold text-slate-900 dark:text-slate-200 mb-1">
-                      Pilih Staf Outsourcing
+                      Pilih Staf Outsourcing ({staffList.length} Staf)
                     </label>
-                    <select
-                      value={selectedStaffId}
-                      onChange={(e) => setSelectedStaffId(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-medium"
+                    <button
+                      type="button"
+                      onClick={() => setIsStaffPickerOpen((prev) => !prev)}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-left transition"
                     >
-                      {staffList.map((st) => (
-                        <option key={st.id} value={st.id}>
-                          {st.name} ({st.nip}) - {st.division}
-                        </option>
-                      ))}
-                    </select>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-lg bg-indigo-600/15 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center text-[10px] shrink-0">
+                          {selectedStaff ? selectedStaff.name.slice(0, 2).toUpperCase() : '--'}
+                        </div>
+                        <div className="min-w-0 truncate">
+                          <p className="font-semibold text-xs text-slate-900 dark:text-white truncate">
+                            {selectedStaff?.name || 'Pilih Pegawai...'}
+                          </p>
+                          <p className="text-[10px] text-slate-500 truncate">
+                            {selectedStaff?.nip || '-'} • {selectedStaff?.division || '-'}
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${
+                          isStaffPickerOpen ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+
+                    {/* Dropdown Combobox Popover */}
+                    {isStaffPickerOpen && (
+                      <div className="absolute z-40 left-0 right-0 sm:w-88 mt-1.5 p-2 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in duration-150">
+                        {/* Search Input */}
+                        <div className="relative mb-2">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            placeholder="Cari nama, NIP, divisi..."
+                            value={staffSearchQuery}
+                            onChange={(e) => setStaffSearchQuery(e.target.value)}
+                            className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            autoFocus
+                          />
+                          {staffSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setStaffSearchQuery('')}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Division Filter */}
+                        {staffDivisions.length > 2 && (
+                          <div className="mb-2">
+                            <select
+                              value={selectedStaffDivisionFilter}
+                              onChange={(e) => setSelectedStaffDivisionFilter(e.target.value)}
+                              className="w-full px-2 py-1 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium cursor-pointer"
+                            >
+                              <option value="ALL">Semua Bidang ({staffList.length})</option>
+                              {staffDivisions
+                                .filter((d) => d !== 'ALL')
+                                .map((div) => (
+                                  <option key={div} value={div}>
+                                    {div}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Staff Options List */}
+                        <div className="max-h-60 overflow-y-auto space-y-1 pr-1">
+                          {filteredStaffForPicker.length === 0 ? (
+                            <p className="text-[11px] text-center text-slate-400 py-3">
+                              Tidak ada pegawai ditemukan
+                            </p>
+                          ) : (
+                            filteredStaffForPicker.map((st) => {
+                              const isSelected = st.id === selectedStaffId;
+                              return (
+                                <button
+                                  key={st.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedStaffId(st.id);
+                                    setIsStaffPickerOpen(false);
+                                  }}
+                                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left cursor-pointer transition ${
+                                    isSelected
+                                      ? 'bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800'
+                                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div
+                                      className={`w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                                        isSelected
+                                          ? 'bg-indigo-600 text-white'
+                                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                      }`}
+                                    >
+                                      {st.name.slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p
+                                        className={`text-xs font-semibold truncate ${
+                                          isSelected
+                                            ? 'text-indigo-700 dark:text-indigo-300'
+                                            : 'text-slate-800 dark:text-slate-200'
+                                        }`}
+                                      >
+                                        {st.name}
+                                      </p>
+                                      <p className="text-[10px] text-slate-500 truncate">
+                                        {st.nip} • {st.division}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {isSelected && (
+                                    <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 ml-1" />
+                                  )}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>
