@@ -1124,7 +1124,7 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-full flex flex-col relative transition-colors ${
+      className={`min-h-full w-full max-w-full overflow-x-hidden flex flex-col relative transition-colors ${
         highContrast ? 'contrast-125 saturate-110 font-medium' : ''
       }`}
     >
@@ -1152,7 +1152,7 @@ export default function App() {
       />
 
       {/* Main Layout Area */}
-      <div className="flex-1 flex max-w-7xl w-full mx-auto relative z-10">
+      <div className="flex-1 flex max-w-7xl w-full max-w-full mx-auto relative z-10 overflow-x-hidden">
         
         {/* Desktop Sidebar (Rendered for Supervisor and Admin) */}
         {currentRole !== 'outsourcing' && (
@@ -1167,7 +1167,7 @@ export default function App() {
         )}
 
         {/* Content Viewport */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 pb-28 md:pb-8">
+        <main className="flex-1 p-3 sm:p-6 lg:p-8 min-w-0 w-full max-w-full overflow-x-hidden pb-28 md:pb-8">
           {/* ================= OUTSOURCING STAFF VIEW (MOBILE ERGONOMIC) ================= */}
           {currentRole === 'outsourcing' && (
             <div>

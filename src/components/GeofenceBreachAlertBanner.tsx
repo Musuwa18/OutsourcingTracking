@@ -64,24 +64,26 @@ export const GeofenceBreachAlertBanner: React.FC<GeofenceBreachAlertBannerProps>
           return (
             <div
               key={rec.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-white/75 dark:bg-slate-900/70 backdrop-blur-md border border-white/50 dark:border-white/10 shadow-xs text-xs"
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-white/75 dark:bg-slate-900/70 backdrop-blur-md border border-white/50 dark:border-white/10 shadow-xs text-xs min-w-0"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-start sm:items-center gap-3 min-w-0">
                 <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-white text-[10px] shrink-0"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-white text-[10px] shrink-0 mt-0.5 sm:mt-0"
                   style={{ backgroundColor: staff?.avatarColor || '#e11d48' }}
                 >
                   {staff?.initials}
                 </div>
-                <div>
-                  <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <div className="min-w-0">
+                  <div className="font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-1.5">
                     <span>{staff?.name}</span>
                     <span className="text-[10px] font-mono text-slate-400">({staff?.nip})</span>
                     <span className="text-[10px] text-slate-500 font-normal">· {staff?.division}</span>
                   </div>
-                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                    <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
-                    <span>Titik Tugas: <strong>{staff?.assignedLocation.name}</strong></span>
+                  <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                    <span className="flex items-center gap-1 shrink-0">
+                      <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                      <span>Titik Tugas: <strong>{staff?.assignedLocation.name}</strong></span>
+                    </span>
                     <span className="text-rose-600 dark:text-rose-400 font-mono font-semibold">
                       (Jarak: {formatDistance(actualDistance)}, melebihi radius +{delta > 0 ? `${delta}m` : '0m'})
                     </span>
