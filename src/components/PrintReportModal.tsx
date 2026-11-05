@@ -459,17 +459,35 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
               </div>
               <div>
                 <p className="font-extrabold underline text-slate-950">
-                  {selectedStaff?.division.includes('IT')
-                    ? 'Hendra Wijaya, S.T.'
-                    : selectedStaff?.division.includes('Security')
-                    ? 'Agus Suryanto, S.Sos.'
-                    : selectedStaff?.division.includes('Kebersihan')
-                    ? 'Hj. Ratna Sari, S.E.'
-                    : selectedStaff?.division.includes('Transport')
-                    ? 'Bambang Hermawan, S.AP.'
-                    : 'Dian Paramita, S.Kom.'}
+                  {selectedStaff?.division?.includes('SD')
+                    ? 'Badaruddin, M.Pd'
+                    : selectedStaff?.division?.includes('SMP')
+                    ? 'Alamsyah Mappaompo, S.Pd. MM'
+                    : selectedStaff?.division?.includes('PAUD')
+                    ? 'Andry Rachmat Hidayat, S.Kom'
+                    : selectedStaff?.division?.includes('Sarpras')
+                    ? 'Bayhaki Novie, S.Pd'
+                    : selectedStaff?.division?.includes('Keuangan')
+                    ? 'Hj. Rabiatul Adawiyah, SE'
+                    : selectedStaff?.division?.includes('Renlap') || selectedStaff?.division?.includes('Perencanaan')
+                    ? 'Muhammad Sugeng Wahyudi, A.Md'
+                    : 'Ahmad Humaidi, S.Pd.'}
                 </p>
-                <p className="text-[10px] text-slate-500 font-mono">NIP: 19820514 200801 1 003</p>
+                <p className="text-[10px] text-slate-500 font-mono">
+                  {selectedStaff?.division?.includes('SD')
+                    ? 'NIP: 19800202 200604 1 028'
+                    : selectedStaff?.division?.includes('SMP')
+                    ? 'NIP: 19780414 200604 1 023'
+                    : selectedStaff?.division?.includes('PAUD')
+                    ? 'NIP: 19851208 2010011 007'
+                    : selectedStaff?.division?.includes('Sarpras')
+                    ? 'NIP: 19831110 2005011 007'
+                    : selectedStaff?.division?.includes('Keuangan')
+                    ? 'NIP: 19730609 199503 2 002'
+                    : selectedStaff?.division?.includes('Renlap') || selectedStaff?.division?.includes('Perencanaan')
+                    ? 'NIP: 19821218 200604 1 008'
+                    : 'NIP: 19860620 201001 1 008'}
+                </p>
               </div>
             </div>
 

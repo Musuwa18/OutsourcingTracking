@@ -344,7 +344,25 @@ export default function App() {
     const saved = localStorage.getItem('ot_audit_logs');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed: SystemAuditLog[] = JSON.parse(saved);
+        // Pembersihan otomatis jika ada nama dummy lawas
+        return parsed.map((log) => {
+          if (log.actorName && log.actorName.includes('Dian Paramita')) {
+            return {
+              ...log,
+              actorName: 'Admin Sistem Disdik HST',
+              role: 'Super Administrator & Analis Sistem TI',
+            };
+          }
+          if (log.actorName && log.actorName.includes('Hendra Wijaya')) {
+            return {
+              ...log,
+              actorName: 'Muhammad Sugeng Wahyudi, A.Md',
+              role: 'Kasubag Perencanaan dan Pelaporan',
+            };
+          }
+          return log;
+        });
       } catch (e) {}
     }
     return INITIAL_AUDIT_LOGS;
@@ -667,11 +685,29 @@ export default function App() {
   ) => {
     const now = new Date();
     const timeStr = `${now.toISOString().slice(0, 10)} ${now.toLocaleTimeString('id-ID', { hour12: false })}`;
+    const resolvedActorName =
+      actorName ||
+      currentUser?.name ||
+      (currentRole === 'outsourcing'
+        ? `${currentStaff?.name || 'Staf Alih Daya'} (${currentStaff?.nip || '-'})`
+        : currentRole === 'supervisor'
+        ? 'Pejabat Penilai Disdik HST'
+        : 'Admin Sistem Disdik HST');
+
+    const resolvedRole =
+      roleTitle ||
+      currentUser?.roleTitle ||
+      (currentRole === 'outsourcing'
+        ? 'Tenaga Outsourcing'
+        : currentRole === 'supervisor'
+        ? 'Supervisor Operasional'
+        : 'Administrator Utama');
+
     const newLog: SystemAuditLog = {
       id: `log-${Date.now()}`,
       timestamp: timeStr,
-      actorName: actorName || (currentRole === 'outsourcing' ? `${currentStaff?.name || 'Staf Alih Daya'} (${currentStaff?.nip || '-'})` : currentRole === 'supervisor' ? 'Hendra Wijaya, S.T.' : 'Dian Paramita, S.Kom.'),
-      role: roleTitle || (currentRole === 'outsourcing' ? 'Tenaga Outsourcing' : currentRole === 'supervisor' ? 'Supervisor Operasional' : 'Administrator Utama'),
+      actorName: resolvedActorName,
+      role: resolvedRole,
       action,
       detail,
       ipAddress: '103.24.58.12',
@@ -881,8 +917,8 @@ export default function App() {
       'Persetujuan Laporan Kinerja',
       `Supervisor menyetujui laporan: "${report?.title || reportId}".`,
       'Laporan',
-      'Hendra Wijaya, S.T.',
-      'Supervisor Operasional'
+      currentUser?.name || 'Pejabat Penilai Disdik HST',
+      currentUser?.roleTitle || 'Supervisor Kedinasan'
     );
 
     addNotification(
@@ -917,8 +953,8 @@ export default function App() {
       'Permintaan Revisi Laporan',
       `Supervisor meminta revisi pada laporan: "${report?.title || reportId}". Catatan: ${notes}`,
       'Laporan',
-      'Hendra Wijaya, S.T.',
-      'Supervisor Operasional'
+      currentUser?.name || 'Pejabat Penilai Disdik HST',
+      currentUser?.roleTitle || 'Supervisor Kedinasan'
     );
 
     addNotification(
@@ -964,8 +1000,8 @@ export default function App() {
       'Pemberian Evaluasi Mingguan (4 Pilar)',
       `Menyelesaikan evaluasi Minggu ke-${evalData.weekNumber} untuk staf ${evaluatedStaff?.name} (Skor: ${evalData.overallWeeklyScore}★).`,
       'Evaluasi',
-      'Hendra Wijaya, S.T.',
-      'Supervisor Operasional'
+      currentUser?.name || 'Pejabat Penilai Disdik HST',
+      currentUser?.roleTitle || 'Supervisor Kedinasan'
     );
 
     addNotification(

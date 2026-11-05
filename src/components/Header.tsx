@@ -63,18 +63,18 @@ export const Header: React.FC<HeaderProps> = ({
 
   const roleLabels: Record<UserRole, { title: string; subtitle: string; badge: string }> = {
     outsourcing: {
-      title: 'Budi Santoso',
-      subtitle: 'Tenaga Outsourcing (IT Support)',
+      title: currentUser?.name || 'Tenaga Alih Daya',
+      subtitle: currentUser?.roleTitle || 'Tenaga Outsourcing Disdik HST',
       badge: 'Staf Lapangan',
     },
     supervisor: {
-      title: 'Hendra Wijaya, S.T.',
-      subtitle: 'Atasan / Supervisor Operasional',
+      title: currentUser?.name || 'Pejabat Penilai',
+      subtitle: currentUser?.roleTitle || 'Atasan / Supervisor Operasional',
       badge: 'Supervisor',
     },
     admin: {
-      title: 'Dian Paramita, S.Kom.',
-      subtitle: 'Admin Utama & HR Governance',
+      title: currentUser?.name || 'Admin Sistem Disdik HST',
+      subtitle: currentUser?.roleTitle || 'Super Administrator TI',
       badge: 'Administrator',
     },
   };
