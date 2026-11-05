@@ -37,6 +37,10 @@ import {
   saveEvaluation,
   listEvaluations,
   getLiveAnalyticsContext,
+  listLocations,
+  saveLocations,
+  createLocation,
+  deleteLocation,
 } from './server/db.js';
 
 dotenv.config();
@@ -49,7 +53,7 @@ const PORT = process.env.PORT || 3010;
 const DIST_DIR = path.join(__dirname, 'dist');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
-// Master Daftar Lokasi Kerja Resmi di Kabupaten Hulu Sungai Tengah
+// Master Daftar Lokasi Kerja Resmi di Kabupaten Hulu Sungai Tengah (3 Lokasi Resmi)
 export const PRIMARY_OFFICES = [
   {
     id: 'loc-disdik-hst',
@@ -74,22 +78,6 @@ export const PRIMARY_OFFICES = [
     latitude: -2.59320,
     longitude: 115.37110,
     radiusMeters: 85,
-  },
-  {
-    id: 'loc-it-center',
-    name: 'Pusat Pembinaan & IT Support Disdik HST',
-    address: 'Kompleks Perkantoran Pemerintah Kab. HST, Barabai',
-    latitude: -2.58980,
-    longitude: 115.37540,
-    radiusMeters: 80,
-  },
-  {
-    id: 'loc-korwil-barabai',
-    name: 'Unit Pelayanan Korwil Pendidikan Barabai',
-    address: 'Wilayah Layanan Pendidikan Barabai, Kab. Hulu Sungai Tengah',
-    latitude: -2.59450,
-    longitude: 115.37680,
-    radiusMeters: 100,
   },
 ];
 
@@ -506,9 +494,42 @@ app.delete('/api/users/:id', (req, res) => {
   }
 });
 
-// 7. Master Lokasi Kerja / Titik Tugas Resmi
+// 7. Master Lokasi Kerja / Titik Tugas Resmi Terpusat (Sinkron ke Seluruh Perangkat)
 app.get('/api/offices', (req, res) => {
-  res.json({ success: true, offices: PRIMARY_OFFICES });
+  try {
+    const offices = listLocations();
+    res.json({ success: true, offices: offices.length > 0 ? offices : PRIMARY_OFFICES });
+  } catch (err) {
+    res.json({ success: true, offices: PRIMARY_OFFICES });
+  }
+});
+
+app.put('/api/offices', (req, res) => {
+  try {
+    const newOffices = req.body.offices || req.body;
+    const updated = saveLocations(newOffices);
+    res.json({ success: true, offices: updated });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal memperbarui master lokasi di server.' });
+  }
+});
+
+app.post('/api/offices', (req, res) => {
+  try {
+    const created = createLocation(req.body);
+    res.status(201).json({ success: true, office: created });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menambah master lokasi baru.' });
+  }
+});
+
+app.delete('/api/offices/:id', (req, res) => {
+  try {
+    deleteLocation(req.params.id);
+    res.json({ success: true, message: 'Lokasi berhasil dihapus dari server.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menghapus lokasi dari server.' });
+  }
 });
 
 // 8. Users / Staff by Division

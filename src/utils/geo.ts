@@ -25,22 +25,6 @@ export const PRIMARY_OFFICES: OfficeLocation[] = [
     longitude: 115.37110,
     radiusMeters: 85,
   },
-  {
-    id: 'loc-it-center',
-    name: 'Pusat Pembinaan & IT Support Disdik HST',
-    address: 'Kompleks Perkantoran Pemerintah Kab. HST, Barabai',
-    latitude: -2.58980,
-    longitude: 115.37540,
-    radiusMeters: 80,
-  },
-  {
-    id: 'loc-korwil-barabai',
-    name: 'Unit Pelayanan Korwil Pendidikan Barabai',
-    address: 'Wilayah Layanan Pendidikan Barabai, Kab. Hulu Sungai Tengah',
-    latitude: -2.59450,
-    longitude: 115.37680,
-    radiusMeters: 100,
-  },
 ];
 
 /**

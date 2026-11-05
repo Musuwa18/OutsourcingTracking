@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { AuthUser, Division, Vendor, OfficeLocation, OUTSOURCING_JOB_ROLES } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
-import { apiLogin, apiRegister, apiBindDevice } from '../services/api';
+import { apiLogin, apiRegister, apiBindDevice, apiFetchOffices } from '../services/api';
 import { getDeviceFingerprint } from '../utils/fingerprint';
 
 const DEFAULT_DIVISIONS: Division[] = [
@@ -96,8 +96,21 @@ export const AuthView: React.FC<AuthViewProps> = ({
   darkMode = false,
   onToggleDarkMode = () => {},
 }) => {
+  const [serverLocations, setServerLocations] = useState<OfficeLocation[]>([]);
+
+  // Fetch lokasi resmi terbaru dari server SQLite saat form dimuat
+  React.useEffect(() => {
+    apiFetchOffices().then((offs) => {
+      if (offs && offs.length > 0) {
+        setServerLocations(offs);
+      }
+    });
+  }, []);
+
   const activeDivisions = divisions && divisions.length > 0 ? divisions : DEFAULT_DIVISIONS;
-  const activeLocations = locations && locations.length > 0 ? locations : PRIMARY_OFFICES;
+  const activeLocations = (locations && locations.length > 0)
+    ? locations
+    : (serverLocations.length > 0 ? serverLocations : PRIMARY_OFFICES);
   
   const availableVendors = (vendors && vendors.length > 0)
     ? vendors.map((v) => v.name)
@@ -129,6 +142,13 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [osLocationId, setOsLocationId] = useState(activeLocations[0]?.id || 'loc-disdik-hst');
   const [osRoleTitle, setOsRoleTitle] = useState<string>(OUTSOURCING_JOB_ROLES[0]);
   const [osVendor, setOsVendor] = useState<string>(availableVendors[0] || 'PT Handil Bakti Utama (Mitra Disdik HST)');
+
+  // Pastikan ID lokasi sinkron saat master lokasi diperbarui
+  React.useEffect(() => {
+    if (activeLocations.length > 0 && !activeLocations.some((l) => l.id === osLocationId)) {
+      setOsLocationId(activeLocations[0].id);
+    }
+  }, [activeLocations]);
 
   // Sync vendor default when availableVendors loads
   React.useEffect(() => {

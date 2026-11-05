@@ -61,6 +61,8 @@ import {
   apiFetchDivisions,
   apiFetchVendors,
   apiFetchAllUsers,
+  apiFetchOffices,
+  apiUpdateOffices,
   apiFetchAttendance,
   apiFetchReports,
   apiFetchEvaluations,
@@ -204,6 +206,12 @@ export default function App() {
     });
     apiFetchVendors().then((vens) => {
       if (vens && vens.length > 0) setVendors(vens);
+    });
+    apiFetchOffices().then((offs) => {
+      if (offs && offs.length > 0) {
+        setLocations(offs);
+        localStorage.setItem('ot_locations', JSON.stringify(offs));
+      }
     });
     apiFetchAllUsers().then((usrs) => {
       if (usrs && usrs.length > 0) {
@@ -550,6 +558,7 @@ export default function App() {
   const handleUpdateLocations = (newLocs: OfficeLocation[]) => {
     setLocations(newLocs);
     localStorage.setItem('ot_locations', JSON.stringify(newLocs));
+    apiUpdateOffices(newLocs).catch((err) => console.warn('Sync offices to server failed:', err));
     addAuditLog('Pembaruan Master Lokasi', `Master lokasi diperbarui (${newLocs.length} lokasi aktif).`, 'Pengaturan');
   };
 

@@ -144,6 +144,16 @@ if (isNodeSqlite && dbEngine) {
       status TEXT DEFAULT 'Aktif',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS locations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      address TEXT NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      radius_meters REAL NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
 
   // Migrasi aman untuk kolom baru users jika database sudah ada sebelumnya
@@ -1765,6 +1775,119 @@ export function getLiveAnalyticsContext() {
       evalsSummary: fallbackStore.evaluations.slice(0, 30)
     };
   }
+}
+
+// ==========================================================
+// MASTER LOKASI KERJA / GEOFENCE RESMI DISDIK HST
+// ==========================================================
+export const DEFAULT_OFFICES = [
+  {
+    id: 'loc-disdik-hst',
+    name: 'Kantor Dinas Pendidikan Kab. Hulu Sungai Tengah',
+    address: 'Jl. Perintis Kemerdekaan No. 32, Barabai Timur, Barabai, Kab. Hulu Sungai Tengah, Kalimantan Selatan 71314',
+    latitude: -2.5911226,
+    longitude: 115.3735289,
+    radiusMeters: 100,
+  },
+  {
+    id: 'loc-skb-hst',
+    name: 'Sanggar Kegiatan Belajar (SKB) Disdik HST',
+    address: 'Jl. Murakata, Barabai, Kab. Hulu Sungai Tengah, Kalimantan Selatan',
+    latitude: -2.58550,
+    longitude: 115.37820,
+    radiusMeters: 90,
+  },
+  {
+    id: 'loc-kesenian-hst',
+    name: 'Gedung Kesenian & Workshop Disdik HST',
+    address: 'Kawasan Sarana Pembelajaran Terpadu, Barabai, Kab. Hulu Sungai Tengah',
+    latitude: -2.59320,
+    longitude: 115.37110,
+    radiusMeters: 85,
+  },
+];
+
+export function listLocations() {
+  if (isNodeSqlite && dbEngine) {
+    const rows = dbEngine.prepare('SELECT * FROM locations ORDER BY name ASC').all();
+    if (rows.length === 0) {
+      // Inisialisasi awal 3 lokasi resmi
+      for (const off of DEFAULT_OFFICES) {
+        dbEngine.prepare(
+          'INSERT OR REPLACE INTO locations (id, name, address, latitude, longitude, radius_meters, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).run(off.id, off.name, off.address, off.latitude, off.longitude, off.radiusMeters, new Date().toISOString());
+      }
+      return DEFAULT_OFFICES;
+    }
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      address: r.address,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      radiusMeters: r.radius_meters,
+      createdAt: r.created_at,
+    }));
+  }
+  return DEFAULT_OFFICES;
+}
+
+export function saveLocations(newLocations) {
+  if (!Array.isArray(newLocations) || newLocations.length === 0) return listLocations();
+  if (isNodeSqlite && dbEngine) {
+    const now = new Date().toISOString();
+    // Hapus lokasi yang sudah tidak ada di daftar baru
+    const newIds = newLocations.map((l) => l.id);
+    const existing = dbEngine.prepare('SELECT id FROM locations').all();
+    for (const ex of existing) {
+      if (!newIds.includes(ex.id)) {
+        dbEngine.prepare('DELETE FROM locations WHERE id = ?').run(ex.id);
+      }
+    }
+    // Simpan atau perbarui lokasi baru
+    for (const loc of newLocations) {
+      dbEngine.prepare(
+        `INSERT OR REPLACE INTO locations (id, name, address, latitude, longitude, radius_meters, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        loc.id || `loc-${Date.now()}`,
+        loc.name,
+        loc.address || '',
+        loc.latitude || -2.5911,
+        loc.longitude || 115.3735,
+        loc.radiusMeters || 100,
+        loc.createdAt || now
+      );
+    }
+  }
+  return listLocations();
+}
+
+export function createLocation(loc) {
+  const id = loc.id || `loc-${Date.now()}`;
+  const now = new Date().toISOString();
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `INSERT OR REPLACE INTO locations (id, name, address, latitude, longitude, radius_meters, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      loc.name,
+      loc.address || '',
+      loc.latitude || -2.5911,
+      loc.longitude || 115.3735,
+      loc.radiusMeters || 100,
+      now
+    );
+  }
+  return { ...loc, id, createdAt: now };
+}
+
+export function deleteLocation(id) {
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare('DELETE FROM locations WHERE id = ?').run(id);
+  }
+  return true;
 }
 
 // Jalankan inisialisasi awal

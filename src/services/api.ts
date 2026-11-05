@@ -261,6 +261,17 @@ export async function apiFetchOffices(): Promise<OfficeLocation[]> {
   return [];
 }
 
+export async function apiUpdateOffices(offices: OfficeLocation[]): Promise<OfficeLocation[]> {
+  const res = await fetch(`${API_BASE}/offices`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ offices }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal memperbarui master lokasi.');
+  return data.offices;
+}
+
 // 6. Staff List by Division
 export async function apiFetchStaff(divisionId?: string): Promise<any[]> {
   try {
