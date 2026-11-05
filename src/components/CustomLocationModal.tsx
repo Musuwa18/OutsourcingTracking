@@ -214,7 +214,7 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
                   type="text"
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
-                  placeholder="Misal: Sanggar Kegiatan Belajar (SKB) Murakata / Gedung Kesenian"
+                  placeholder="Misal: Balai Belajar GTK / Gudang WorkShop Banua Hanyar"
                   className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
                   required
                 />

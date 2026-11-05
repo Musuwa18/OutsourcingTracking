@@ -721,7 +721,7 @@ export const INITIAL_AUDIT_LOGS: SystemAuditLog[] = [
     actorName: 'Muhammad Rizky (OS-SKB-006)',
     role: 'Tenaga Outsourcing',
     action: 'Presensi Masuk (Clock In)',
-    detail: 'Verifikasi selfie valid di Sanggar Kegiatan Belajar (SKB) Murakata Disdik HST (radius 11.4m).',
+    detail: 'Verifikasi selfie valid di Balai Belajar GTK Disdik HST (radius 11.4m).',
     ipAddress: '192.168.204.57',
     category: 'Kehadiran',
   },
