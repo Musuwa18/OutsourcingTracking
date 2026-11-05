@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, RefreshCw, X, ShieldCheck, AlertCircle, MapPin, CheckCircle2, Navigation } from 'lucide-react';
 import { OfficeLocation } from '../types';
-import { formatDistance } from '../utils/geo';
+import { formatDistance, PRIMARY_OFFICES } from '../utils/geo';
 import { GeofenceRadarMap } from './GeofenceRadarMap';
 
 interface CameraCaptureModalProps {
@@ -16,7 +16,7 @@ interface CameraCaptureModalProps {
     withinRadius: boolean;
     locationName: string;
   }) => void;
-  assignedLocation: OfficeLocation;
+  assignedLocation?: OfficeLocation;
   actionType: 'clock-in' | 'clock-out';
 }
 
@@ -27,6 +27,11 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   assignedLocation,
   actionType,
 }) => {
+  const safeOffice = assignedLocation || PRIMARY_OFFICES[0];
+  const targetLat = typeof safeOffice?.latitude === 'number' ? safeOffice.latitude : PRIMARY_OFFICES[0].latitude;
+  const targetLng = typeof safeOffice?.longitude === 'number' ? safeOffice.longitude : PRIMARY_OFFICES[0].longitude;
+  const targetRadius = typeof safeOffice?.radiusMeters === 'number' ? safeOffice.radiusMeters : 100;
+  const targetName = safeOffice?.name || PRIMARY_OFFICES[0].name;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -133,11 +138,11 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           calculateDistanceMeters(
             latitude,
             longitude,
-            assignedLocation.latitude,
-            assignedLocation.longitude
+            targetLat,
+            targetLng
           )
         );
-        const withinRadius = dist <= assignedLocation.radiusMeters;
+        const withinRadius = dist <= targetRadius;
 
         setCoords({
           latitude,
@@ -151,14 +156,14 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       (err) => {
         console.warn('GPS hardware access failed, fallback to simulated Disdik GPS:', err);
         // Fallback GPS aman jika izin lokasi ditolak sementara
-        const fallbackLat = assignedLocation.latitude + (Math.random() - 0.5) * 0.0004;
-        const fallbackLng = assignedLocation.longitude + (Math.random() - 0.5) * 0.0004;
+        const fallbackLat = targetLat + (Math.random() - 0.5) * 0.0004;
+        const fallbackLng = targetLng + (Math.random() - 0.5) * 0.0004;
         const dist = Math.round(
           calculateDistanceMeters(
             fallbackLat,
             fallbackLng,
-            assignedLocation.latitude,
-            assignedLocation.longitude
+            targetLat,
+            targetLng
           )
         );
         setCoords({
@@ -166,7 +171,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           longitude: fallbackLng,
           accuracy: 12,
           distance: dist,
-          withinRadius: dist <= assignedLocation.radiusMeters,
+          withinRadius: dist <= targetRadius,
         });
         setIsLocating(false);
       },
@@ -321,7 +326,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       accuracy: coords.accuracy,
       distanceMeters: coords.distance,
       withinRadius: coords.withinRadius,
-      locationName: assignedLocation.name,
+      locationName: targetName,
     });
     onClose();
   };
@@ -468,13 +473,13 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-md">
               <GeofenceRadarMap
                 userCoords={coords}
-                assignedLocation={assignedLocation}
+                assignedLocation={safeOffice}
                 height="340px"
                 className="w-full"
               />
             </div>
             <div className="flex items-center justify-between text-xs px-1 text-slate-500 dark:text-slate-400">
-              <span className="text-[11px] font-mono">Pusat Tugas: {assignedLocation.name}</span>
+              <span className="text-[11px] font-mono">Pusat Tugas: {targetName}</span>
               <button
                 type="button"
                 onClick={() => setActiveViewTab('camera')}
@@ -502,7 +507,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               <div className="space-y-1.5 w-full">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-900 dark:text-white">
-                    {assignedLocation.name}
+                    {targetName}
                   </span>
                   {coords && (
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -536,7 +541,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                     </div>
                     <div className="flex justify-between">
                       <span>Radius maksimal resmi:</span>
-                      <span className="font-mono tabular-nums">{assignedLocation.radiusMeters} meter</span>
+                      <span className="font-mono tabular-nums">{targetRadius} meter</span>
                     </div>
                   </div>
                 ) : null}
@@ -549,7 +554,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-[11px] text-rose-800 dark:text-rose-200 flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div className="leading-relaxed">
-                <strong>Peringatan Pelanggaran Geofence:</strong> Anda berada di luar radius resmi tugas ({formatDistance(coords?.distance || 0)} dari batas {assignedLocation.radiusMeters}m). Jika Anda mengirim presensi ini, sistem akan <strong>otomatis mengirim notifikasi peringatan visual ke dashboard atasan / supervisor</strong>.
+                <strong>Peringatan Pelanggaran Geofence:</strong> Anda berada di luar radius resmi tugas ({formatDistance(coords?.distance || 0)} dari batas {targetRadius}m). Jika Anda mengirim presensi ini, sistem akan <strong>otomatis mengirim notifikasi peringatan visual ke dashboard atasan / supervisor</strong>.
               </div>
             </div>
           )}

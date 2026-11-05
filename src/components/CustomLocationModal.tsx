@@ -48,10 +48,10 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
         setIsCustomMode(false);
       } else {
         setIsCustomMode(true);
-        setCustomName(assigned.name);
-        setCustomAddress(assigned.address);
-        setCustomLat(assigned.latitude);
-        setCustomLng(assigned.longitude);
+        setCustomName(assigned.name || 'Lokasi Khusus');
+        setCustomAddress(assigned.address || '');
+        setCustomLat(typeof assigned.latitude === 'number' ? assigned.latitude : PRIMARY_OFFICES[0].latitude);
+        setCustomLng(typeof assigned.longitude === 'number' ? assigned.longitude : PRIMARY_OFFICES[0].longitude);
         setCustomRadius(assigned.radiusMeters || 100);
       }
     }

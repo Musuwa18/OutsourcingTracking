@@ -16,6 +16,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { StaffProfile, AttendanceRecord, DailyWorkReport } from '../types';
+import { PRIMARY_OFFICES } from '../utils/geo';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { WatermarkCameraModal } from '../components/WatermarkCameraModal';
 import { AiDuplicateValidationModal } from '../components/AiDuplicateValidationModal';
@@ -47,6 +48,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   onClockOut,
   onSubmitReport,
 }) => {
+  const safeOffice = staff?.assignedLocation || PRIMARY_OFFICES[0];
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
   const [actionType, setActionType] = useState<'clock-in' | 'clock-out'>('clock-in');
 
@@ -163,10 +165,10 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
       imageHash,
       aiDuplicateFlag,
       locationCoords: reportLocationData || {
-        latitude: staff.assignedLocation.latitude,
-        longitude: staff.assignedLocation.longitude,
+        latitude: typeof safeOffice.latitude === 'number' ? safeOffice.latitude : PRIMARY_OFFICES[0].latitude,
+        longitude: typeof safeOffice.longitude === 'number' ? safeOffice.longitude : PRIMARY_OFFICES[0].longitude,
         accuracy: 10,
-        locationName: staff.assignedLocation.name,
+        locationName: safeOffice.name || PRIMARY_OFFICES[0].name,
       },
       supervisorApproval: 'Pending',
     });
@@ -276,7 +278,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         {/* Assigned Location Badge */}
         <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 backdrop-blur-md text-xs text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10 font-medium">
           <MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-          <span className="truncate">Lokasi Tugas: <strong className="text-slate-900 dark:text-white">{staff.assignedLocation.name}</strong></span>
+          <span className="truncate">Lokasi Tugas: <strong className="text-slate-900 dark:text-white">{safeOffice.name || PRIMARY_OFFICES[0].name}</strong></span>
         </div>
 
         {/* Floating Action Card for Smart Attendance */}
@@ -657,7 +659,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         isOpen={cameraModalOpen}
         onClose={() => setCameraModalOpen(false)}
         onCapture={handleAttendanceCapture}
-        assignedLocation={staff.assignedLocation}
+        assignedLocation={safeOffice}
         actionType={actionType}
       />
 

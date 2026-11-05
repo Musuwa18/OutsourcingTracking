@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapPin, Navigation, Maximize2, Minimize2, ShieldCheck, AlertCircle, Compass } from 'lucide-react';
 import { OfficeLocation } from '../types';
-import { formatDistance } from '../utils/geo';
+import { formatDistance, PRIMARY_OFFICES } from '../utils/geo';
 
 interface GeofenceRadarMapProps {
   userCoords: {
@@ -12,7 +12,7 @@ interface GeofenceRadarMapProps {
     distance: number;
     withinRadius: boolean;
   } | null;
-  assignedLocation: OfficeLocation;
+  assignedLocation?: OfficeLocation;
   height?: string;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
@@ -27,6 +27,11 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
   onToggleExpand,
   className = '',
 }) => {
+  const safeOffice = assignedLocation || PRIMARY_OFFICES[0];
+  const officeLat = typeof safeOffice?.latitude === 'number' ? safeOffice.latitude : PRIMARY_OFFICES[0].latitude;
+  const officeLng = typeof safeOffice?.longitude === 'number' ? safeOffice.longitude : PRIMARY_OFFICES[0].longitude;
+  const officeRadius = typeof safeOffice?.radiusMeters === 'number' ? safeOffice.radiusMeters : 100;
+  const officeName = safeOffice?.name || PRIMARY_OFFICES[0].name;
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
@@ -46,8 +51,8 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
       mapInstanceRef.current = null;
     }
 
-    const defaultLat = userCoords?.latitude ?? assignedLocation.latitude;
-    const defaultLng = userCoords?.longitude ?? assignedLocation.longitude;
+    const defaultLat = userCoords?.latitude ?? officeLat;
+    const defaultLng = userCoords?.longitude ?? officeLng;
 
     const map = L.map(mapContainerRef.current, {
       center: [defaultLat, defaultLng],
@@ -95,7 +100,7 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
     const map = mapInstanceRef.current;
     if (!map || !mapReady) return;
 
-    const officePos: [number, number] = [assignedLocation.latitude, assignedLocation.longitude];
+    const officePos: [number, number] = [officeLat, officeLng];
     const isWithin = userCoords?.withinRadius ?? true;
 
     // 1. Lingkaran Radius Geofence Kantor
@@ -104,7 +109,7 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
 
     if (!geofenceCircleRef.current) {
       geofenceCircleRef.current = L.circle(officePos, {
-        radius: assignedLocation.radiusMeters,
+        radius: officeRadius,
         color: circleColor,
         weight: 2,
         fillColor: circleFill,
@@ -113,7 +118,7 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
       }).addTo(map);
     } else {
       geofenceCircleRef.current.setLatLng(officePos);
-      geofenceCircleRef.current.setRadius(assignedLocation.radiusMeters);
+      geofenceCircleRef.current.setRadius(officeRadius);
       geofenceCircleRef.current.setStyle({
         color: circleColor,
         fillColor: circleFill,
@@ -146,8 +151,8 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
         .addTo(map)
         .bindPopup(
           `<div class="text-xs p-1 font-sans">
-            <strong class="text-slate-900 block">${assignedLocation.name}</strong>
-            <span class="text-slate-500 block text-[10px]">Radius Operasional: ${assignedLocation.radiusMeters} meter</span>
+            <strong class="text-slate-900 block">${officeName}</strong>
+            <span class="text-slate-500 block text-[10px]">Radius Operasional: ${officeRadius} meter</span>
           </div>`
         );
     } else {
@@ -224,7 +229,7 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
     if (userCoords) {
       map.setView([userCoords.latitude, userCoords.longitude], 17, { animate: true });
     } else {
-      map.setView([assignedLocation.latitude, assignedLocation.longitude], 17, { animate: true });
+      map.setView([officeLat, officeLng], 17, { animate: true });
     }
   };
 
@@ -233,7 +238,7 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    const officePos: [number, number] = [assignedLocation.latitude, assignedLocation.longitude];
+    const officePos: [number, number] = [officeLat, officeLng];
     if (userCoords) {
       const userPos: [number, number] = [userCoords.latitude, userCoords.longitude];
       map.fitBounds(L.latLngBounds([userPos, officePos]), { padding: [35, 35], maxZoom: 18 });

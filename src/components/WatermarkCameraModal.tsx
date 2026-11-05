@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Camera, X, RefreshCw, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { StaffProfile } from '../types';
 import { stampWatermarkOnPhoto } from '../utils/watermark';
+import { PRIMARY_OFFICES } from '../utils/geo';
 
 interface WatermarkCameraModalProps {
   isOpen: boolean;
@@ -13,7 +14,7 @@ interface WatermarkCameraModalProps {
     accuracy: number;
     locationName: string;
   }) => void;
-  currentStaff: StaffProfile;
+  currentStaff?: StaffProfile;
   taskTitle: string;
 }
 
@@ -24,6 +25,10 @@ export const WatermarkCameraModal: React.FC<WatermarkCameraModalProps> = ({
   currentStaff,
   taskTitle,
 }) => {
+  const safeOffice = currentStaff?.assignedLocation || PRIMARY_OFFICES[0];
+  const targetLat = typeof safeOffice?.latitude === 'number' ? safeOffice.latitude : PRIMARY_OFFICES[0].latitude;
+  const targetLng = typeof safeOffice?.longitude === 'number' ? safeOffice.longitude : PRIMARY_OFFICES[0].longitude;
+  const targetName = safeOffice?.name || PRIMARY_OFFICES[0].name;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -59,26 +64,26 @@ export const WatermarkCameraModal: React.FC<WatermarkCameraModalProps> = ({
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
             accuracy: pos.coords.accuracy || 12,
-            locationName: currentStaff.assignedLocation.name,
+            locationName: targetName,
           });
         },
         () => {
           // Fallback to assigned office location
           setCoords({
-            latitude: currentStaff.assignedLocation.latitude,
-            longitude: currentStaff.assignedLocation.longitude,
+            latitude: targetLat,
+            longitude: targetLng,
             accuracy: 10,
-            locationName: currentStaff.assignedLocation.name,
+            locationName: targetName,
           });
         },
         { enableHighAccuracy: true, timeout: 8000 }
       );
     } else {
       setCoords({
-        latitude: currentStaff.assignedLocation.latitude,
-        longitude: currentStaff.assignedLocation.longitude,
+        latitude: targetLat,
+        longitude: targetLng,
         accuracy: 10,
-        locationName: currentStaff.assignedLocation.name,
+        locationName: targetName,
       });
     }
   };

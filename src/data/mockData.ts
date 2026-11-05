@@ -114,6 +114,7 @@ export function generateInitialAttendance(): AttendanceRecord[] {
       const clockInTime = `${String(inHour).padStart(2, '0')}:${String(inMin).padStart(2, '0')}:14`;
       const clockOutTime = isToday ? undefined : '17:05:42';
 
+      const assignedLoc = staff.assignedLocation || PRIMARY_OFFICES[0];
       const record: AttendanceRecord = {
         id: `att-${staff.id}-${dateStr}`,
         staffId: staff.id,
@@ -122,12 +123,12 @@ export function generateInitialAttendance(): AttendanceRecord[] {
         clockOutTime: status === 'Izin' ? '-' : clockOutTime,
         selfieUrl: createSelfieThumbnail(staff.name, `${dateStr} ${clockInTime}`),
         locationCoords: {
-          latitude: staff.assignedLocation.latitude + (randomSeed * 0.00001 - 0.0005),
-          longitude: staff.assignedLocation.longitude + (randomSeed * 0.00001 - 0.0005),
+          latitude: (assignedLoc.latitude || -2.5911226) + (randomSeed * 0.00001 - 0.0005),
+          longitude: (assignedLoc.longitude || 115.3735289) + (randomSeed * 0.00001 - 0.0005),
           accuracy: 8 + (randomSeed % 14), // under 30m
           distanceMeters: distance,
-          withinRadius: distance <= staff.assignedLocation.radiusMeters,
-          locationName: staff.assignedLocation.name,
+          withinRadius: distance <= (assignedLoc.radiusMeters || 100),
+          locationName: assignedLoc.name || PRIMARY_OFFICES[0].name,
         },
         status,
         notes: status === 'Terlambat' ? 'Kendala lalu lintas jalan tol' : status === 'Izin' ? 'Izin keperluan keluarga (disetujui)' : undefined,
@@ -217,10 +218,10 @@ export function generateInitialReports(): DailyWorkReport[] {
         analyzedAt: '2026-10-09 11:44:55',
       },
       locationCoords: {
-        latitude: PRIMARY_OFFICES[3].latitude,
-        longitude: PRIMARY_OFFICES[3].longitude,
+        latitude: PRIMARY_OFFICES[1].latitude,
+        longitude: PRIMARY_OFFICES[1].longitude,
         accuracy: 9,
-        locationName: PRIMARY_OFFICES[3].name,
+        locationName: PRIMARY_OFFICES[1].name,
       },
       supervisorApproval: 'Disetujui',
       supervisorNotes: 'Standar kebersihan terjaga dengan baik.',
@@ -273,10 +274,10 @@ export function generateInitialReports(): DailyWorkReport[] {
         analyzedAt: '2026-10-09 14:14:30',
       },
       locationCoords: {
-        latitude: PRIMARY_OFFICES[4].latitude,
-        longitude: PRIMARY_OFFICES[4].longitude,
+        latitude: PRIMARY_OFFICES[2].latitude,
+        longitude: PRIMARY_OFFICES[2].longitude,
         accuracy: 11,
-        locationName: PRIMARY_OFFICES[4].name,
+        locationName: PRIMARY_OFFICES[2].name,
       },
       supervisorApproval: 'Pending',
       createdAt: '2026-10-09 14:15:00',

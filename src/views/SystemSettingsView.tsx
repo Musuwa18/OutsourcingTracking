@@ -1347,11 +1347,11 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 font-mono text-[10px] text-slate-600 dark:text-slate-400 space-y-0.5">
                     <div className="flex justify-between">
                       <span>Lat:</span>
-                      <strong className="text-slate-900 dark:text-white tabular-nums">{loc.latitude.toFixed(5)}</strong>
+                      <strong className="text-slate-900 dark:text-white tabular-nums">{typeof loc.latitude === 'number' ? loc.latitude.toFixed(5) : loc.latitude}</strong>
                     </div>
                     <div className="flex justify-between">
                       <span>Lng:</span>
-                      <strong className="text-slate-900 dark:text-white tabular-nums">{loc.longitude.toFixed(5)}</strong>
+                      <strong className="text-slate-900 dark:text-white tabular-nums">{typeof loc.longitude === 'number' ? loc.longitude.toFixed(5) : loc.longitude}</strong>
                     </div>
                   </div>
                 </div>

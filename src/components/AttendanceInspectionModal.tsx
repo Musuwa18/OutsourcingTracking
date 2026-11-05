@@ -18,7 +18,14 @@ export const AttendanceInspectionModal: React.FC<AttendanceInspectionModalProps>
 }) => {
   if (!isOpen || !record || !staff) return null;
 
-  const { locationCoords } = record;
+  const locationCoords = record.locationCoords || {
+    latitude: -2.5911226,
+    longitude: 115.3735289,
+    accuracy: 10,
+    distanceMeters: 0,
+    withinRadius: true,
+    locationName: 'Kantor Dinas Pendidikan Kab. Hulu Sungai Tengah',
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">

@@ -665,7 +665,7 @@ export default function App() {
         division: currentUser.divisionName || 'Dinas Pendidikan Kab. HST',
         vendorName: currentUser.vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)',
         roleTitle: currentUser.roleTitle || 'Tenaga Outsourcing',
-        assignedLocation: PRIMARY_OFFICES[0],
+        assignedLocation: (currentUser as any).customLocation || PRIMARY_OFFICES[0],
         avatarColor: currentUser.avatarColor || '#4f46e5',
         initials: currentUser.initials || 'OS',
         joinDate: '2026-01-01',
