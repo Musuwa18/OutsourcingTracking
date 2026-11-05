@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, RefreshCw, X, ShieldCheck, AlertCircle, MapPin, CheckCircle2 } from 'lucide-react';
+import { Camera, RefreshCw, X, ShieldCheck, AlertCircle, MapPin, CheckCircle2, Navigation, Maximize2 } from 'lucide-react';
 import { OfficeLocation } from '../types';
 import { calculateDistanceMeters, formatDistance, validateGpsAccuracy } from '../utils/geo';
+import { GeofenceRadarMap } from './GeofenceRadarMap';
 
 interface CameraCaptureModalProps {
   isOpen: boolean;
@@ -48,11 +49,17 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   // Server timestamp simulated lock
   const [serverTime, setServerTime] = useState<string>('');
 
+  // Mode Tampilan: Kamera Selfie vs Peta Radar Lokasi
+  const [activeViewTab, setActiveViewTab] = useState<'camera' | 'map'>('camera');
+  const [isMapExpanded, setIsMapExpanded] = useState<boolean>(false);
+
   useEffect(() => {
     if (!isOpen) {
       stopCamera();
       setCapturedImage(null);
       setCameraError(null);
+      setActiveViewTab('camera');
+      setIsMapExpanded(false);
       return;
     }
 
@@ -313,7 +320,73 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           </button>
         </div>
 
-        {/* Camera Viewport / Captured Preview */}
+        {/* Tab Switcher Cerdas: Kamera Selfie vs Peta Radar Geofence */}
+        <div className="px-4 pt-2.5 pb-1 shrink-0 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800">
+          <div className="grid grid-cols-2 p-1 rounded-xl bg-slate-200/70 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 gap-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setActiveViewTab('camera')}
+              className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeViewTab === 'camera'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-cyan-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>Kamera Selfie</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveViewTab('map')}
+              className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeViewTab === 'map'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-cyan-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <MapPin className="w-3.5 h-3.5" />
+              <span>Peta Radar</span>
+              {coords && (
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-mono ${
+                  coords.withinRadius
+                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold'
+                    : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 font-bold'
+                }`}>
+                  {formatDistance(coords.distance)}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Viewport Konten (Peta Layar Penuh jika Tab Map Aktif) */}
+        {activeViewTab === 'map' ? (
+          <div className="relative p-4 bg-slate-950">
+            <GeofenceRadarMap
+              userCoords={coords}
+              assignedLocation={assignedLocation}
+              height="300px"
+              isExpanded={isMapExpanded}
+              onToggleExpand={() => setIsMapExpanded(!isMapExpanded)}
+              className="w-full"
+            />
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-300 px-1">
+              <span className="text-[11px] font-mono text-slate-400">
+                Pusat: {assignedLocation.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveViewTab('camera')}
+                className="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                <span>Buka Kamera Selfie</span>
+                <span>&rarr;</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+        /* Camera Viewport / Captured Preview */
         <div className="relative bg-slate-950 aspect-[4/3] w-full flex items-center justify-center overflow-hidden">
           {capturedImage ? (
             <img
@@ -350,9 +423,35 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
           <canvas ref={canvasRef} className="hidden" />
         </div>
+        )}
 
         {/* Location & GPS Geofence Status Card */}
         <div className="p-4 space-y-3 overflow-y-auto">
+          {/* Tampilan Mini-Map Interaktif (Saat Berada di Tab Kamera) */}
+          {activeViewTab === 'camera' && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Navigation className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Peta Radar Posisi &amp; Radius Kantor</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveViewTab('map')}
+                  className="text-[11px] text-indigo-600 dark:text-cyan-400 hover:underline font-semibold cursor-pointer"
+                >
+                  Perbesar Peta &rarr;
+                </button>
+              </div>
+
+              <GeofenceRadarMap
+                userCoords={coords}
+                assignedLocation={assignedLocation}
+                height="150px"
+                onToggleExpand={() => setActiveViewTab('map')}
+              />
+            </div>
+          )}
           <div className={`p-3 rounded-xl border text-xs transition-colors ${
             isLocating
               ? 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'

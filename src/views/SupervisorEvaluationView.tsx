@@ -10,6 +10,7 @@ import {
   Calendar,
   Send,
   User,
+  Users,
   ExternalLink,
   Search,
   ChevronDown,
@@ -109,7 +110,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
         st.name.toLowerCase().includes(q) ||
         (st.nip && st.nip.toLowerCase().includes(q)) ||
         (st.division && st.division.toLowerCase().includes(q)) ||
-        (st.role && st.role.toLowerCase().includes(q)) ||
+        (st.roleTitle && st.roleTitle.toLowerCase().includes(q)) ||
         (st.vendorName && st.vendorName.toLowerCase().includes(q))
       );
     });

@@ -184,6 +184,17 @@ export async function apiFetchAllUsers(): Promise<any[]> {
   return [];
 }
 
+export async function apiCreateUser(userData: any): Promise<any> {
+  const res = await fetch(`${API_BASE}/users`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(userData),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal menambahkan akun pegawai baru.');
+  return data.user;
+}
+
 export async function apiResetPassword(userId: string, newPassword?: string): Promise<string> {
   const res = await fetch(`${API_BASE}/users/${userId}/reset-password`, {
     method: 'POST',

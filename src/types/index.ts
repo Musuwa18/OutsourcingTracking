@@ -15,11 +15,14 @@ export interface Vendor {
   contractNumber?: string;
   contractStart?: string;
   contractEnd?: string;
+  contractStartDate?: string;
+  contractEndDate?: string;
   picName?: string;
   picPhone?: string;
   address?: string;
   status: 'Aktif' | 'Nonaktif';
   staffCount?: number;
+  totalStaff?: number;
   createdAt?: string;
 }
 
@@ -178,8 +181,8 @@ export interface MonthlyAggregate {
   month: string; // YYYY-MM
   weekScores: (number | null)[]; // [W1, W2, W3, W4]
   averageScore: number;
-  predicate: 'Sangat Baik / Unggul' | 'Baik / Memenuhi Harapan' | 'Cukup / Perlu Peningkatan' | 'Kurang / Evaluasi Khusus';
-  contractRecommendation: 'Direkomendasikan Perpanjang Penuh' | 'Perpanjang dengan Masa Evaluasi' | 'Pertimbangan / Pelatihan Khusus' | 'Tidak Direkomendasikan Perpanjang';
+  predicate: 'Sangat Baik / Unggul' | 'Baik / Memenuhi Harapan' | 'Cukup / Perlu Peningkatan' | 'Kurang / Evaluasi Khusus' | 'Belum Ada Penilaian';
+  contractRecommendation: 'Direkomendasikan Perpanjang Penuh' | 'Perpanjang dengan Masa Evaluasi' | 'Pertimbangan / Pelatihan Khusus' | 'Tidak Direkomendasikan Perpanjang' | 'Belum Ada Evaluasi';
   pillarScores: {
     quality: number;
     professionalism: number;
@@ -260,7 +263,7 @@ export interface ActiveSession {
 }
 
 export interface GeofenceGlobalConfig {
-  assignmentPolicy: 'fixed' | 'roaming';
+  assignmentPolicy: 'fixed' | 'roaming' | 'any_office' | 'strict_assigned';
   gpsAccuracyThreshold: number; // in meters (default 30)
   autoNotifySupervisorOnBreach: boolean;
   strictOpenSkyWarning: boolean;

@@ -35,6 +35,21 @@ interface AnalyticsMonthlyViewProps {
   onOpenAiChat?: () => void;
 }
 
+const DEFAULT_AGGREGATE: MonthlyAggregate = {
+  staffId: '',
+  month: '2026-10',
+  weekScores: [null, null, null, null],
+  averageScore: 0,
+  predicate: 'Belum Ada Penilaian',
+  contractRecommendation: 'Belum Ada Evaluasi',
+  pillarScores: {
+    quality: 0,
+    professionalism: 0,
+    interpersonal: 0,
+    adaptability: 0,
+  },
+};
+
 export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
   staffList,
   monthlyAggregates,
@@ -73,7 +88,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
         st.name.toLowerCase().includes(q) ||
         (st.nip && st.nip.toLowerCase().includes(q)) ||
         (st.division && st.division.toLowerCase().includes(q)) ||
-        (st.role && st.role.toLowerCase().includes(q)) ||
+        (st.roleTitle && st.roleTitle.toLowerCase().includes(q)) ||
         (st.vendorName && st.vendorName.toLowerCase().includes(q))
       );
     });
@@ -92,8 +107,8 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
   }, [staffList, selectedDivision, searchQuery, sortBy, aggMap]);
 
   const staffMap = useMemo(() => new Map(staffList.map((s) => [s.id, s])), [staffList]);
-  const currentStaff = staffMap.get(selectedStaffId) || filteredAndSortedStaff[0] || staffList[0];
-  const currentAggregate = aggMap.get(currentStaff?.id) || monthlyAggregates[0];
+  const currentStaff = (selectedStaffId ? staffMap.get(selectedStaffId) : null) || filteredAndSortedStaff[0] || staffList[0];
+  const currentAggregate = (currentStaff?.id ? aggMap.get(currentStaff.id) : null) || monthlyAggregates[0] || DEFAULT_AGGREGATE;
 
   // Evaluasi mingguan untuk staf terpilih
   const staffEvals = weeklyEvaluations.filter(
@@ -463,7 +478,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
                 <div className="text-[10px] font-bold uppercase text-slate-400">Capaian Bulanan</div>
                 <div className="flex items-baseline gap-1 mt-0.5">
                   <span className="text-2xl font-extrabold font-mono text-slate-900 dark:text-white tabular-nums">
-                    {currentAggregate?.averageScore.toFixed(2)}
+                    {currentAggregate ? currentAggregate.averageScore.toFixed(2) : '0.00'}
                   </span>
                   <span className="text-xs text-slate-400">/ 5.00★</span>
                 </div>
@@ -535,7 +550,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
                   </div>
                   <div className="grid grid-cols-4 gap-2 text-center text-xs">
                     {[1, 2, 3, 4].map((w, idx) => {
-                      const score = currentAggregate?.weekScores[idx];
+                      const score = currentAggregate?.weekScores ? currentAggregate.weekScores[idx] : null;
                       return (
                         <div
                           key={w}
@@ -560,25 +575,25 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
                     <div className="flex justify-between items-center">
                       <span className="text-slate-600 dark:text-slate-400 font-medium">Pilar 1: Kualitas & Hasil</span>
                       <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
-                        {currentAggregate?.pillarScores.quality.toFixed(2)}★
+                        {currentAggregate?.pillarScores ? currentAggregate.pillarScores.quality.toFixed(2) : '0.00'}★
                       </strong>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-600 dark:text-slate-400 font-medium">Pilar 2: Sikap & Profesionalisme</span>
                       <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
-                        {currentAggregate?.pillarScores.professionalism.toFixed(2)}★
+                        {currentAggregate?.pillarScores ? currentAggregate.pillarScores.professionalism.toFixed(2) : '0.00'}★
                       </strong>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-600 dark:text-slate-400 font-medium">Pilar 3: Hubungan Interpersonal</span>
                       <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
-                        {currentAggregate?.pillarScores.interpersonal.toFixed(2)}★
+                        {currentAggregate?.pillarScores ? currentAggregate.pillarScores.interpersonal.toFixed(2) : '0.00'}★
                       </strong>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-600 dark:text-slate-400 font-medium">Pilar 4: Adaptabilitas Masalah</span>
                       <strong className="font-mono tabular-nums text-slate-900 dark:text-slate-100 font-bold">
-                        {currentAggregate?.pillarScores.adaptability.toFixed(2)}★
+                        {currentAggregate?.pillarScores ? currentAggregate.pillarScores.adaptability.toFixed(2) : '0.00'}★
                       </strong>
                     </div>
                   </div>
@@ -596,10 +611,10 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
 
                 <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 space-y-1">
                   <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200">
-                    {currentAggregate?.contractRecommendation}
+                    {currentAggregate?.contractRecommendation || 'Belum Ada Evaluasi'}
                   </div>
                   <p className="text-[11px] text-indigo-800 dark:text-indigo-300 leading-relaxed">
-                    Berdasarkan capaian KPI bulanan ({currentAggregate?.averageScore.toFixed(2)}★) dan kepatuhan presensi, personel alih daya ini dinilai layak melanjutkan masa penugasan.
+                    Berdasarkan capaian KPI bulanan ({currentAggregate ? currentAggregate.averageScore.toFixed(2) : '0.00'}★) dan kepatuhan presensi, personel alih daya ini dinilai layak melanjutkan masa penugasan.
                   </p>
                 </div>
 

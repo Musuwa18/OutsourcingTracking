@@ -56,6 +56,7 @@ import {
   apiCreateVendor,
   apiUpdateVendor,
   apiDeleteVendor,
+  apiCreateUser,
   apiResetPassword,
   apiUpdateUserProfile,
   apiResetUserDevice,
@@ -152,6 +153,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
   const [userToDelete, setUserToDelete] = useState<UserAccount | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   // ================= TAB: GEOFENCE STATE =================
   const [editingLocation, setEditingLocation] = useState<OfficeLocation | null>(null);
@@ -383,13 +385,9 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     }
     setIsResettingPass(true);
     try {
-      const res = await apiResetPassword(targetUserForReset.id, resetPasswordInput);
-      if (res.success) {
-        onShowToast(`Kata sandi akun "${targetUserForReset.name}" berhasil di-reset menjadi: ${resetPasswordInput}`, 'success');
-        setResetModalOpen(false);
-      } else {
-        onShowToast(res.message || 'Gagal mereset kata sandi', 'warning');
-      }
+      const msg = await apiResetPassword(targetUserForReset.id, resetPasswordInput);
+      onShowToast(msg || `Kata sandi akun "${targetUserForReset.name}" berhasil di-reset menjadi: ${resetPasswordInput}`, 'success');
+      setResetModalOpen(false);
     } catch (err: any) {
       onShowToast(err.message || 'Terjadi kesalahan sistem', 'warning');
     } finally {
@@ -598,36 +596,60 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     onShowToast(`Sesi aktif untuk "${userName}" berhasil diputus (Revoked).`, 'info');
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserName.trim() || !newUserNip.trim() || !newUserEmail.trim()) {
       onShowToast('Harap lengkapi seluruh field akun pengguna', 'warning');
       return;
     }
 
-    const newUser: UserAccount = {
-      id: `usr-${Date.now()}`,
-      name: newUserName.trim(),
-      nip: newUserNip.trim(),
-      email: newUserEmail.trim(),
-      role: newUserRole,
-      roleTitle: newUserRoleTitle.trim() || (newUserRole === 'outsourcing' ? 'Staf Lapangan Alih Daya' : 'Pejabat Operasional'),
-      status: 'Aktif',
-      deviceBinding: null,
-      lastLogin: 'Belum pernah login',
-      avatarColor: '#6366f1',
-      initials: newUserName.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase() || 'US',
-    };
+    setIsCreatingUser(true);
+    try {
+      const selectedDiv = divisions[0];
+      const created = await apiCreateUser({
+        name: newUserName.trim(),
+        nip: newUserNip.trim(),
+        email: newUserEmail.trim(),
+        role: newUserRole,
+        roleTitle: newUserRoleTitle.trim() || (newUserRole === 'outsourcing' ? 'Staf Lapangan Alih Daya' : 'Pejabat Operasional'),
+        divisionId: selectedDiv?.id || 'div-umpeg',
+        divisionName: selectedDiv?.name || 'Sub Bagian Dinas',
+        vendorName: vendors[0]?.name || 'PT Handil Bakti Utama (Mitra Disdik HST)',
+        password: 'Password123!',
+      });
 
-    onUpdateUsers([...users, newUser]);
-    setNewUserModalOpen(false);
-    onShowToast(`Akun pengguna "${newUser.name}" berhasil dibuat dengan proteksi device binding aktif.`, 'success');
+      const newUser: UserAccount = {
+        id: created.id,
+        name: created.name,
+        nip: created.nip,
+        email: created.email,
+        role: created.role,
+        roleTitle: created.roleTitle,
+        divisionId: created.divisionId,
+        divisionName: created.divisionName,
+        supervisorId: created.supervisorId,
+        vendorName: created.vendorName,
+        status: 'Aktif',
+        deviceBinding: null,
+        lastLogin: 'Belum pernah login',
+        avatarColor: created.avatarColor || '#6366f1',
+        initials: created.initials || 'OS',
+      };
 
-    // Reset inputs
-    setNewUserName('');
-    setNewUserNip('');
-    setNewUserEmail('');
-    setNewUserRoleTitle('');
+      onUpdateUsers([...users, newUser]);
+      setNewUserModalOpen(false);
+      onShowToast(`Akun pengguna "${newUser.name}" berhasil dibuat dan tersimpan permanen di database.`, 'success');
+
+      // Reset inputs
+      setNewUserName('');
+      setNewUserNip('');
+      setNewUserEmail('');
+      setNewUserRoleTitle('');
+    } catch (err: any) {
+      onShowToast(err.message || 'Gagal menambahkan akun pegawai baru.', 'warning');
+    } finally {
+      setIsCreatingUser(false);
+    }
   };
 
   // ================= ACTION HANDLERS: TAB 3 (RBAC) =================
@@ -2435,9 +2457,10 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-colors cursor-pointer shadow-xs"
+                  disabled={isCreatingUser}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold transition-colors cursor-pointer shadow-xs"
                 >
-                  Daftarkan Akun
+                  {isCreatingUser ? 'Mendaftarkan...' : 'Daftarkan Akun'}
                 </button>
               </div>
             </form>

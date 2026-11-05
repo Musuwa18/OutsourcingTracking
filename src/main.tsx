@@ -2,6 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { PwaProvider } from './context/PwaContext.tsx';
+import 'leaflet/dist/leaflet.css';
 import './index.css';
 
 interface Props {

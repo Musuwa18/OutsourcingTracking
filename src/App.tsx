@@ -145,6 +145,23 @@ const FALLBACK_DIVISIONS: Division[] = [
   }
 ];
 
+// Default fallback for outsourcing staff profile to prevent undefined crashes
+const DEFAULT_FALLBACK_STAFF: StaffProfile = {
+  id: 'usr-os-default',
+  nip: 'OS-DISDIK',
+  name: 'Staf Alih Daya',
+  email: 'staff@outsource.id',
+  phone: '',
+  division: 'Dinas Pendidikan Kab. HST',
+  vendorName: 'PT Handil Bakti Utama (Mitra Disdik HST)',
+  roleTitle: 'Tenaga Outsourcing',
+  assignedLocation: PRIMARY_OFFICES[0],
+  avatarColor: '#4f46e5',
+  initials: 'OS',
+  joinDate: '2026-01-01',
+  status: 'Aktif',
+};
+
 export default function App() {
   // Theme & Accessibility State
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -213,7 +230,7 @@ export default function App() {
             avatarColor: u.avatarColor || '#4f46e5',
             initials: u.initials || u.name.slice(0, 2).toUpperCase(),
             joinDate: '2026-01-02',
-            status: 'Aktif',
+            status: 'Aktif' as const,
           };
         });
         setStaffList(mappedStaff);
@@ -267,9 +284,9 @@ export default function App() {
   };
 
   // 15-Minute Inactivity Auto-Logout Protocol (with 60-second warning modal)
-  const { showWarningModal, remainingSeconds, stayLoggedIn, logoutNow } = useSessionTimeout({
-    timeoutMinutes: 15,
-    warningThresholdSeconds: 60,
+  const { isWarningOpen, remainingSeconds, extendSession, logoutNow } = useSessionTimeout({
+    timeoutMs: 15 * 60 * 1000,
+    warningDurationMs: 60 * 1000,
     onTimeout: () => {
       handleLogout();
       showToast('Sesi Anda telah berakhir otomatis karena 15 menit tidak ada aktivitas.', 'warning');
@@ -574,17 +591,20 @@ export default function App() {
         name: currentUser.name,
         email: currentUser.email,
         phone: currentUser.phone || '',
-        division: currentUser.divisionName,
-        vendorName: currentUser.vendorName || 'PT Indo Tekno Prima',
-        roleTitle: currentUser.roleTitle,
+        division: currentUser.divisionName || 'Dinas Pendidikan Kab. HST',
+        vendorName: currentUser.vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)',
+        roleTitle: currentUser.roleTitle || 'Tenaga Outsourcing',
         assignedLocation: PRIMARY_OFFICES[0],
         avatarColor: currentUser.avatarColor || '#4f46e5',
-        initials: currentUser.initials || 'OT',
-        joinDate: '2024-01-01',
+        initials: currentUser.initials || 'OS',
+        joinDate: '2026-01-01',
         status: 'Aktif' as const,
       };
     }
-    return staffList.find((s) => s.id === activeStaffId) || staffList[0];
+    const found = staffList.find((s) => s.id === activeStaffId);
+    if (found) return found;
+    if (staffList.length > 0 && staffList[0]) return staffList[0];
+    return DEFAULT_FALLBACK_STAFF;
   }, [currentUser, staffList, activeStaffId]);
 
   // Filtered staff list for Supervisor (strictly shows staff in their division)
@@ -612,10 +632,10 @@ export default function App() {
   // Today's attendance for active staff
   const todayDateStr = '2026-10-09';
   const staffTodayAttendance = attendanceRecords.find(
-    (a) => a.staffId === currentStaff.id && a.date === todayDateStr
+    (a) => a.staffId === currentStaff?.id && a.date === todayDateStr
   );
   const staffTodayReports = dailyReports.filter(
-    (r) => r.staffId === currentStaff.id && r.date === todayDateStr
+    (r) => r.staffId === currentStaff?.id && r.date === todayDateStr
   );
 
   // Pending daily reports for supervisor badge
@@ -650,7 +670,7 @@ export default function App() {
     const newLog: SystemAuditLog = {
       id: `log-${Date.now()}`,
       timestamp: timeStr,
-      actorName: actorName || (currentRole === 'outsourcing' ? `${currentStaff.name} (${currentStaff.nip})` : currentRole === 'supervisor' ? 'Hendra Wijaya, S.T.' : 'Dian Paramita, S.Kom.'),
+      actorName: actorName || (currentRole === 'outsourcing' ? `${currentStaff?.name || 'Staf Alih Daya'} (${currentStaff?.nip || '-'})` : currentRole === 'supervisor' ? 'Hendra Wijaya, S.T.' : 'Dian Paramita, S.Kom.'),
       role: roleTitle || (currentRole === 'outsourcing' ? 'Tenaga Outsourcing' : currentRole === 'supervisor' ? 'Supervisor Operasional' : 'Administrator Utama'),
       action,
       detail,
@@ -679,10 +699,11 @@ export default function App() {
   const handleClockIn = (selfieBase64: string, locationData: any) => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('id-ID', { hour12: false });
+    const targetStaffId = currentStaff?.id || 'usr-os-default';
 
     const newRecord: AttendanceRecord = {
-      id: `att-${currentStaff.id}-${todayDateStr}`,
-      staffId: currentStaff.id,
+      id: `att-${targetStaffId}-${todayDateStr}`,
+      staffId: targetStaffId,
       date: todayDateStr,
       clockInTime: timeStr,
       selfieUrl: selfieBase64,
@@ -693,14 +714,14 @@ export default function App() {
 
     setAttendanceRecords((prev) => {
       const filtered = prev.filter(
-        (r) => !(r.staffId === currentStaff.id && r.date === todayDateStr)
+        (r) => !(r.staffId === targetStaffId && r.date === todayDateStr)
       );
       return [newRecord, ...filtered];
     });
 
     // Background sync to SQLite server
     apiSubmitAttendance({
-      staffId: currentStaff.id,
+      staffId: targetStaffId,
       date: todayDateStr,
       clockInTime: timeStr,
       selfieUrl: selfieBase64,
@@ -712,13 +733,13 @@ export default function App() {
     if (!locationData.withinRadius) {
       addAuditLog(
         'Pelanggaran Geofence: Presensi di Luar Radius',
-        `PERINGATAN GEOFENCE: ${currentStaff.name} presensi di luar radius aman (${locationData.distanceMeters}m dari ${locationData.locationName}, batas radius ${currentStaff.assignedLocation.radiusMeters}m). Notifikasi otomatis dikirim ke supervisor.`,
+        `PERINGATAN GEOFENCE: ${currentStaff?.name || 'Staf'} presensi di luar radius aman (${locationData.distanceMeters}m dari ${locationData.locationName}, batas radius ${currentStaff?.assignedLocation?.radiusMeters || 80}m). Notifikasi otomatis dikirim ke supervisor.`,
         'Kehadiran'
       );
 
       addNotification(
         'Peringatan Geofence: Presensi di Luar Radius',
-        `${currentStaff.name} (${currentStaff.nip}) melakukan Clock-In berjarak ${locationData.distanceMeters} meter dari ${locationData.locationName} (Batas Radius Aman: ${currentStaff.assignedLocation.radiusMeters}m).`,
+        `${currentStaff?.name || 'Staf'} (${currentStaff?.nip || '-'}) melakukan Clock-In berjarak ${locationData.distanceMeters} meter dari ${locationData.locationName} (Batas Radius Aman: ${currentStaff?.assignedLocation?.radiusMeters || 80}m).`,
         'geofence_alert'
       );
     } else {
@@ -740,10 +761,11 @@ export default function App() {
   const handleClockOut = (selfieBase64: string, locationData: any) => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('id-ID', { hour12: false });
+    const targetStaffId = currentStaff?.id || 'usr-os-default';
 
     setAttendanceRecords((prev) =>
       prev.map((r) => {
-        if (r.staffId === currentStaff.id && r.date === todayDateStr) {
+        if (r.staffId === targetStaffId && r.date === todayDateStr) {
           return {
             ...r,
             clockOutTime: timeStr,
@@ -755,7 +777,7 @@ export default function App() {
 
     // Background sync to SQLite server
     apiSubmitAttendance({
-      staffId: currentStaff.id,
+      staffId: targetStaffId,
       date: todayDateStr,
       clockOutTime: timeStr,
       selfieUrl: selfieBase64,
@@ -812,7 +834,7 @@ export default function App() {
 
       addNotification(
         'Peringatan AI: Foto Terindikasi Duplikat',
-        `${currentStaff.name} mengirimkan laporan "${newReport.title}" dengan foto terindikasi duplikat (${newReport.aiDuplicateFlag.similarityScore}% kesamaan). Harap periksa di feed supervisi.`,
+        `${currentStaff?.name || 'Staf'} mengirimkan laporan "${newReport.title}" dengan foto terindikasi duplikat (${newReport.aiDuplicateFlag.similarityScore}% kesamaan). Harap periksa di feed supervisi.`,
         'approval'
       );
 
@@ -1075,7 +1097,7 @@ export default function App() {
                   todayReports={staffTodayReports}
                   allReports={dailyReports}
                   staffList={staffList}
-                  activeStaffId={currentStaff.id}
+                  activeStaffId={currentStaff?.id || ''}
                   onClockIn={handleClockIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
@@ -1089,7 +1111,7 @@ export default function App() {
                   todayReports={staffTodayReports}
                   allReports={dailyReports}
                   staffList={staffList}
-                  activeStaffId={currentStaff.id}
+                  activeStaffId={currentStaff?.id || ''}
                   onClockIn={handleClockIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
@@ -1110,16 +1132,16 @@ export default function App() {
                     <div className="flex items-center gap-3">
                       <div
                         className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white text-base"
-                        style={{ backgroundColor: currentStaff.avatarColor }}
+                        style={{ backgroundColor: currentStaff?.avatarColor || '#4f46e5' }}
                       >
-                        {currentStaff.initials}
+                        {currentStaff?.initials || 'OS'}
                       </div>
                       <div>
                         <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                          {currentStaff.name}
+                          {currentStaff?.name || 'Staf Alih Daya'}
                         </h2>
                         <p className="text-xs text-slate-500">
-                          {currentStaff.roleTitle} · {currentStaff.nip}
+                          {currentStaff?.roleTitle || 'Tenaga Outsourcing'} · {currentStaff?.nip || '-'}
                         </p>
                       </div>
                     </div>
@@ -1127,23 +1149,23 @@ export default function App() {
                     <div className="space-y-2 text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
                       <div className="flex justify-between">
                         <span className="text-slate-500">Vendor Mitra:</span>
-                        <span className="font-semibold">{currentStaff.vendorName}</span>
+                        <span className="font-semibold">{currentStaff?.vendorName || '-'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Divisi Penugasan:</span>
-                        <span className="font-semibold">{currentStaff.division}</span>
+                        <span className="font-semibold">{currentStaff?.division || '-'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Titik Geofence:</span>
-                        <span className="font-semibold">{currentStaff.assignedLocation.name}</span>
+                        <span className="font-semibold">{currentStaff?.assignedLocation?.name || 'Kantor Disdik HST'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Radius Aman:</span>
-                        <span className="font-mono">{currentStaff.assignedLocation.radiusMeters} meter</span>
+                        <span className="font-mono">{currentStaff?.assignedLocation?.radiusMeters || 80} meter</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Tanggal Bergabung:</span>
-                        <span className="font-mono">{currentStaff.joinDate}</span>
+                        <span className="font-mono">{currentStaff?.joinDate || '-'}</span>
                       </div>
                     </div>
                   </div>
@@ -1332,10 +1354,10 @@ export default function App() {
 
       {/* 15-Minute Session Inactivity Timeout Countdown */}
       <SessionTimeoutModal
-        isOpen={showWarningModal}
+        isOpen={isWarningOpen}
         remainingSeconds={remainingSeconds}
-        onStayLoggedIn={stayLoggedIn}
-        onLogoutNow={logoutNow}
+        onExtend={extendSession}
+        onLogout={logoutNow}
       />
 
       {/* User Profile & Password Change Modal */}

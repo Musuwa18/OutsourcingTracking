@@ -377,6 +377,59 @@ app.get('/api/users', (req, res) => {
   }
 });
 
+app.post('/api/users', (req, res) => {
+  try {
+    const {
+      nip,
+      name,
+      email,
+      password,
+      role,
+      divisionId,
+      divisionName,
+      roleTitle,
+      phone,
+      vendorName,
+      deviceId,
+      customLocation,
+      supervisorId,
+      workspaceNote
+    } = req.body;
+
+    if (!nip || !name || !email) {
+      return res.status(400).json({ error: 'NIP, Nama, dan Email wajib diisi.' });
+    }
+
+    const existing = getUserByEmailOrNip(email) || getUserByEmailOrNip(nip);
+    if (existing) {
+      return res.status(409).json({ error: 'Email atau NIP sudah terdaftar dalam sistem.' });
+    }
+
+    const newUser = createUser({
+      nip: String(nip).trim(),
+      name: String(name).trim(),
+      email: String(email).trim().toLowerCase(),
+      password: password || 'Password123!',
+      role: role || 'outsourcing',
+      divisionId: divisionId || 'div-umpeg',
+      divisionName: divisionName || 'Sub Bagian Dinas',
+      roleTitle: roleTitle || (role === 'supervisor' ? 'Pejabat Penilai' : role === 'admin' ? 'Administrator' : 'Tenaga Outsourcing'),
+      phone: phone || '',
+      vendorName: vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)',
+      deviceId: deviceId || null,
+      customLocation: customLocation || null,
+      supervisorId: supervisorId || null,
+      workspaceNote: workspaceNote || ''
+    });
+
+    const { passwordHash, ...safeUserData } = newUser;
+    res.status(201).json({ success: true, user: safeUserData, message: 'Akun pegawai berhasil dibuat.' });
+  } catch (err) {
+    console.error('[API Error] Create User:', err);
+    res.status(500).json({ error: err.message || 'Gagal menambahkan akun pegawai.' });
+  }
+});
+
 app.post('/api/users/:id/reset-password', (req, res) => {
   try {
     const { newPassword } = req.body;
