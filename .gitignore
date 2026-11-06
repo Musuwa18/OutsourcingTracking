@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Database operasional & backup
+data/outsource_track.db
+data/*.bak*
+
+# File unggahan presensi & bukti tugas
+uploads/
