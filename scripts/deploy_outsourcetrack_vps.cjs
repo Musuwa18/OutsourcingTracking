@@ -36,6 +36,16 @@ fi
 
 git fetch origin main
 git reset --hard origin/main
+
+# Jika git reset menghapus database karena transisi untracking, pulihkan dari backup
+if [ ! -f "$OUTSOURCE_DIR/data/outsource_track.db" ]; then
+  LATEST_BAK=$(ls -t "$OUTSOURCE_DIR/data/outsource_track.db.bak_"* 2>/dev/null | head -n 1)
+  if [ -n "$LATEST_BAK" ]; then
+    echo ">> Memulihkan database SQLite dari backup ($LATEST_BAK)..."
+    cp "$LATEST_BAK" "$OUTSOURCE_DIR/data/outsource_track.db"
+  fi
+fi
+
 npm run build
 sudo pm2 restart outsource-track
 
