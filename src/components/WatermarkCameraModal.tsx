@@ -181,8 +181,8 @@ export const WatermarkCameraModal: React.FC<WatermarkCameraModalProps> = ({
 
     // Apply official tamper-resistant watermark stamp
     const stamped = await stampWatermarkOnPhoto(rawImage, {
-      staffName: currentStaff.name,
-      nip: currentStaff.nip,
+      staffName: currentStaff?.name || 'Staf',
+      nip: currentStaff?.nip || '-',
       locationName: coords.locationName,
       latitude: coords.latitude,
       longitude: coords.longitude,
