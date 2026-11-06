@@ -20,8 +20,8 @@ set -e
 echo ">> Mencari lokasi outsource-track di VPS..."
 sudo pm2 show outsource-track | grep "exec mode\\|script path\\|exec cwd" || true
 
-OUTSOURCE_DIR=$(sudo pm2 show outsource-track | grep "exec cwd" | awk '{print $4}' | tr -d ' ')
-if [ -z "$OUTSOURCE_DIR" ]; then
+OUTSOURCE_DIR=$(sudo pm2 show outsource-track | grep "exec cwd" | awk -F'│' '{print $3}' | tr -d ' ')
+if [ -z "$OUTSOURCE_DIR" ] || [ ! -d "$OUTSOURCE_DIR" ]; then
   OUTSOURCE_DIR="/var/www/outsourcing-tracking"
 fi
 echo ">> Direktori aplikasi: $OUTSOURCE_DIR"
@@ -48,6 +48,12 @@ fi
 
 npm run build
 sudo pm2 restart outsource-track
+
+# Proteksi backup SQLite pasca-update
+if [ -f "$OUTSOURCE_DIR/data/outsource_track.db" ]; then
+  echo ">> Membuat backup database lokal VPS pasca-update..."
+  cp "$OUTSOURCE_DIR/data/outsource_track.db" "$OUTSOURCE_DIR/data/outsource_track.db.bak_post_$(date +%Y%m%d_%H%M%S)"
+fi
 
 echo ">> Status PM2 terkini:"
 sudo pm2 list
