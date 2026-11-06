@@ -60,7 +60,7 @@ sudo pm2 list
 `;
 
 const b64 = Buffer.from(remoteBashScript).toString('base64');
-const cmd = `ssh ${portFlag} -o StrictHostKeyChecking=no ${sshTarget} "echo '${b64}' | base64 -d | bash"`.replace(/\s+/g, ' ').trim();
+const cmd = `ssh -A ${portFlag} -o StrictHostKeyChecking=no ${sshTarget} "echo '${b64}' | base64 -d | bash"`.replace(/\s+/g, ' ').trim();
 
 try {
   execSync(cmd, { stdio: 'inherit' });
