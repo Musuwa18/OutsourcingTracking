@@ -52,8 +52,9 @@ import {
   autoClosePreviousDayAttendance,
   getHelpDeskSettings,
   saveHelpDeskSettings,
+  getInstitutionSettings,
+  saveInstitutionSettings,
 } from './server/db.js';
-
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -726,6 +727,29 @@ app.post('/api/settings/helpdesk', (req, res) => {
     res.json({ success: true, settings: saved, message: 'Pengaturan pusat bantuan berhasil disimpan.' });
   } catch (err) {
     res.status(500).json({ error: 'Gagal menyimpan pengaturan pusat bantuan.' });
+  }
+});
+
+// 11d. Institution Identity & Kop Surat Settings
+app.get('/api/settings/institution', (req, res) => {
+  try {
+    const settings = getInstitutionSettings();
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal mengambil pengaturan instansi.' });
+  }
+});
+
+app.post('/api/settings/institution', (req, res) => {
+  try {
+    const payload = req.body.settings || req.body;
+    if (!payload) {
+      return res.status(400).json({ error: 'Data pengaturan instansi tidak valid.' });
+    }
+    const saved = saveInstitutionSettings(payload);
+    res.json({ success: true, settings: saved, message: 'Pengaturan identitas instansi & kop surat berhasil disimpan.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menyimpan pengaturan instansi.' });
   }
 });
 

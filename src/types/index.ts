@@ -517,5 +517,38 @@ export const DEFAULT_HELPDESK_CONFIG: HelpDeskConfig = {
   guideCamera: 'Berikan izin kamera pada browser saat diminta. Jika layar hitam, muat ulang (refresh) halaman.',
   guideAccount: 'Hubungi admin TI atau Subbag Kepegawaian Disdik untuk verifikasi & reset akun dinas Anda.',
 };
+export interface InstitutionSettings {
+  namaPemda: string;
+  namaSkpd: string;
+  singkatanSkpd: string;
+  alamatLengkap: string;
+  website: string;
+  email: string;
+  telepon: string;
+  kotaSurat: string;
+  nomorSuratPrefix: string;
+  logoKiriUrl: string;
+  logoKananUrl: string;
+  pejabatNama: string;
+  pejabatNip: string;
+  pejabatJabatan: string;
+}
+
+export const DEFAULT_INSTITUTION_SETTINGS: InstitutionSettings = {
+  namaPemda: 'PEMERINTAH KABUPATEN HULU SUNGAI TENGAH',
+  namaSkpd: 'DINAS PENDIDIKAN',
+  singkatanSkpd: 'DISDIK',
+  alamatLengkap: 'Jalan H. Sibli Imansyah No. 1 RT 06 RW 02 Barabai, Kabupaten Hulu Sungai Tengah, Kalimantan Selatan 71315',
+  website: 'disdik.barabaikab.go.id',
+  email: 'disdik@barabaikab.go.id',
+  telepon: '(0517) 41234',
+  kotaSurat: 'Barabai',
+  nomorSuratPrefix: '800.1 / OTP-DISDIK',
+  logoKiriUrl: '/logos/Lambang_Kabupaten_Hulu_Sungai_Tengah.png',
+  logoKananUrl: '/logos/logo-disdik2026.png',
+  pejabatNama: 'Salihin, S.Pd.SD',
+  pejabatNip: '19780502 200604 1 017',
+  pejabatJabatan: 'Sekretaris Dinas Pendidikan',
+};
 
 

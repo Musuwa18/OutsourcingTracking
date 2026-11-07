@@ -2520,5 +2520,49 @@ export function saveHelpDeskSettings(settings) {
   return settings;
 }
 
+export const DEFAULT_INSTITUTION_SETTINGS = {
+  namaPemda: 'PEMERINTAH KABUPATEN HULU SUNGAI TENGAH',
+  namaSkpd: 'DINAS PENDIDIKAN',
+  singkatanSkpd: 'DISDIK',
+  alamatLengkap: 'Jalan H. Sibli Imansyah No. 1 RT 06 RW 02 Barabai, Kabupaten Hulu Sungai Tengah, Kalimantan Selatan 71315',
+  website: 'disdik.barabaikab.go.id',
+  email: 'disdik@barabaikab.go.id',
+  telepon: '(0517) 41234',
+  kotaSurat: 'Barabai',
+  nomorSuratPrefix: '800.1 / OTP-DISDIK',
+  logoKiriUrl: '/logos/Lambang_Kabupaten_Hulu_Sungai_Tengah.png',
+  logoKananUrl: '/logos/logo-disdik2026.png',
+  pejabatNama: 'Salihin, S.Pd.SD',
+  pejabatNip: '19780502 200604 1 017',
+  pejabatJabatan: 'Sekretaris Dinas Pendidikan',
+};
+
+export function getInstitutionSettings() {
+  if (isNodeSqlite && dbEngine) {
+    try {
+      const row = dbEngine.prepare("SELECT value FROM system_settings WHERE key = 'institution_settings'").get();
+      if (row && row.value) {
+        return JSON.parse(row.value);
+      }
+    } catch (e) {
+      console.warn('getInstitutionSettings error:', e);
+    }
+  }
+  return DEFAULT_INSTITUTION_SETTINGS;
+}
+
+export function saveInstitutionSettings(settings) {
+  const jsonStr = JSON.stringify(settings);
+  const now = new Date().toISOString();
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      INSERT INTO system_settings (key, value, updated_at)
+      VALUES ('institution_settings', ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(jsonStr, now);
+  }
+  return settings;
+}
+
 // Jalankan inisialisasi awal
 seedDatabaseIfEmpty();

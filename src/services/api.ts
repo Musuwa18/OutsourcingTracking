@@ -3,7 +3,7 @@
  * Menghubungkan frontend React ke backend Express REST API di Port 3010
  * Dinas Pendidikan Kabupaten Hulu Sungai Tengah
  */
-import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig } from '../types';
+import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings } from '../types';
 
 const API_BASE = '/api';
 
@@ -626,4 +626,30 @@ export async function apiSaveHelpDeskSettings(settings: HelpDeskConfig): Promise
     throw new Error(json.error || 'Gagal menyimpan pengaturan pusat bantuan.');
   }
   return json.settings;
+}
+
+// 17. INSTITUTION IDENTITY & KOP SURAT CONFIGURATION
+export async function apiGetInstitutionSettings(): Promise<InstitutionSettings | null> {
+  try {
+    const res = await fetch(`${API_BASE}/settings/institution`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.settings || json;
+  } catch (err: unknown) {
+    console.warn('apiGetInstitutionSettings warning:', err);
+    return null;
+  }
+}
+
+export async function apiSaveInstitutionSettings(settings: InstitutionSettings): Promise<InstitutionSettings> {
+  const res = await fetch(`${API_BASE}/settings/institution`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ settings }),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || 'Gagal menyimpan pengaturan identitas instansi.');
+  }
+  return json.settings || settings;
 }

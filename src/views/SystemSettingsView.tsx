@@ -57,6 +57,8 @@ import {
   WakarSchedule,
   HelpDeskConfig,
   DEFAULT_HELPDESK_CONFIG,
+  InstitutionSettings,
+  DEFAULT_INSTITUTION_SETTINGS,
 } from '../types';
 import { VisualMapPicker } from '../components/VisualMapPicker';
 import {
@@ -75,8 +77,9 @@ import {
   apiApproveSupervisorChange,
   apiRejectSupervisorChange,
   apiSaveHelpDeskSettings,
+  apiSaveInstitutionSettings,
 } from '../services/api';
-export type SettingsTab = 'divisions' | 'vendors' | 'users' | 'geofence' | 'schedule' | 'rbac' | 'helpdesk';
+export type SettingsTab = 'instansi' | 'divisions' | 'vendors' | 'users' | 'geofence' | 'schedule' | 'rbac' | 'helpdesk';
 
 interface SystemSettingsViewProps {
   locations: OfficeLocation[];
@@ -103,6 +106,8 @@ interface SystemSettingsViewProps {
   onUpdateAttendanceSettings?: (settings: AttendanceGlobalSettings) => void;
   helpDeskConfig?: HelpDeskConfig;
   onUpdateHelpDeskConfig?: (config: HelpDeskConfig) => void;
+  institutionSettings?: InstitutionSettings;
+  onUpdateInstitutionSettings?: (settings: InstitutionSettings) => void;
   onConfigureLocation?: (staff: StaffProfile) => void;
   activeSubTab?: SettingsTab;
   onSubTabChange?: (subTab: SettingsTab) => void;
@@ -134,6 +139,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   onUpdateAttendanceSettings,
   helpDeskConfig,
   onUpdateHelpDeskConfig,
+  institutionSettings,
+  onUpdateInstitutionSettings,
   onConfigureLocation,
   activeSubTab,
   onSubTabChange,
@@ -202,6 +209,35 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         },
       },
     }));
+  };
+
+  // State Form Identitas Instansi & Kop Surat
+  const [instansiConfig, setInstansiConfig] = useState<InstitutionSettings>(() => {
+    return institutionSettings || DEFAULT_INSTITUTION_SETTINGS;
+  });
+  const [isSavingInstansi, setIsSavingInstansi] = useState(false);
+
+  React.useEffect(() => {
+    if (institutionSettings) {
+      setInstansiConfig(institutionSettings);
+    }
+  }, [institutionSettings]);
+
+  const handleSaveInstansi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingInstansi(true);
+    try {
+      const saved = await apiSaveInstitutionSettings(instansiConfig);
+      if (onUpdateInstitutionSettings) {
+        onUpdateInstitutionSettings(saved);
+      }
+      onShowToast('Pengaturan identitas instansi & kop surat resmi berhasil disimpan ke database!', 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal menyimpan pengaturan instansi.';
+      onShowToast(msg, 'warning');
+    } finally {
+      setIsSavingInstansi(false);
+    }
   };
 
   const handleDayChange = (dayKey: string, field: keyof DayWorkSchedule, val: any) => {
@@ -1036,6 +1072,19 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         <div className="flex md:hidden flex-wrap items-center gap-1.5 p-1 glass-pill rounded-xl text-xs font-semibold overflow-x-auto">
           <button
             type="button"
+            onClick={() => setActiveTab('instansi')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'instansi'
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            <span>Identitas & Kop Surat</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('divisions')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'divisions'
@@ -1127,6 +1176,377 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         </div>
       </div>
       {/* ========================================================================= */}
+      {/* ========================================================================= */}
+      {/* TAB 0: IDENTITAS INSTANSI & KOP SURAT RESMI (REPLIKASI DINAS / SKPD LAIN) */}
+      {/* ========================================================================= */}
+      {activeTab === 'instansi' && (
+        <form onSubmit={handleSaveInstansi} className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>Pengaturan Identitas Instansi & Format Kop Dokumen Resmi</span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Atur nama Pemda, instansi SKPD (Dinas Pendidikan, Dinas Kesehatan, RSUD, dll.), alamat naskah dinas, logo, dan penandatangan cetak untuk replikasi sistem.
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSavingInstansi}
+              className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSavingInstansi ? 'Menyimpan...' : 'Simpan Identitas Instansi'}</span>
+            </button>
+          </div>
+
+          {/* Form Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* Box 1: Identitas Lembaga & SKPD */}
+            <div className="p-5 glass-card space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+                <Building2 className="w-4 h-4 text-indigo-500" />
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  1. Identitas Lembaga & Satuan Kerja (SKPD)
+                </h3>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama Pemerintah Daerah / Kota
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={instansiConfig.namaPemda}
+                  onChange={(e) => setInstansiConfig({ ...instansiConfig, namaPemda: e.target.value })}
+                  placeholder="Contoh: PEMERINTAH KABUPATEN HULU SUNGAI TENGAH"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama Satuan Kerja / Dinas / Badan (SKPD)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={instansiConfig.namaSkpd}
+                  onChange={(e) => setInstansiConfig({ ...instansiConfig, namaSkpd: e.target.value })}
+                  placeholder="Contoh: DINAS PENDIDIKAN / DINAS KESEHATAN"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Ubah bagian ini jika aplikasi direplikasi untuk dinas/instansi lain.
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Singkatan Instansi
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={instansiConfig.singkatanSkpd}
+                    onChange={(e) => setInstansiConfig({ ...instansiConfig, singkatanSkpd: e.target.value })}
+                    placeholder="DISDIK / DINKES"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Prefix Nomor Naskah Dinas
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={instansiConfig.nomorSuratPrefix}
+                    onChange={(e) => setInstansiConfig({ ...instansiConfig, nomorSuratPrefix: e.target.value })}
+                    placeholder="800.1 / OTP-DISDIK"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Box 2: Alamat Kantor & Saluran Kontak Resmi */}
+            <div className="p-5 glass-card space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+                <MapPin className="w-4 h-4 text-emerald-500" />
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  2. Alamat Domisili & Saluran Kontak Resmi
+                </h3>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Alamat Lengkap Kantor Kedinasan
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={instansiConfig.alamatLengkap}
+                  onChange={(e) => setInstansiConfig({ ...instansiConfig, alamatLengkap: e.target.value })}
+                  placeholder="Alamat kantor lengkap, jalan, nomor RT/RW, kecamatan, kabupaten, dan kode pos..."
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white leading-relaxed"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Kota Tempat Naskah Dinas
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={instansiConfig.kotaSurat}
+                    onChange={(e) => setInstansiConfig({ ...instansiConfig, kotaSurat: e.target.value })}
+                    placeholder="Contoh: Barabai"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Nomor Telepon Kantor
+                  </label>
+                  <input
+                    type="text"
+                    value={instansiConfig.telepon}
+                    onChange={(e) => setInstansiConfig({ ...instansiConfig, telepon: e.target.value })}
+                    placeholder="(0517) 41234"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Pos-el / Surel Resmi (Email)
+                  </label>
+                  <input
+                    type="email"
+                    value={instansiConfig.email}
+                    onChange={(e) => setInstansiConfig({ ...instansiConfig, email: e.target.value })}
+                    placeholder="disdik@barabaikab.go.id"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Laman / Website Resmi
+                  </label>
+                  <input
+                    type="text"
+                    value={instansiConfig.website}
+                    onChange={(e) => setInstansiConfig({ ...instansiConfig, website: e.target.value })}
+                    placeholder="disdik.barabaikab.go.id"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Box 3: Pejabat Penandatangan Resmi (Mengetahui) */}
+            <div className="p-5 glass-card space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+                <UserCheck className="w-4 h-4 text-purple-500" />
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  3. Pejabat Penandatangan Dokumen Cetak (Mengetahui)
+                </h3>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Jabatan Penandatangan
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={instansiConfig.pejabatJabatan}
+                  onChange={(e) => setInstansiConfig({ ...instansiConfig, pejabatJabatan: e.target.value })}
+                  placeholder="Contoh: Sekretaris Dinas Pendidikan"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama Lengkap & Gelar Pejabat
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={instansiConfig.pejabatNama}
+                  onChange={(e) => setInstansiConfig({ ...instansiConfig, pejabatNama: e.target.value })}
+                  placeholder="Contoh: Salihin, S.Pd.SD"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nomor Induk Pegawai (NIP)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={instansiConfig.pejabatNip}
+                  onChange={(e) => setInstansiConfig({ ...instansiConfig, pejabatNip: e.target.value })}
+                  placeholder="Contoh: 19780502 200604 1 017"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Box 4: Berkas Logo Resmi Kop Surat */}
+            <div className="p-5 glass-card space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+                <Layers className="w-4 h-4 text-amber-500" />
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  4. Berkas Logo Resmi Kop Surat
+                </h3>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Logo Kiri (Lambang Daerah Pemkab / Pemkot)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={instansiConfig.logoKiriUrl}
+                    onChange={(e) => setInstansiConfig({ ...instansiConfig, logoKiriUrl: e.target.value })}
+                    placeholder="/logos/Lambang_Kabupaten_Hulu_Sungai_Tengah.png"
+                    className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                  <div className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 p-1 flex items-center justify-center shrink-0 bg-white">
+                    <img src={instansiConfig.logoKiriUrl} alt="Logo Kiri" className="w-full h-full object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Logo Kanan (Logo SKPD / Tut Wuri Handayani / Bakti Husada)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={instansiConfig.logoKananUrl}
+                    onChange={(e) => setInstansiConfig({ ...instansiConfig, logoKananUrl: e.target.value })}
+                    placeholder="/logos/logo-disdik2026.png"
+                    className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                  <div className="w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 p-1 flex items-center justify-center shrink-0 bg-white">
+                    <img src={instansiConfig.logoKananUrl} alt="Logo Kanan" className="w-full h-full object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-wrap gap-2 text-[11px]">
+                <span className="text-slate-500 self-center">Preset Logo Kanan:</span>
+                <button
+                  type="button"
+                  onClick={() => setInstansiConfig({ ...instansiConfig, logoKananUrl: '/logos/logo-disdik2026.png' })}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-indigo-500 cursor-pointer font-medium"
+                >
+                  Logo Disdik (Tut Wuri)
+                </button>
+              </div>
+            </div>
+
+            {/* Box 5: PRATINJAU LANGSUNG KOP SURAT RESMI (Full Width) */}
+            <div className="lg:col-span-2 p-6 glass-card space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Pratinjau Langsung (Live Preview) Kop Surat & Format Dokumen Cetak
+                  </h3>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-semibold">
+                  Tersinkronisasi Otomatis
+                </span>
+              </div>
+
+              {/* Render Lembar Putih Mirip Kertas Cetak */}
+              <div className="p-6 sm:p-8 bg-white text-slate-900 rounded-2xl border border-slate-300 shadow-sm space-y-4">
+                <div className="border-b-4 border-double border-slate-900 pb-3 text-center relative">
+                  <div className="flex items-center justify-between px-2 sm:px-4">
+                    <div className="w-16 h-16 sm:w-18 sm:h-18 flex items-center justify-center shrink-0">
+                      <img
+                        src={instansiConfig.logoKiriUrl}
+                        alt="Logo Kiri"
+                        className="w-full h-full object-contain max-h-18"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                      />
+                    </div>
+                    <div className="flex-1 px-3 sm:px-6 text-center">
+                      <h3 className="text-xs sm:text-sm font-extrabold tracking-wide uppercase text-slate-900 leading-tight">
+                        {instansiConfig.namaPemda}
+                      </h3>
+                      <h2 className="text-sm sm:text-lg font-black tracking-wider uppercase text-slate-950 leading-snug">
+                        {instansiConfig.namaSkpd}
+                      </h2>
+                      <p className="text-[10px] sm:text-[11px] text-slate-700 leading-tight mt-0.5 font-medium">
+                        {instansiConfig.alamatLengkap}
+                      </p>
+                      <p className="text-[9px] sm:text-[10px] text-slate-600 leading-tight">
+                        Laman: <u>{instansiConfig.website}</u> · Pos-el: <u>{instansiConfig.email}</u> · Telp: {instansiConfig.telepon}
+                      </p>
+                    </div>
+                    <div className="w-16 h-16 sm:w-18 sm:h-18 flex items-center justify-center shrink-0">
+                      <img
+                        src={instansiConfig.logoKananUrl}
+                        alt="Logo Kanan"
+                        className="w-full h-full object-contain max-h-18"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dummy Signature Preview */}
+                <div className="pt-2 flex justify-between items-end text-[10px] text-slate-700 px-4">
+                  <div className="text-center space-y-8">
+                    <div>
+                      <p>Pejabat Penilai,</p>
+                      <p className="font-bold">Atasan Langsung / Kasubag</p>
+                    </div>
+                    <div>
+                      <p className="font-bold underline text-slate-900">Nama Atasan Langsung</p>
+                      <p className="font-mono text-[9px] text-slate-500">NIP: 19821218 XXXXXX X XXX</p>
+                    </div>
+                  </div>
+
+                  <div className="text-center space-y-8">
+                    <div>
+                      <p>{instansiConfig.kotaSurat}, [Tanggal Cetak]</p>
+                      <p className="font-bold">{instansiConfig.pejabatJabatan}</p>
+                    </div>
+                    <div>
+                      <p className="font-bold underline text-slate-900">{instansiConfig.pejabatNama}</p>
+                      <p className="font-mono text-[9px] text-slate-500">NIP: {instansiConfig.pejabatNip}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </form>
+      )}
+
       {/* TAB 1: MASTER BIDANG & SUBBAGIAN (DIVISIONS CRUD)                         */}
       {/* ========================================================================= */}
       {activeTab === 'divisions' && (

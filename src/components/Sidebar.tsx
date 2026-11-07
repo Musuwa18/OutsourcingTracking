@@ -48,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }, [currentTab]);
 
   const settingsSubNavItems = [
+    { id: 'instansi', label: 'Identitas & Kop Surat', icon: Building2 },
     { id: 'users', label: 'Staf & Atasan', icon: Users },
     { id: 'geofence', label: 'Master Geofencing', icon: MapPin },
     { id: 'schedule', label: 'Jadwal & Aturan Kerja', icon: Clock },

@@ -32,6 +32,7 @@ interface HeaderProps {
   onOpenCloudSync?: () => void;
   onOpenSecurityModal?: () => void;
   onOpenAiChat?: () => void;
+  institutionName?: string;
 }
 export const Header: React.FC<HeaderProps> = ({
   currentRole,
@@ -51,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSecurityModal,
   onOpenAiChat,
   helpDeskConfig,
+  institutionName,
 }) => {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
@@ -115,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden sm:inline">OutsourceTrack & KPI Pro</span>
             </span>
             <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight hidden sm:inline truncate font-medium">
-              Dinas Pendidikan Kab. Hulu Sungai Tengah
+              {institutionName || 'Dinas Pendidikan Kab. Hulu Sungai Tengah'}
             </span>
           </div>
         </div>

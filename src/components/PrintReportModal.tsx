@@ -19,8 +19,9 @@ import {
   WeeklyEvaluation,
   Division,
   AuthUser,
+  InstitutionSettings,
+  DEFAULT_INSTITUTION_SETTINGS,
 } from '../types';
-
 interface PrintReportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -32,6 +33,7 @@ interface PrintReportModalProps {
   divisions?: Division[];
   currentDivisionId?: string;
   currentUser?: AuthUser | null;
+  institutionSettings?: InstitutionSettings;
 }
 
 export const PrintReportModal: React.FC<PrintReportModalProps> = ({
@@ -45,6 +47,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   divisions = [],
   currentDivisionId,
   currentUser,
+  institutionSettings,
 }) => {
   if (!isOpen) return null;
 
@@ -62,6 +65,8 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   });
 
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
+  const inst = institutionSettings || DEFAULT_INSTITUTION_SETTINGS;
+
   const selectedStaff = staffMap.get(selectedStaffId) || staffList[0];
 
   // Hitung statistik rekap kehadiran
@@ -190,29 +195,29 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
             <div className="flex items-center justify-between px-2 sm:px-4">
               <div className="w-18 h-18 sm:w-20 sm:h-20 flex items-center justify-center shrink-0">
                 <img
-                  src="/logos/Lambang_Kabupaten_Hulu_Sungai_Tengah.png"
-                  alt="Lambang Kabupaten Hulu Sungai Tengah"
+                  src={inst.logoKiriUrl || '/logos/Lambang_Kabupaten_Hulu_Sungai_Tengah.png'}
+                  alt="Lambang Daerah"
                   className="w-full h-full object-contain max-h-20"
                 />
               </div>
               <div className="flex-1 px-3 sm:px-6 text-center">
                 <h3 className="text-sm sm:text-base font-extrabold tracking-wide uppercase text-slate-900 leading-tight">
-                  PEMERINTAH KABUPATEN HULU SUNGAI TENGAH
+                  {inst.namaPemda}
                 </h3>
                 <h2 className="text-base sm:text-xl font-black tracking-wider uppercase text-slate-950 leading-snug">
-                  DINAS PENDIDIKAN
+                  {inst.namaSkpd}
                 </h2>
                 <p className="text-[11px] sm:text-xs text-slate-700 leading-tight mt-0.5 font-medium">
-                  Jalan H. Sibli Imansyah No. 1 RT 06 RW 02 Barabai, Kabupaten Hulu Sungai Tengah, Kalimantan Selatan 71315
+                  {inst.alamatLengkap}
                 </p>
                 <p className="text-[10px] text-slate-600 leading-tight">
-                  Laman: <u>disdik.barabaikab.go.id</u> · Pos-el: <u>disdik@barabaikab.go.id</u> · Telp: (0517) 41234
+                  Laman: <u>{inst.website}</u> · Pos-el: <u>{inst.email}</u> · Telp: {inst.telepon}
                 </p>
               </div>
               <div className="w-18 h-18 sm:w-20 sm:h-20 flex items-center justify-center shrink-0">
                 <img
-                  src="/logos/logo-disdik2026.png"
-                  alt="Logo Dinas Pendidikan Kab. HST"
+                  src={inst.logoKananUrl || '/logos/logo-disdik2026.png'}
+                  alt="Logo SKPD"
                   className="w-full h-full object-contain max-h-20"
                 />
               </div>
@@ -227,7 +232,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                   REKAPITULASI BULANAN KEHADIRAN & EVALUASI KINERJA TENAGA ALIH DAYA
                 </h4>
                 <p className="text-xs text-slate-600 font-mono">
-                  Nomor: 800.1 / OTP-DISDIK / X / 2026 · Periode: Oktober 2026
+                  Nomor: {inst.nomorSuratPrefix} / X / 2026 · Periode: Oktober 2026
                 </p>
               </div>
 
@@ -552,14 +557,14 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
             {/* Mengetahui HR Governance / Sekretaris Dinas */}
             <div className="space-y-14">
               <div>
-                <p className="text-slate-600">Barabai, {today}</p>
-                <p className="font-bold text-slate-800">Sekretaris Dinas Pendidikan</p>
+                <p className="text-slate-600">{inst.kotaSurat || 'Barabai'}, {today}</p>
+                <p className="font-bold text-slate-800">{inst.pejabatJabatan || 'Sekretaris Dinas Pendidikan'}</p>
               </div>
               <div>
                 <p className="font-extrabold underline text-slate-950">
-                  Salihin, S.Pd.SD
+                  {inst.pejabatNama || 'Salihin, S.Pd.SD'}
                 </p>
-                <p className="text-[10px] text-slate-500 font-mono">NIP: 19780502 200604 1 017</p>
+                <p className="text-[10px] text-slate-500 font-mono">NIP: {inst.pejabatNip || '19780502 200604 1 017'}</p>
               </div>
             </div>
           </div>

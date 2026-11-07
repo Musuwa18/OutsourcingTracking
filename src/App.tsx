@@ -58,7 +58,7 @@ import { NotificationDrawer } from './components/NotificationDrawer';
 import { AiAnalyticsChatModal } from './components/AiAnalyticsChatModal';
 import { CustomLocationModal } from './components/CustomLocationModal';
 import { AuthView } from './views/AuthView';
-import { AuthUser, Division, Vendor, FieldCheckinRecord, HelpDeskConfig, DEFAULT_HELPDESK_CONFIG } from './types';
+import { AuthUser, Division, Vendor, FieldCheckinRecord, HelpDeskConfig, DEFAULT_HELPDESK_CONFIG, InstitutionSettings, DEFAULT_INSTITUTION_SETTINGS } from './types';
 import {
   apiFetchDivisions,
   apiFetchVendors,
@@ -77,6 +77,8 @@ import {
   apiSubmitFieldCheckin,
   apiGetHelpDeskSettings,
   apiUpdateStaffSupervisor,
+  apiGetInstitutionSettings,
+  apiSaveInstitutionSettings,
 } from './services/api';
 import { getTodayDateStr, getCurrentWitaTimeStr } from './utils/date';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
@@ -358,6 +360,14 @@ export default function App() {
     apiGetHelpDeskSettings().then((cfg) => {
       if (cfg) setHelpDeskConfig(cfg);
     });
+
+    // 6. Sinkronisasi Pengaturan Identitas Instansi & Kop Dokumen dari SQLite
+    apiGetInstitutionSettings().then((cfg) => {
+      if (cfg) {
+        setInstitutionSettings(cfg);
+        localStorage.setItem('ot_institution_settings', JSON.stringify(cfg));
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -489,6 +499,15 @@ export default function App() {
   });
   const [fieldCheckins, setFieldCheckins] = useState<FieldCheckinRecord[]>([]);
   const [helpDeskConfig, setHelpDeskConfig] = useState<HelpDeskConfig>(DEFAULT_HELPDESK_CONFIG);
+  const [institutionSettings, setInstitutionSettings] = useState<InstitutionSettings>(() => {
+    const saved = localStorage.getItem('ot_institution_settings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return DEFAULT_INSTITUTION_SETTINGS;
+  });
   const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(() => {
     const saved = localStorage.getItem('ot_audit_logs');
     if (saved) {
@@ -802,6 +821,12 @@ export default function App() {
     setSecurityConfig(newSec);
     localStorage.setItem('ot_security_config', JSON.stringify(newSec));
     addAuditLog('Pembaruan Kebijakan Keamanan', `Konfigurasi SSO/2FA/Biometrik diperbarui.`, 'Pengaturan');
+  };
+
+  const handleUpdateInstitutionSettings = (newCfg: InstitutionSettings) => {
+    setInstitutionSettings(newCfg);
+    localStorage.setItem('ot_institution_settings', JSON.stringify(newCfg));
+    addAuditLog('Pembaruan Identitas Instansi', `Kop surat & profil instansi (${newCfg.namaSkpd}) diperbarui.`, 'Pengaturan');
   };
 
   // Auto-sync Core Data to LocalStorage
@@ -1552,6 +1577,7 @@ export default function App() {
       <Header
         currentRole={currentRole}
         currentUser={currentUser}
+        institutionName={`${institutionSettings.namaSkpd} · ${institutionSettings.kotaSurat || 'Kab. HST'}`}
         onLogout={handleLogout}
         onRoleChange={(role) => setCurrentRole(role)}
         darkMode={darkMode}
@@ -1786,6 +1812,8 @@ export default function App() {
                   onConfigureLocation={(staff) => setCustomLocationStaff(staff)}
                   activeSubTab={settingsSubTab}
                   onSubTabChange={(sub) => setSettingsSubTab(sub)}
+                  institutionSettings={institutionSettings}
+                  onUpdateInstitutionSettings={handleUpdateInstitutionSettings}
                   onShowToast={showToast}
                 />
               )}
@@ -1825,6 +1853,7 @@ export default function App() {
         divisions={divisions}
         currentDivisionId={currentUser?.divisionId}
         currentUser={currentUser}
+        institutionSettings={institutionSettings}
       />
 
       {/* Google Drive Cloud Sync Modal */}
