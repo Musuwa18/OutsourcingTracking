@@ -1824,6 +1824,7 @@ export default function App() {
         weeklyEvaluations={weeklyEvaluations}
         divisions={divisions}
         currentDivisionId={currentUser?.divisionId}
+        currentUser={currentUser}
       />
 
       {/* Google Drive Cloud Sync Modal */}

@@ -18,6 +18,7 @@ import {
   DailyWorkReport,
   WeeklyEvaluation,
   Division,
+  AuthUser,
 } from '../types';
 
 interface PrintReportModalProps {
@@ -30,6 +31,7 @@ interface PrintReportModalProps {
   weeklyEvaluations?: WeeklyEvaluation[];
   divisions?: Division[];
   currentDivisionId?: string;
+  currentUser?: AuthUser | null;
 }
 
 export const PrintReportModal: React.FC<PrintReportModalProps> = ({
@@ -42,6 +44,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   weeklyEvaluations = [],
   divisions = [],
   currentDivisionId,
+  currentUser,
 }) => {
   if (!isOpen) return null;
 
@@ -72,6 +75,33 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   const staffAttendance = attendanceRecords.filter((r) => r.staffId === selectedStaff?.id);
   const staffMonthlyAgg = monthlyAggregates.find((m) => m.staffId === selectedStaff?.id);
   const staffWeeklyEvals = weeklyEvaluations.filter((e) => e.staffId === selectedStaff?.id);
+
+  // Hitung rata-rata skor KPI tim dinamis
+  const averageTeamScore = staffList.length > 0
+    ? (
+        staffList.reduce((acc, st) => {
+          const agg = monthlyAggregates.find((m) => m.staffId === st.id);
+          return acc + (agg?.averageScore ? agg.averageScore : 1.00);
+        }, 0) / staffList.length
+      ).toFixed(2)
+    : '1.00';
+
+  // Indikator rapor individu staf terpilih
+  const latestEval = staffWeeklyEvals.length > 0 ? staffWeeklyEvals[staffWeeklyEvals.length - 1] : null;
+  const pQuality = latestEval ? latestEval.ratings.qualityOfWork.toFixed(2) : (staffMonthlyAgg?.pillarScores?.quality ? staffMonthlyAgg.pillarScores.quality.toFixed(2) : '1.00');
+  const pQuantity = latestEval ? latestEval.ratings.quantityOfWork.toFixed(2) : (staffMonthlyAgg?.pillarScores?.quality ? staffMonthlyAgg.pillarScores.quality.toFixed(2) : '1.00');
+  const pTime = latestEval ? latestEval.ratings.timeManagement.toFixed(2) : (staffMonthlyAgg?.pillarScores?.quality ? staffMonthlyAgg.pillarScores.quality.toFixed(2) : '1.00');
+
+  const pInitiative = latestEval ? latestEval.ratings.initiative.toFixed(2) : (staffMonthlyAgg?.pillarScores?.professionalism ? staffMonthlyAgg.pillarScores.professionalism.toFixed(2) : '1.00');
+  const pAccountability = latestEval ? latestEval.ratings.accountability.toFixed(2) : (staffMonthlyAgg?.pillarScores?.professionalism ? staffMonthlyAgg.pillarScores.professionalism.toFixed(2) : '1.00');
+  const pPunctuality = latestEval ? latestEval.ratings.punctuality.toFixed(2) : (staffMonthlyAgg?.pillarScores?.professionalism ? staffMonthlyAgg.pillarScores.professionalism.toFixed(2) : '1.00');
+
+  const pTeamwork = latestEval ? latestEval.ratings.teamwork.toFixed(2) : (staffMonthlyAgg?.pillarScores?.interpersonal ? staffMonthlyAgg.pillarScores.interpersonal.toFixed(2) : '1.00');
+  const pCommunication = latestEval ? latestEval.ratings.communication.toFixed(2) : (staffMonthlyAgg?.pillarScores?.interpersonal ? staffMonthlyAgg.pillarScores.interpersonal.toFixed(2) : '1.00');
+  const pCustomer = latestEval ? latestEval.ratings.customerOrientation.toFixed(2) : (staffMonthlyAgg?.pillarScores?.interpersonal ? staffMonthlyAgg.pillarScores.interpersonal.toFixed(2) : '1.00');
+
+  const pAdaptability = latestEval ? latestEval.ratings.adaptability.toFixed(2) : (staffMonthlyAgg?.pillarScores?.adaptability ? staffMonthlyAgg.pillarScores.adaptability.toFixed(2) : '1.00');
+  const pProblemSolving = latestEval ? latestEval.ratings.problemSolving.toFixed(2) : (staffMonthlyAgg?.pillarScores?.adaptability ? staffMonthlyAgg.pillarScores.adaptability.toFixed(2) : '1.00');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-xs overflow-y-auto">
@@ -157,26 +187,34 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           
           {/* ================= KOP SURAT RESMI KEDINASAN ================= */}
           <div className="border-b-4 border-double border-slate-900 pb-3 text-center relative">
-            <div className="flex items-center justify-between px-4">
-              <div className="w-16 h-16 flex items-center justify-center border-2 border-slate-800 rounded-xl font-bold text-xs uppercase p-1">
-                LOGO DISDIK
+            <div className="flex items-center justify-between px-2 sm:px-4">
+              <div className="w-18 h-18 sm:w-20 sm:h-20 flex items-center justify-center shrink-0">
+                <img
+                  src="/logos/Lambang_Kabupaten_Hulu_Sungai_Tengah.png"
+                  alt="Lambang Kabupaten Hulu Sungai Tengah"
+                  className="w-full h-full object-contain max-h-20"
+                />
               </div>
-              <div className="flex-1 px-4 text-center">
+              <div className="flex-1 px-3 sm:px-6 text-center">
                 <h3 className="text-sm sm:text-base font-extrabold tracking-wide uppercase text-slate-900 leading-tight">
                   PEMERINTAH KABUPATEN HULU SUNGAI TENGAH
                 </h3>
                 <h2 className="text-base sm:text-xl font-black tracking-wider uppercase text-slate-950 leading-snug">
                   DINAS PENDIDIKAN
                 </h2>
-                <p className="text-[11px] text-slate-700 leading-tight mt-0.5 font-medium">
-                  Jalan Perintis Kemerdekaan No. 10, Barabai, Kalimantan Selatan 71315
+                <p className="text-[11px] sm:text-xs text-slate-700 leading-tight mt-0.5 font-medium">
+                  Jalan H. Sibli Imansyah No. 1 RT 06 RW 02 Barabai, Kabupaten Hulu Sungai Tengah, Kalimantan Selatan 71315
                 </p>
                 <p className="text-[10px] text-slate-600 leading-tight">
                   Laman: <u>disdik.barabaikab.go.id</u> · Pos-el: <u>disdik@barabaikab.go.id</u> · Telp: (0517) 41234
                 </p>
               </div>
-              <div className="w-16 h-16 flex items-center justify-center border-2 border-slate-800 rounded-xl font-bold text-xs uppercase p-1">
-                KAB. HST
+              <div className="w-18 h-18 sm:w-20 sm:h-20 flex items-center justify-center shrink-0">
+                <img
+                  src="/logos/logo-disdik2026.png"
+                  alt="Logo Dinas Pendidikan Kab. HST"
+                  className="w-full h-full object-contain max-h-20"
+                />
               </div>
             </div>
           </div>
@@ -216,7 +254,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                 <div>
                   <div className="text-slate-500 text-[10px]">Rata-rata Skor KPI Tim</div>
                   <div className="text-base font-bold font-mono text-indigo-700 mt-0.5">
-                    4.42 / 5.00 ★
+                    {averageTeamScore} / 5.00 ★
                   </div>
                 </div>
               </div>
@@ -258,15 +296,15 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                             100%
                           </td>
                           <td className="py-2 px-2.5 border-r border-slate-200 text-center font-mono font-bold text-indigo-700">
-                            {agg?.averageScore ? agg.averageScore.toFixed(2) : '4.40'}
+                            {agg ? agg.averageScore.toFixed(2) : '1.00'}
                           </td>
                           <td className="py-2 px-2.5 border-r border-slate-200 text-center">
                             <span className="font-semibold text-slate-900">
-                              {agg?.predicate || 'Sangat Baik'}
+                              {agg?.predicate || 'Belum Ada Penilaian'}
                             </span>
                           </td>
                           <td className="py-2 px-3 text-[11px] text-slate-700">
-                            {agg?.contractRecommendation || 'Direkomendasikan Perpanjangan Kontrak'}
+                            {agg?.contractRecommendation || 'Belum Ada Evaluasi'}
                           </td>
                         </tr>
                       );
@@ -337,15 +375,15 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Kualitas Hasil Pekerjaan (A1)</span>
-                      <strong>4.60 ★</strong>
+                      <strong>{pQuality} ★</strong>
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Kuantitas / Volume Output (A2)</span>
-                      <strong>4.40 ★</strong>
+                      <strong>{pQuantity} ★</strong>
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Manajemen Waktu & Efisiensi (A3)</span>
-                      <strong>4.50 ★</strong>
+                      <strong>{pTime} ★</strong>
                     </div>
                   </div>
 
@@ -355,15 +393,15 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Inisiatif & Tanggung Jawab (B1)</span>
-                      <strong>4.50 ★</strong>
+                      <strong>{pInitiative} ★</strong>
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Akuntabilitas Kerja (B2)</span>
-                      <strong>4.60 ★</strong>
+                      <strong>{pAccountability} ★</strong>
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Kedisiplinan Kehadiran (B3)</span>
-                      <strong>4.80 ★</strong>
+                      <strong>{pPunctuality} ★</strong>
                     </div>
                   </div>
 
@@ -373,15 +411,15 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Kerjasama Tim / Solidaritas (C1)</span>
-                      <strong>4.70 ★</strong>
+                      <strong>{pTeamwork} ★</strong>
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Komunikasi Efektif (C2)</span>
-                      <strong>4.40 ★</strong>
+                      <strong>{pCommunication} ★</strong>
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Orientasi Pelayanan Tamu (C3)</span>
-                      <strong>4.50 ★</strong>
+                      <strong>{pCustomer} ★</strong>
                     </div>
                   </div>
 
@@ -391,11 +429,11 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Adaptabilitas Kondisi Lapangan (D1)</span>
-                      <strong>4.50 ★</strong>
+                      <strong>{pAdaptability} ★</strong>
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span>Problem Solving Cepat (D2)</span>
-                      <strong>4.30 ★</strong>
+                      <strong>{pProblemSolving} ★</strong>
                     </div>
                   </div>
                 </div>
@@ -404,18 +442,17 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                   <div>
                     <span className="text-slate-600">Rata-rata Skor Kumulatif:</span>{' '}
                     <strong className="text-base text-indigo-700 font-mono">
-                      {staffMonthlyAgg?.averageScore ? staffMonthlyAgg.averageScore.toFixed(2) : '4.52'} / 5.00 ★
+                      {staffMonthlyAgg?.averageScore ? staffMonthlyAgg.averageScore.toFixed(2) : (latestEval ? latestEval.overallWeeklyScore.toFixed(2) : '1.00')} / 5.00 ★
                     </strong>
                   </div>
                   <div>
                     <span className="text-slate-600">Predikat Kinerja:</span>{' '}
                     <strong className="text-slate-900 uppercase">
-                      {staffMonthlyAgg?.predicate || 'SANGAT BAIK'}
+                      {staffMonthlyAgg?.predicate || (latestEval ? 'Telah Dievaluasi' : 'Belum Ada Penilaian')}
                     </strong>
                   </div>
                 </div>
               </div>
-
               {/* Bukti Dokumentasi Tugas Harian */}
               <div className="space-y-2">
                 <h5 className="text-xs font-bold text-slate-900 uppercase">
@@ -455,11 +492,19 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
             <div className="space-y-14">
               <div>
                 <p className="text-slate-600">Pejabat Penilai,</p>
-                <p className="font-bold text-slate-800">Atasan Langsung / Kasubag</p>
+                <p className="font-bold text-slate-800">
+                  {currentUser?.role === 'supervisor'
+                    ? (currentUser.roleTitle || 'Atasan Langsung / Kasubag')
+                    : 'Atasan Langsung / Kasubag'}
+                </p>
               </div>
               <div>
                 <p className="font-extrabold underline text-slate-950">
-                  {selectedStaff?.division?.includes('SD')
+                  {currentUser?.role === 'supervisor'
+                    ? currentUser.name
+                    : selectedStaff?.division?.includes('Renlap') || selectedStaff?.division?.includes('Perencanaan')
+                    ? 'Muhammad Sugeng Wahyudi, A.Md'
+                    : selectedStaff?.division?.includes('SD')
                     ? 'Badaruddin, M.Pd'
                     : selectedStaff?.division?.includes('SMP')
                     ? 'Alamsyah Mappaompo, S.Pd. MM'
@@ -469,12 +514,14 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                     ? 'Bayhaki Novie, S.Pd'
                     : selectedStaff?.division?.includes('Keuangan')
                     ? 'Hj. Rabiatul Adawiyah, SE'
-                    : selectedStaff?.division?.includes('Renlap') || selectedStaff?.division?.includes('Perencanaan')
-                    ? 'Muhammad Sugeng Wahyudi, A.Md'
                     : 'Ahmad Humaidi, S.Pd.'}
                 </p>
                 <p className="text-[10px] text-slate-500 font-mono">
-                  {selectedStaff?.division?.includes('SD')
+                  {currentUser?.role === 'supervisor'
+                    ? (currentUser.nip ? `NIP: ${currentUser.nip}` : '-')
+                    : selectedStaff?.division?.includes('Renlap') || selectedStaff?.division?.includes('Perencanaan')
+                    ? 'NIP: 19821218 200604 1 008'
+                    : selectedStaff?.division?.includes('SD')
                     ? 'NIP: 19800202 200604 1 028'
                     : selectedStaff?.division?.includes('SMP')
                     ? 'NIP: 19780414 200604 1 023'
@@ -484,8 +531,6 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                     ? 'NIP: 19831110 2005011 007'
                     : selectedStaff?.division?.includes('Keuangan')
                     ? 'NIP: 19730609 199503 2 002'
-                    : selectedStaff?.division?.includes('Renlap') || selectedStaff?.division?.includes('Perencanaan')
-                    ? 'NIP: 19821218 200604 1 008'
                     : 'NIP: 19860620 201001 1 008'}
                 </p>
               </div>
@@ -504,7 +549,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
               </span>
             </div>
 
-            {/* Mengetahui HR Governance */}
+            {/* Mengetahui HR Governance / Sekretaris Dinas */}
             <div className="space-y-14">
               <div>
                 <p className="text-slate-600">Barabai, {today}</p>
@@ -512,9 +557,9 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
               </div>
               <div>
                 <p className="font-extrabold underline text-slate-950">
-                  H. M. Arsyad, S.Pd., M.M.
+                  Salihin, S.Pd.SD
                 </p>
-                <p className="text-[10px] text-slate-500 font-mono">NIP: 19740312 199803 1 004</p>
+                <p className="text-[10px] text-slate-500 font-mono">NIP: 19780502 200604 1 017</p>
               </div>
             </div>
           </div>

@@ -631,12 +631,15 @@ export function computeMonthlyAggregates(
       count++;
     });
 
-    // If no evals yet, default to reasonable baseline for realistic demonstration
-    let avg = 4.0;
-    let pillarQuality = 4.2;
-    let pillarProf = 4.1;
-    let pillarInter = 4.0;
-    let pillarAdapt = 3.9;
+    // Default baseline 1.00 (bintang 1) jika staf belum dievaluasi
+    let avg = 1.00;
+    let pillarQuality = 1.00;
+    let pillarProf = 1.00;
+    let pillarInter = 1.00;
+    let pillarAdapt = 1.00;
+
+    let predicate: MonthlyAggregate['predicate'] = 'Belum Ada Penilaian';
+    let contractRecommendation: MonthlyAggregate['contractRecommendation'] = 'Belum Ada Evaluasi';
 
     if (count > 0) {
       const validScores = weekScores.filter((s): s is number => s !== null);
@@ -645,28 +648,23 @@ export function computeMonthlyAggregates(
       pillarProf = Number((totalProf / count).toFixed(2));
       pillarInter = Number((totalInter / count).toFixed(2));
       pillarAdapt = Number((totalAdapt / count).toFixed(2));
+      avg = Number(avg.toFixed(2));
+
+      // Predicate calculation saat sudah memiliki evaluasi mingguan
+      if (avg >= 4.5) {
+        predicate = 'Sangat Baik / Unggul';
+        contractRecommendation = 'Direkomendasikan Perpanjang Penuh';
+      } else if (avg >= 3.5) {
+        predicate = 'Baik / Memenuhi Harapan';
+        contractRecommendation = 'Perpanjang dengan Masa Evaluasi';
+      } else if (avg >= 2.5) {
+        predicate = 'Cukup / Perlu Peningkatan';
+        contractRecommendation = 'Pertimbangan / Pelatihan Khusus';
+      } else {
+        predicate = 'Kurang / Evaluasi Khusus';
+        contractRecommendation = 'Tidak Direkomendasikan Perpanjang';
+      }
     }
-
-    avg = Number(avg.toFixed(2));
-
-    // Predicate calculation
-    let predicate: MonthlyAggregate['predicate'] = 'Cukup / Perlu Peningkatan';
-    let contractRecommendation: MonthlyAggregate['contractRecommendation'] = 'Pertimbangan / Pelatihan Khusus';
-
-    if (avg >= 4.5) {
-      predicate = 'Sangat Baik / Unggul';
-      contractRecommendation = 'Direkomendasikan Perpanjang Penuh';
-    } else if (avg >= 3.5) {
-      predicate = 'Baik / Memenuhi Harapan';
-      contractRecommendation = 'Perpanjang dengan Masa Evaluasi';
-    } else if (avg >= 2.5) {
-      predicate = 'Cukup / Perlu Peningkatan';
-      contractRecommendation = 'Pertimbangan / Pelatihan Khusus';
-    } else {
-      predicate = 'Kurang / Evaluasi Khusus';
-      contractRecommendation = 'Tidak Direkomendasikan Perpanjang';
-    }
-
     return {
       staffId: staff.id,
       month,

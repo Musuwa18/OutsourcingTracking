@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120" width="100" height="120">
+  <!-- Perisai / Shield -->
+  <path d="M50 5 L88 20 C88 75 50 112 50 115 C50 112 12 75 12 20 Z" fill="#0284c7" stroke="#0369a1" stroke-width="2.5"/>
+  <path d="M50 11 L82 23 C82 72 50 105 50 107 C50 105 18 72 18 23 Z" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  
+  <!-- Pita Atas -->
+  <rect x="25" y="16" width="50" height="8" rx="2" fill="#eab308" stroke="#ca8a04" stroke-width="0.75"/>
+  <text x="50" y="22.5" font-size="5.5" font-family="Arial, sans-serif" font-weight="bold" fill="#713f12" text-anchor="middle">MURAKATA</text>
+  
+  <!-- Bintang Segi Lima Kuning Emas -->
+  <polygon points="50,28 53,37 62,37 55,42 58,51 50,46 42,51 45,42 38,37 47,37" fill="#facc15" stroke="#ca8a04" stroke-width="0.75"/>
+  
+  <!-- Gunung & Pohon Karet -->
+  <path d="M30 65 L50 48 L70 65 Z" fill="#15803d" stroke="#166534" stroke-width="1"/>
+  <path d="M42 65 L50 57 L58 65 Z" fill="#22c55e"/>
+  
+  <!-- Padi dan Kapas -->
+  <!-- Batang Padi Kiri -->
+  <path d="M30 75 Q20 50 35 38" fill="none" stroke="#eab308" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Rantai/Kapas Kanan -->
+  <path d="M70 75 Q80 50 65 38" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round"/>
+  
+  <!-- Pita Bawah -->
+  <path d="M22 86 Q50 95 78 86 L80 94 Q50 102 20 94 Z" fill="#dc2626" stroke="#991b1b" stroke-width="1"/>
+  <text x="50" y="93" font-size="5" font-family="Arial, sans-serif" font-weight="bold" fill="#ffffff" text-anchor="middle">KAB. HULU SUNGAI TENGAH</text>
+</svg>
