@@ -218,7 +218,7 @@ app.post('/api/auth/register', (req, res) => {
       name,
       email,
       password,
-      role,
+      role = 'outsourcing',
       divisionId,
       divisionName,
       roleTitle,
@@ -230,7 +230,13 @@ app.post('/api/auth/register', (req, res) => {
       workspaceNote
     } = req.body;
 
-    if (!nip || !name || !email || !password || !role || !divisionId) {
+    if (role && role !== 'outsourcing') {
+      return res.status(403).json({
+        error: 'Registrasi mandiri hanya diperbolehkan untuk Staf Outsourcing. Akun Atasan dan Administrator didaftarkan langsung oleh Super Admin.'
+      });
+    }
+
+    if (!nip || !name || !email || !password || !divisionId) {
       return res.status(400).json({ error: 'Seluruh kolom bertanda wajib harus dilengkapi.' });
     }
 
@@ -244,10 +250,10 @@ app.post('/api/auth/register', (req, res) => {
       name,
       email,
       password,
-      role,
+      role: 'outsourcing',
       divisionId,
       divisionName: divisionName || 'Sub Bagian Dinas',
-      roleTitle: roleTitle || (role === 'outsourcing' ? 'Tenaga Outsourcing' : 'Atasan Langsung'),
+      roleTitle: roleTitle || 'Tenaga Outsourcing',
       phone,
       vendorName: vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)',
       deviceId,

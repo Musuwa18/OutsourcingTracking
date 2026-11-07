@@ -120,7 +120,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
         'Dinas Pendidikan Kab. HST'
       ];
 
-  const [activeTab, setActiveTab] = useState<'login' | 'register-os' | 'register-spv'>('login');
+  const [activeTab, setActiveTab] = useState<'login' | 'register-os'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -157,18 +157,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
     }
   }, [vendors]);
 
-  // Register Supervisor Form States
-  const [spvName, setSpvName] = useState('');
-  const [spvNip, setSpvNip] = useState('');
-  const [spvEmail, setSpvEmail] = useState('');
-  const [spvPassword, setSpvPassword] = useState('');
-  const [spvConfirmPassword, setSpvConfirmPassword] = useState('');
-  const [showSpvPassword, setShowSpvPassword] = useState(false);
-  const [showSpvConfirmPassword, setShowSpvConfirmPassword] = useState(false);
-  const [spvPhone, setSpvPhone] = useState('');
-  const [spvDivisionId, setSpvDivisionId] = useState(activeDivisions[0]?.id || 'div-it');
-  const [spvLocationId, setSpvLocationId] = useState(activeLocations[0]?.id || 'loc-disdik-hst');
-  const [spvTitle, setSpvTitle] = useState('Kepala Sub Bagian Operasional');
 
   // 1. Handle Submit Login
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -283,57 +271,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
     }
   };
 
-  // 5. Handle Register Supervisor
-  const handleRegisterSpvSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-    if (!spvName || !spvNip || !spvEmail || !spvPassword || !spvConfirmPassword) {
-      setErrorMessage('Harap lengkapi seluruh kolom bertanda bintang (*).');
-      return;
-    }
-
-    if (spvPassword.length < 6) {
-      setErrorMessage('Kata sandi minimal terdiri dari 6 karakter.');
-      return;
-    }
-
-    if (spvPassword !== spvConfirmPassword) {
-      setErrorMessage('Konfirmasi kata sandi tidak cocok. Harap periksa kembali.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const selectedDiv = activeDivisions.find((d) => d.id === spvDivisionId);
-      const selectedLoc = activeLocations.find((l) => l.id === spvLocationId) || activeLocations[0];
-      const deviceId = localStorage.getItem('ot_device_id') || getDeviceFingerprint();
-      localStorage.setItem('ot_device_id', deviceId);
-
-      const result = await apiRegister({
-        name: spvName.trim(),
-        nip: spvNip.trim(),
-        email: spvEmail.trim().toLowerCase(),
-        password: spvPassword,
-        role: 'supervisor',
-        divisionId: spvDivisionId,
-        divisionName: selectedDiv?.name || 'Sub Bagian Dinas',
-        roleTitle: spvTitle.trim() || 'Atasan Langsung / Kasubag',
-        phone: spvPhone.trim(),
-        vendorName: 'Dinas Pendidikan Kab. HST',
-        deviceId,
-        customLocation: selectedLoc,
-        workspaceNote: `Penugasan di: ${selectedLoc.name}`,
-      });
-
-      localStorage.setItem('ot_last_email', result.user.email);
-      onShowToast('Pendaftaran akun Atasan Langsung berhasil!', 'success');
-      onLoginSuccess(result.user, result.token);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Pendaftaran gagal.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center px-4 py-8 relative">
@@ -368,7 +305,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
         <div className="glass-card p-6 sm:p-8 space-y-6 border border-white/70 dark:border-white/10 shadow-xl">
           
           {/* Navigation Pill Tabs */}
-          <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-slate-100/90 dark:bg-slate-800/80 text-xs font-semibold">
+          <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100/90 dark:bg-slate-800/80 text-xs font-semibold">
             <button
               type="button"
               onClick={() => { setActiveTab('login'); setErrorMessage(''); }}
@@ -390,17 +327,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
               }`}
             >
               Daftar Staf
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('register-spv'); setErrorMessage(''); }}
-              className={`py-2 px-1.5 rounded-xl transition-all cursor-pointer text-center truncate ${
-                activeTab === 'register-spv'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-cyan-400 font-bold shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              Daftar Atasan
             </button>
           </div>
 
@@ -728,208 +654,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
             </form>
           )}
 
-          {/* ===================== TAB 3: REGISTER SUPERVISOR ===================== */}
-          {activeTab === 'register-spv' && (
-            <form onSubmit={handleRegisterSpvSubmit} className="space-y-4">
-              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-xs text-amber-900 dark:text-amber-200">
-                <strong>Registrasi Atasan Langsung:</strong> Akun ini memiliki wewenang menyetujui laporan harian dan memberikan evaluasi kinerja 4 pilar staf pada divisi yang Anda bawahi.
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  Pilih Sub Bagian yang Anda Bawahi *
-                </label>
-                <select
-                  value={spvDivisionId}
-                  onChange={(e) => setSpvDivisionId(e.target.value)}
-                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                  required
-                >
-                  {activeDivisions.map((d) => (
-                    <option key={d.id} value={d.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                      {d.name} ({d.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Pilihan Lokasi Kantor / Titik Tugas Atasan */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  Pilih Lokasi Kantor / Pos Penugasan Atasan *
-                </label>
-                <select
-                  value={spvLocationId}
-                  onChange={(e) => setSpvLocationId(e.target.value)}
-                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                  required
-                >
-                  {activeLocations.map((loc) => (
-                    <option key={loc.id} value={loc.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                      {loc.name} (Radius Absen: {loc.radiusMeters} meter)
-                    </option>
-                  ))}
-                </select>
-                {(() => {
-                  const loc = activeLocations.find((l) => l.id === spvLocationId);
-                  return loc ? (
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 truncate">
-                      📍 {loc.address}
-                    </p>
-                  ) : null;
-                })()}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    Nama Lengkap & Gelar *
-                  </label>
-                  <input
-                    type="text"
-                    value={spvName}
-                    onChange={(e) => setSpvName(e.target.value)}
-                    placeholder="Contoh: Ir. Muhammad Ridwan, M.T."
-                    className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    NIP Pejabat *
-                  </label>
-                  <input
-                    type="text"
-                    value={spvNip}
-                    onChange={(e) => setSpvNip(e.target.value)}
-                    placeholder="19820514 200801 1 003"
-                    className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    Email Kedinasan *
-                  </label>
-                  <input
-                    type="email"
-                    value={spvEmail}
-                    onChange={(e) => setSpvEmail(e.target.value)}
-                    placeholder="nama@dinas.go.id"
-                    className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    No. Telepon / WhatsApp
-                  </label>
-                  <input
-                    type="text"
-                    value={spvPhone}
-                    onChange={(e) => setSpvPhone(e.target.value)}
-                    placeholder="0811-xxxx-xxxx"
-                    className="w-full px-3 py-2 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  Jabatan Struktural
-                </label>
-                <input
-                  type="text"
-                  value={spvTitle}
-                  onChange={(e) => setSpvTitle(e.target.value)}
-                  placeholder="Contoh: Kepala Sub Bagian / PPTK"
-                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                />
-              </div>
-
-              {/* Kata Sandi & Konfirmasi Kata Sandi Atasan */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    Kata Sandi *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showSpvPassword ? 'text' : 'password'}
-                      value={spvPassword}
-                      onChange={(e) => setSpvPassword(e.target.value)}
-                      placeholder="Minimal 6 karakter"
-                      className="w-full pl-3 pr-10 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowSpvPassword(!showSpvPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
-                      title={showSpvPassword ? 'Sembunyikan Kata Sandi' : 'Lihat Kata Sandi'}
-                      aria-label="Toggle lihat kata sandi atasan"
-                    >
-                      {showSpvPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                      Ulangi Kata Sandi *
-                    </label>
-                    {spvConfirmPassword && (
-                      <span className={`text-[10px] font-bold ${
-                        spvPassword === spvConfirmPassword
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-rose-500'
-                      }`}>
-                        {spvPassword === spvConfirmPassword ? '✓ Cocok' : '✗ Tidak cocok'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <input
-                      type={showSpvConfirmPassword ? 'text' : 'password'}
-                      value={spvConfirmPassword}
-                      onChange={(e) => setSpvConfirmPassword(e.target.value)}
-                      placeholder="Ketik ulang kata sandi"
-                      className={`w-full pl-3 pr-10 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium ${
-                        spvConfirmPassword
-                          ? spvPassword === spvConfirmPassword
-                            ? 'border-emerald-500 ring-1 ring-emerald-500/30'
-                            : 'border-rose-500 ring-1 ring-rose-500/30'
-                          : ''
-                      }`}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowSpvConfirmPassword(!showSpvConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
-                      title={showSpvConfirmPassword ? 'Sembunyikan Kata Sandi' : 'Lihat Kata Sandi'}
-                      aria-label="Toggle lihat konfirmasi kata sandi atasan"
-                    >
-                      {showSpvConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-700 hover:to-orange-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 transition-all cursor-pointer disabled:opacity-50 pt-3"
-              >
-                <span>{loading ? 'Mendaftarkan...' : 'Daftarkan Akun & Buka Portal Supervisi'}</span>
-                <CheckCircle2 className="w-4 h-4" />
-              </button>
-            </form>
-          )}
 
         </div>
 
