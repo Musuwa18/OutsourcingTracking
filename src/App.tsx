@@ -250,6 +250,33 @@ export default function App() {
         });
         setStaffList(mappedStaff);
         localStorage.setItem('ot_staff_list', JSON.stringify(mappedStaff));
+
+        // Sinkronisasi otomatis session user aktif dengan data terbaru dari server
+        setCurrentUser((prevUser) => {
+          if (!prevUser) return null;
+          const fresh = usrs.find(
+            (u) => u.id === prevUser.id || u.nip === prevUser.nip || u.email === prevUser.email
+          );
+          if (fresh) {
+            const updated: AuthUser = {
+              ...prevUser,
+              name: fresh.name,
+              initials: fresh.initials || fresh.name.slice(0, 2).toUpperCase(),
+              avatarColor: fresh.avatarColor || prevUser.avatarColor,
+              roleTitle: fresh.roleTitle || prevUser.roleTitle,
+              divisionName: fresh.divisionName || prevUser.divisionName,
+              divisionId: fresh.divisionId || prevUser.divisionId,
+              vendorName: fresh.vendorName || prevUser.vendorName,
+              supervisorId: fresh.supervisorId,
+              pendingSupervisorId: fresh.pendingSupervisorId,
+              supervisorChangeCount: fresh.supervisorChangeCount,
+              supervisorRequestStatus: fresh.supervisorRequestStatus,
+            };
+            localStorage.setItem('ot_session_user', JSON.stringify(updated));
+            return updated;
+          }
+          return prevUser;
+        });
       }
     });
 
