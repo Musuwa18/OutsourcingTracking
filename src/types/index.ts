@@ -496,4 +496,26 @@ export const DEFAULT_ATTENDANCE_SETTINGS: AttendanceGlobalSettings = {
   },
 };
 
+export interface HelpDeskConfig {
+  title: string;
+  subTitle: string;
+  whatsapp: string;
+  email: string;
+  address: string;
+  guideGeofence: string;
+  guideCamera: string;
+  guideAccount: string;
+}
+
+export const DEFAULT_HELPDESK_CONFIG: HelpDeskConfig = {
+  title: 'Pusat Bantuan & Layanan IT Disdik',
+  subTitle: 'Subbag Perencanaan dan Pelaporan · Disdik Kab. HST',
+  whatsapp: '0811-518-515',
+  email: 'disdik@hulusungaitengahkab.go.id',
+  address: 'Jalan Sibli Imansyah No. 01, Barabai, Kab. Hulu Sungai Tengah',
+  guideGeofence: 'Pastikan GPS pada perangkat aktif dengan mode "Akurasi Tinggi" dan browser diizinkan mengakses lokasi.',
+  guideCamera: 'Berikan izin kamera pada browser saat diminta. Jika layar hitam, muat ulang (refresh) halaman.',
+  guideAccount: 'Hubungi admin TI atau Subbag Kepegawaian Disdik untuk verifikasi & reset akun dinas Anda.',
+};
+
 

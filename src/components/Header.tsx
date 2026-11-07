@@ -12,11 +12,12 @@ import {
   Phone,
   X,
 } from 'lucide-react';
-import { UserRole, NotificationItem, AuthUser } from '../types';
+import { UserRole, NotificationItem, AuthUser, HelpDeskConfig, DEFAULT_HELPDESK_CONFIG } from '../types';
 import { usePwa } from '../context/PwaContext';
 interface HeaderProps {
   currentRole: UserRole;
   currentUser?: AuthUser | null;
+  helpDeskConfig?: HelpDeskConfig;
   onLogout?: () => void;
   onOpenProfile?: () => void;
   onRoleChange: (role: UserRole) => void;
@@ -49,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCloudSync,
   onOpenSecurityModal,
   onOpenAiChat,
+  helpDeskConfig,
 }) => {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
@@ -292,10 +294,10 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Pusat Bantuan & Layanan IT Disdik
+                    {(helpDeskConfig || DEFAULT_HELPDESK_CONFIG).title}
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Subbag Umum & Kepegawaian · Disdik Kab. HST
+                    {(helpDeskConfig || DEFAULT_HELPDESK_CONFIG).subTitle}
                   </p>
                 </div>
               </div>
@@ -318,21 +320,21 @@ export const Header: React.FC<HeaderProps> = ({
                   <div>
                     <span className="font-semibold text-slate-800 dark:text-slate-200">WhatsApp Helpdesk:</span>{' '}
                     <a
-                      href="https://wa.me/628115001234?text=Halo%20Admin%20IT%20Disdik%20HST,%20saya%20membutuhkan%20bantuan%20terkait%20aplikasi%20OutsourceTrack"
+                      href={`https://wa.me/${((helpDeskConfig || DEFAULT_HELPDESK_CONFIG).whatsapp || '62811518515').replace(/\D/g, '').replace(/^0/, '62')}?text=Halo%20Admin%20IT%20Disdik%20HST,%20saya%20membutuhkan%20bantuan%20terkait%20aplikasi%20OutsourceTrack`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-mono text-indigo-600 dark:text-cyan-400 hover:underline font-bold"
                     >
-                      +62 811-5001-234 (Chat WhatsApp)
+                      {(helpDeskConfig || DEFAULT_HELPDESK_CONFIG).whatsapp} (Chat WhatsApp)
                     </a>
                   </div>
                   <div>
                     <span className="font-semibold text-slate-800 dark:text-slate-200">Email Resmi:</span>{' '}
-                    <span className="font-mono text-slate-700 dark:text-slate-300">disdik@hulusungaitengahkab.go.id</span>
+                    <span className="font-mono text-slate-700 dark:text-slate-300">{(helpDeskConfig || DEFAULT_HELPDESK_CONFIG).email}</span>
                   </div>
                   <div>
                     <span className="font-semibold text-slate-800 dark:text-slate-200">Alamat Kantor:</span>{' '}
-                    <span>Jl. Jenderal Sudirman No. 1, Barabai, Kab. Hulu Sungai Tengah</span>
+                    <span>{(helpDeskConfig || DEFAULT_HELPDESK_CONFIG).address}</span>
                   </div>
                 </div>
               </div>
@@ -342,9 +344,9 @@ export const Header: React.FC<HeaderProps> = ({
                   Panduan Cepat Kendala Presensi & Laporan
                 </div>
                 <ul className="text-[11px] text-slate-600 dark:text-slate-300 space-y-1 list-disc pl-4 leading-relaxed">
-                  <li><strong>Kendala Geofence:</strong> Pastikan GPS pada perangkat aktif dengan mode "Akurasi Tinggi" dan browser diizinkan mengakses lokasi.</li>
-                  <li><strong>Kendala Kamera WebRTC:</strong> Berikan izin kamera pada browser saat diminta. Jika layar hitam, muat ulang (refresh) halaman.</li>
-                  <li><strong>Lupa Sandi / Masalah Akun:</strong> Hubungi admin TI atau Subbag Kepegawaian Disdik untuk verifikasi & reset akun dinas Anda.</li>
+                  <li><strong>Kendala Geofence:</strong> {(helpDeskConfig || DEFAULT_HELPDESK_CONFIG).guideGeofence}</li>
+                  <li><strong>Kendala Kamera WebRTC:</strong> {(helpDeskConfig || DEFAULT_HELPDESK_CONFIG).guideCamera}</li>
+                  <li><strong>Lupa Sandi / Masalah Akun:</strong> {(helpDeskConfig || DEFAULT_HELPDESK_CONFIG).guideAccount}</li>
                 </ul>
               </div>
             </div>

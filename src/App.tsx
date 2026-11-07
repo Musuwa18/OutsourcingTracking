@@ -58,7 +58,7 @@ import { NotificationDrawer } from './components/NotificationDrawer';
 import { AiAnalyticsChatModal } from './components/AiAnalyticsChatModal';
 import { CustomLocationModal } from './components/CustomLocationModal';
 import { AuthView } from './views/AuthView';
-import { AuthUser, Division, Vendor, FieldCheckinRecord } from './types';
+import { AuthUser, Division, Vendor, FieldCheckinRecord, HelpDeskConfig, DEFAULT_HELPDESK_CONFIG } from './types';
 import {
   apiFetchDivisions,
   apiFetchVendors,
@@ -75,6 +75,7 @@ import {
   apiGetAttendanceSettings,
   apiFetchFieldCheckins,
   apiSubmitFieldCheckin,
+  apiGetHelpDeskSettings,
 } from './services/api';
 import { getTodayDateStr, getCurrentWitaTimeStr } from './utils/date';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
@@ -320,6 +321,11 @@ export default function App() {
         setFieldCheckins(fcList);
       }
     });
+
+    // 5. Sinkronisasi Konfigurasi Pusat Bantuan & Helpdesk dari SQLite
+    apiGetHelpDeskSettings().then((cfg) => {
+      if (cfg) setHelpDeskConfig(cfg);
+    });
   }, []);
 
   useEffect(() => {
@@ -441,6 +447,7 @@ export default function App() {
     return generateInitialEvaluations();
   });
   const [fieldCheckins, setFieldCheckins] = useState<FieldCheckinRecord[]>([]);
+  const [helpDeskConfig, setHelpDeskConfig] = useState<HelpDeskConfig>(DEFAULT_HELPDESK_CONFIG);
   const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(() => {
     const saved = localStorage.getItem('ot_audit_logs');
     if (saved) {
@@ -1432,6 +1439,7 @@ export default function App() {
         onOpenSecurityModal={() => setSecurityModalOpen(true)}
         onOpenAiChat={() => setAiChatOpen(true)}
         onOpenProfile={() => setIsProfileModalOpen(true)}
+        helpDeskConfig={helpDeskConfig}
       />
 
       {/* Main Layout Area */}
@@ -1634,6 +1642,8 @@ export default function App() {
                   onUpdateSecurityConfig={handleUpdateSecurityConfig}
                   attendanceSettings={attendanceSettings}
                   onUpdateAttendanceSettings={(s) => setAttendanceSettings(s)}
+                  helpDeskConfig={helpDeskConfig}
+                  onUpdateHelpDeskConfig={(cfg) => setHelpDeskConfig(cfg)}
                   onShowToast={showToast}
                 />
               )}

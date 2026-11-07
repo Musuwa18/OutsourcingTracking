@@ -2477,5 +2477,46 @@ export function autoClosePreviousDayAttendance(todayDateStr) {
   return 0;
 }
 
+// ==============================================================================
+// HELPDESK & IT SUPPORT CONFIGURATION (PUSAT BANTUAN DISDIK HST)
+// ==============================================================================
+export const DEFAULT_HELPDESK_SETTINGS = {
+  title: 'Pusat Bantuan & Layanan IT Disdik',
+  subTitle: 'Subbag Perencanaan dan Pelaporan · Disdik Kab. HST',
+  whatsapp: '0811-518-515',
+  email: 'disdik@hulusungaitengahkab.go.id',
+  address: 'Jalan Sibli Imansyah No. 01, Barabai, Kab. Hulu Sungai Tengah',
+  guideGeofence: 'Pastikan GPS pada perangkat aktif dengan mode "Akurasi Tinggi" dan browser diizinkan mengakses lokasi.',
+  guideCamera: 'Berikan izin kamera pada browser saat diminta. Jika layar hitam, muat ulang (refresh) halaman.',
+  guideAccount: 'Hubungi admin TI atau Subbag Kepegawaian Disdik untuk verifikasi & reset akun dinas Anda.',
+};
+
+export function getHelpDeskSettings() {
+  if (isNodeSqlite && dbEngine) {
+    try {
+      const row = dbEngine.prepare("SELECT value FROM system_settings WHERE key = 'helpdesk_settings'").get();
+      if (row && row.value) {
+        return JSON.parse(row.value);
+      }
+    } catch (e) {
+      console.warn('getHelpDeskSettings error:', e);
+    }
+  }
+  return DEFAULT_HELPDESK_SETTINGS;
+}
+
+export function saveHelpDeskSettings(settings) {
+  const jsonStr = JSON.stringify(settings);
+  const now = new Date().toISOString();
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      INSERT INTO system_settings (key, value, updated_at)
+      VALUES ('helpdesk_settings', ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(jsonStr, now);
+  }
+  return settings;
+}
+
 // Jalankan inisialisasi awal
 seedDatabaseIfEmpty();

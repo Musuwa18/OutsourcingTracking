@@ -3,7 +3,7 @@
  * Menghubungkan frontend React ke backend Express REST API di Port 3010
  * Dinas Pendidikan Kabupaten Hulu Sungai Tengah
  */
-import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord } from '../types';
+import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig } from '../types';
 
 const API_BASE = '/api';
 
@@ -600,4 +600,30 @@ export async function apiFetchFieldCheckins(filters: {
     console.warn('apiFetchFieldCheckins warning:', err);
     return [];
   }
+}
+
+// 16. HELPDESK & IT SUPPORT CONFIGURATION
+export async function apiGetHelpDeskSettings(): Promise<HelpDeskConfig | null> {
+  try {
+    const res = await fetch(`${API_BASE}/settings/helpdesk`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.settings || null;
+  } catch (err: unknown) {
+    console.warn('apiGetHelpDeskSettings warning:', err);
+    return null;
+  }
+}
+
+export async function apiSaveHelpDeskSettings(settings: HelpDeskConfig): Promise<HelpDeskConfig> {
+  const res = await fetch(`${API_BASE}/settings/helpdesk`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ settings }),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || 'Gagal menyimpan pengaturan pusat bantuan.');
+  }
+  return json.settings;
 }

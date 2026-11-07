@@ -50,6 +50,8 @@ import {
   getAttendanceSettings,
   saveAttendanceSettings,
   autoClosePreviousDayAttendance,
+  getHelpDeskSettings,
+  saveHelpDeskSettings,
 } from './server/db.js';
 
 dotenv.config();
@@ -700,6 +702,29 @@ app.post('/api/settings/attendance', (req, res) => {
     res.json({ success: true, settings: saved });
   } catch (err) {
     res.status(500).json({ error: 'Gagal menyimpan pengaturan jadwal presensi.' });
+  }
+});
+
+// 11c. HelpDesk & IT Support Settings (Pusat Bantuan Disdik HST)
+app.get('/api/settings/helpdesk', (req, res) => {
+  try {
+    const settings = getHelpDeskSettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal memuat pengaturan pusat bantuan.' });
+  }
+});
+
+app.post('/api/settings/helpdesk', (req, res) => {
+  try {
+    const payload = req.body.settings || req.body;
+    if (!payload) {
+      return res.status(400).json({ error: 'Data pengaturan pusat bantuan tidak valid.' });
+    }
+    const saved = saveHelpDeskSettings(payload);
+    res.json({ success: true, settings: saved, message: 'Pengaturan pusat bantuan berhasil disimpan.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menyimpan pengaturan pusat bantuan.' });
   }
 });
 

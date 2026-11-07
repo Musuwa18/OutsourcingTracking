@@ -37,6 +37,7 @@ import {
   Coffee,
   Sun,
   Moon,
+  HelpCircle,
 } from 'lucide-react';
 import {
   Division,
@@ -54,6 +55,8 @@ import {
   DEFAULT_ATTENDANCE_SETTINGS,
   DayWorkSchedule,
   WakarSchedule,
+  HelpDeskConfig,
+  DEFAULT_HELPDESK_CONFIG,
 } from '../types';
 import { VisualMapPicker } from '../components/VisualMapPicker';
 import {
@@ -71,6 +74,7 @@ import {
   apiSaveAttendanceSettings,
   apiApproveSupervisorChange,
   apiRejectSupervisorChange,
+  apiSaveHelpDeskSettings,
 } from '../services/api';
 
 interface SystemSettingsViewProps {
@@ -95,6 +99,8 @@ interface SystemSettingsViewProps {
   onUpdateSecurityConfig: (cfg: EnterpriseSecurityConfig) => void;
   attendanceSettings?: AttendanceGlobalSettings;
   onUpdateAttendanceSettings?: (settings: AttendanceGlobalSettings) => void;
+  helpDeskConfig?: HelpDeskConfig;
+  onUpdateHelpDeskConfig?: (config: HelpDeskConfig) => void;
   onShowToast: (message: string, type?: 'success' | 'warning' | 'info') => void;
 }
 
@@ -120,9 +126,39 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   onUpdateSecurityConfig,
   attendanceSettings,
   onUpdateAttendanceSettings,
+  helpDeskConfig,
+  onUpdateHelpDeskConfig,
   onShowToast,
 }) => {
-  const [activeTab, setActiveTab] = useState<'divisions' | 'vendors' | 'users' | 'geofence' | 'schedule' | 'rbac'>('divisions');
+  const [activeTab, setActiveTab] = useState<'divisions' | 'vendors' | 'users' | 'geofence' | 'schedule' | 'rbac' | 'helpdesk'>('divisions');
+
+  // ================= TAB: HELPDESK & IT SUPPORT =================
+  const [helpConfig, setHelpConfig] = useState<HelpDeskConfig>(() => {
+    return helpDeskConfig || DEFAULT_HELPDESK_CONFIG;
+  });
+  const [isSavingHelp, setIsSavingHelp] = useState(false);
+
+  React.useEffect(() => {
+    if (helpDeskConfig) {
+      setHelpConfig(helpDeskConfig);
+    }
+  }, [helpDeskConfig]);
+
+  const handleSaveHelpDesk = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingHelp(true);
+    try {
+      const saved = await apiSaveHelpDeskSettings(helpConfig);
+      setHelpConfig(saved);
+      if (onUpdateHelpDeskConfig) onUpdateHelpDeskConfig(saved);
+      onShowToast('Pengaturan Pusat Bantuan & Kontak Helpdesk berhasil disimpan!', 'success');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal menyimpan pengaturan helpdesk.';
+      onShowToast(message, 'warning');
+    } finally {
+      setIsSavingHelp(false);
+    }
+  };
 
   // ================= TAB: SCHEDULE & ATTENDANCE RULES =================
   const [scheduleSettings, setScheduleSettings] = useState<AttendanceGlobalSettings>(() => {
@@ -1002,9 +1038,21 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Peran & RBAC</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('helpdesk')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'helpdesk'
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>Pusat Bantuan & Helpdesk</span>
+          </button>
         </div>
       </div>
-
       {/* ========================================================================= */}
       {/* TAB 1: MASTER BIDANG & SUBBAGIAN (DIVISIONS CRUD)                         */}
       {/* ========================================================================= */}
@@ -2440,6 +2488,175 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 7: PUSAT BANTUAN & KONTAK HELPDESK                                    */}
+      {/* ========================================================================= */}
+      {activeTab === 'helpdesk' && (
+        <form onSubmit={handleSaveHelpDesk} className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>Pengaturan Pusat Bantuan & Kontak Helpdesk</span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Atur informasi kontak resmi, WhatsApp admin, email, dan alamat dinas yang muncul pada jendela Pusat Bantuan seluruh pengguna
+              </p>
+            </div>
+            <button
+              type="submit"
+              disabled={isSavingHelp}
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-500/20 shrink-0"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSavingHelp ? 'Menyimpan...' : 'Simpan Pengaturan Helpdesk'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Form Input Data Kontak */}
+            <div className="p-5 glass-card space-y-4">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+                <Phone className="w-4 h-4 text-emerald-500" />
+                <span>Informasi Kontak & Layanan Resmi</span>
+              </h3>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Judul Layanan Bantuan
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={helpConfig.title}
+                    onChange={(e) => setHelpConfig({ ...helpConfig, title: e.target.value })}
+                    placeholder="Contoh: Pusat Bantuan & Layanan IT Disdik"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Sub Judul / Unit Kerja Penanggung Jawab
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={helpConfig.subTitle}
+                    onChange={(e) => setHelpConfig({ ...helpConfig, subTitle: e.target.value })}
+                    placeholder="Contoh: Subbag Perencanaan dan Pelaporan · Disdik Kab. HST"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Nomor WhatsApp Helpdesk Resmi (Aktif)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={helpConfig.whatsapp}
+                    onChange={(e) => setHelpConfig({ ...helpConfig, whatsapp: e.target.value })}
+                    placeholder="Contoh: 0811-518-515"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Format nomor lokal atau internasional (tautan chat WhatsApp dibuat otomatis)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Email Pengaduan / Kedinasan
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={helpConfig.email}
+                    onChange={(e) => setHelpConfig({ ...helpConfig, email: e.target.value })}
+                    placeholder="Contoh: disdik@hulusungaitengahkab.go.id"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Alamat Lengkap Kantor Dinas
+                  </label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={helpConfig.address}
+                    onChange={(e) => setHelpConfig({ ...helpConfig, address: e.target.value })}
+                    placeholder="Jalan Sibli Imansyah No. 01, Barabai, Kab. Hulu Sungai Tengah"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Form Panduan Cepat Kendala */}
+            <div className="p-5 glass-card space-y-4">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+                <FileText className="w-4 h-4 text-indigo-500" />
+                <span>Teks Panduan Kendala Pengguna</span>
+              </h3>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Petunjuk Kendala Geofence / Lokasi GPS
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={helpConfig.guideGeofence}
+                    onChange={(e) => setHelpConfig({ ...helpConfig, guideGeofence: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Petunjuk Kendala Kamera WebRTC
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={helpConfig.guideCamera}
+                    onChange={(e) => setHelpConfig({ ...helpConfig, guideCamera: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Petunjuk Lupa Sandi & Masalah Akun
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={helpConfig.guideAccount}
+                    onChange={(e) => setHelpConfig({ ...helpConfig, guideAccount: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white leading-relaxed"
+                  />
+                </div>
+
+                {/* Pratinjau Tampilan */}
+                <div className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-[11px] space-y-1">
+                  <div className="font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Pratinjau Sinkronisasi:</span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400">
+                    Pengaturan ini otomatis tersimpan di server dan langsung diterapkan pada modal <strong>Pusat Bantuan & Layanan IT Disdik</strong> di header seluruh staf dan atasan.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
       )}
 
       {/* ========================================================================= */}
