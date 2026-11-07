@@ -49,7 +49,7 @@ import { AdminAttendanceView } from './views/AdminAttendanceView';
 import { SupervisorEvaluationView } from './views/SupervisorEvaluationView';
 import { AnalyticsMonthlyView } from './views/AnalyticsMonthlyView';
 import { SettingsSecurityView } from './views/SettingsSecurityView';
-import { SystemSettingsView } from './views/SystemSettingsView';
+import { SystemSettingsView, SettingsTab } from './views/SystemSettingsView';
 import { AuditLogView } from './views/AuditLogView';
 import { PrintReportModal } from './components/PrintReportModal';
 import { GoogleDriveSyncModal } from './components/GoogleDriveSyncModal';
@@ -368,7 +368,7 @@ export default function App() {
   });
   const [mobileTab, setMobileTab] = useState<string>('beranda');
   const [adminTab, setAdminTab] = useState<string>('monitoring-presensi');
-
+  const [settingsSubTab, setSettingsSubTab] = useState<SettingsTab>('users');
   const handleLoginSuccess = (user: AuthUser, token: string) => {
     setCurrentUser(user);
     setCurrentRole(user.role);
@@ -1454,6 +1454,11 @@ export default function App() {
             pendingReportsCount={pendingReportsCount}
             geofenceBreachCount={geofenceBreachCount}
             glassMode={glassMode}
+            settingsSubTab={settingsSubTab}
+            onSettingsSubTabChange={(sub) => {
+              setAdminTab('pengaturan-keamanan');
+              setSettingsSubTab(sub as SettingsTab);
+            }}
           />
         )}
 
@@ -1644,6 +1649,8 @@ export default function App() {
                   helpDeskConfig={helpDeskConfig}
                   onUpdateHelpDeskConfig={(cfg) => setHelpDeskConfig(cfg)}
                   onConfigureLocation={(staff) => setCustomLocationStaff(staff)}
+                  activeSubTab={settingsSubTab}
+                  onSubTabChange={(sub) => setSettingsSubTab(sub)}
                   onShowToast={showToast}
                 />
               )}

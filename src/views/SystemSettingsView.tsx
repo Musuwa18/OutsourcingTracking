@@ -76,6 +76,7 @@ import {
   apiRejectSupervisorChange,
   apiSaveHelpDeskSettings,
 } from '../services/api';
+export type SettingsTab = 'divisions' | 'vendors' | 'users' | 'geofence' | 'schedule' | 'rbac' | 'helpdesk';
 
 interface SystemSettingsViewProps {
   locations: OfficeLocation[];
@@ -102,6 +103,8 @@ interface SystemSettingsViewProps {
   helpDeskConfig?: HelpDeskConfig;
   onUpdateHelpDeskConfig?: (config: HelpDeskConfig) => void;
   onConfigureLocation?: (staff: StaffProfile) => void;
+  activeSubTab?: SettingsTab;
+  onSubTabChange?: (subTab: SettingsTab) => void;
   onShowToast: (message: string, type?: 'success' | 'warning' | 'info') => void;
 }
 
@@ -130,10 +133,19 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   helpDeskConfig,
   onUpdateHelpDeskConfig,
   onConfigureLocation,
+  activeSubTab,
+  onSubTabChange,
   onShowToast,
 }) => {
-  const [activeTab, setActiveTab] = useState<'divisions' | 'vendors' | 'users' | 'geofence' | 'schedule' | 'rbac' | 'helpdesk'>('divisions');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+    return activeSubTab || 'users';
+  });
 
+  React.useEffect(() => {
+    if (activeSubTab && activeSubTab !== activeTab) {
+      setActiveTab(activeSubTab);
+    }
+  }, [activeSubTab]);
   // ================= TAB: HELPDESK & IT SUPPORT =================
   const [helpConfig, setHelpConfig] = useState<HelpDeskConfig>(() => {
     return helpDeskConfig || DEFAULT_HELPDESK_CONFIG;
@@ -995,8 +1007,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           </p>
         </div>
 
-        {/* 5 Main Navigation Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1 glass-pill rounded-xl text-xs font-semibold overflow-x-auto">
+        {/* Main Navigation Tabs (Khusus Mobile: di Desktop dikendalikan oleh Accordion Sidebar Kiri) */}
+        <div className="flex md:hidden flex-wrap items-center gap-1.5 p-1 glass-pill rounded-xl text-xs font-semibold overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('divisions')}

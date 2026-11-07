@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   CalendarCheck2,
@@ -9,9 +9,15 @@ import {
   Settings,
   Sparkles,
   AlertTriangle,
+  ChevronDown,
+  MapPin,
+  Clock,
+  Building2,
+  Briefcase,
+  ShieldCheck,
+  HelpCircle,
 } from 'lucide-react';
 import { UserRole } from '../types';
-
 interface SidebarProps {
   currentTab: string;
   onTabChange: (tab: string) => void;
@@ -19,6 +25,8 @@ interface SidebarProps {
   pendingReportsCount: number;
   geofenceBreachCount?: number;
   glassMode?: boolean;
+  settingsSubTab?: string;
+  onSettingsSubTabChange?: (subTab: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -28,7 +36,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
   pendingReportsCount,
   geofenceBreachCount = 0,
   glassMode = true,
+  settingsSubTab = 'users',
+  onSettingsSubTabChange,
 }) => {
+  const [settingsExpanded, setSettingsExpanded] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (currentTab === 'pengaturan-keamanan') {
+      setSettingsExpanded(true);
+    }
+  }, [currentTab]);
+
+  const settingsSubNavItems = [
+    { id: 'users', label: 'Staf & Atasan', icon: Users },
+    { id: 'geofence', label: 'Master Geofencing', icon: MapPin },
+    { id: 'schedule', label: 'Jadwal & Aturan Kerja', icon: Clock },
+    { id: 'divisions', label: 'Master Bidang', icon: Building2 },
+    { id: 'vendors', label: 'Master Vendor', icon: Briefcase },
+    { id: 'rbac', label: 'Peran & RBAC', icon: ShieldCheck },
+    { id: 'helpdesk', label: 'Pusat Bantuan & Helpdesk', icon: HelpCircle },
+  ];
   const adminNavItems = [
     {
       id: 'monitoring-presensi',
@@ -93,6 +120,86 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {adminNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentTab === item.id;
+
+              if (item.id === 'pengaturan-keamanan') {
+                return (
+                  <div key={item.id} className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onTabChange('pengaturan-keamanan');
+                        if (isActive) {
+                          setSettingsExpanded(!settingsExpanded);
+                        } else {
+                          setSettingsExpanded(true);
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 border border-white/20 active:scale-[0.99]'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-md font-mono ${
+                            isActive
+                              ? 'bg-white/20 text-white font-bold'
+                              : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-semibold'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                            settingsExpanded && isActive ? 'rotate-180 text-white' : 'text-slate-400'
+                          }`}
+                        />
+                      </div>
+                    </button>
+
+                    {/* Accordion Submenu: 7 Tab Pengaturan Sistem */}
+                    {isActive && settingsExpanded && (
+                      <div className="pl-3.5 pr-1 py-1 space-y-1 border-l-2 border-indigo-200 dark:border-indigo-900/60 ml-5 my-1 animate-in slide-in-from-top-1 duration-150">
+                        {settingsSubNavItems.map((sub) => {
+                          const SubIcon = sub.icon;
+                          const isSubActive = settingsSubTab === sub.id;
+
+                          return (
+                            <button
+                              key={sub.id}
+                              type="button"
+                              onClick={() => {
+                                onTabChange('pengaturan-keamanan');
+                                if (onSettingsSubTabChange) {
+                                  onSettingsSubTabChange(sub.id);
+                                }
+                              }}
+                              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs transition-all cursor-pointer ${
+                                isSubActive
+                                  ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-cyan-400 font-bold border border-indigo-200/80 dark:border-indigo-800/80 shadow-2xs'
+                                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/60 dark:hover:bg-slate-800/50 font-medium border border-transparent'
+                              }`}
+                            >
+                              <SubIcon
+                                className={`w-3.5 h-3.5 shrink-0 ${
+                                  isSubActive ? 'text-indigo-600 dark:text-cyan-400' : 'text-slate-400'
+                                }`}
+                              />
+                              <span className="truncate">{sub.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
 
               return (
                 <button
