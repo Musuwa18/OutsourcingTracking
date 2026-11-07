@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Calendar, Clock, CheckCircle2, AlertTriangle, FileText, Filter } from 'lucide-react';
+import { Calendar, Clock, FileText } from 'lucide-react';
 import { AttendanceRecord, DailyWorkReport, StaffProfile } from '../types';
-
+import { DetailRiwayatModal } from '../components/DetailRiwayatModal';
 interface StaffHistoryViewProps {
   staff: StaffProfile;
   attendanceRecords: AttendanceRecord[];
@@ -14,7 +14,13 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
   workReports,
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'attendance' | 'reports'>('all');
+  const [selectedItem, setSelectedItem] = useState<AttendanceRecord | DailyWorkReport | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
+  const handleOpenDetail = (item: AttendanceRecord | DailyWorkReport) => {
+    setSelectedItem(item);
+    setIsModalOpen(true);
+  };
   // Filter records belonging to this staff
   const staffAttendance = attendanceRecords.filter((r) => r.staffId === staff.id);
   const staffReports = workReports.filter((r) => r.staffId === staff.id);
@@ -107,7 +113,10 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
               <div className="space-y-2.5">
                 {/* Attendance Record Card */}
                 {dayAttendance && filterType !== 'reports' && (
-                  <div className="p-4 glass-card flex items-center justify-between text-xs">
+                  <div
+                    onClick={() => handleOpenDetail(dayAttendance)}
+                    className="p-4 glass-card flex items-center justify-between text-xs cursor-pointer transition-all active:scale-[0.99] hover:border-blue-500/50"
+                  >
                     <div className="flex items-center gap-3">
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                         dayAttendance.status === 'Hadir'
@@ -147,7 +156,8 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                   dayReports.map((report) => (
                     <div
                       key={report.id}
-                      className="p-4 glass-card text-xs space-y-2"
+                      onClick={() => handleOpenDetail(report)}
+                      className="p-4 glass-card text-xs space-y-2 cursor-pointer transition-all active:scale-[0.99] hover:border-blue-500/50"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">
@@ -180,6 +190,14 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
           );
         })}
       </div>
+
+      {/* Detail Riwayat Modal */}
+      <DetailRiwayatModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        item={selectedItem}
+        staff={staff}
+      />
     </div>
   );
 };
