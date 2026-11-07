@@ -749,11 +749,31 @@ export default function App() {
     return computeMonthlyAggregates(staffList, weeklyEvaluations, '2026-10');
   }, [staffList, weeklyEvaluations]);
 
-  // Today's attendance for active staff (Auto-reset based on real-time WITA date)
+  // Today's attendance for active staff (mendukung shift malam / overnight shift H ke H+1)
   const todayDateStr = getTodayDateStr();
-  const staffTodayAttendance = attendanceRecords.find(
-    (a) => (a.staffId === currentStaff?.id || a.staffId === currentUser?.id) && a.date === todayDateStr
-  );
+  const staffTodayAttendance = useMemo(() => {
+    const todayRec = attendanceRecords.find(
+      (a) => (a.staffId === currentStaff?.id || a.staffId === currentUser?.id) && a.date === todayDateStr
+    );
+    if (todayRec) return todayRec;
+
+    // Cek shift malam aktif dari hari kemarin jika saat ini masih pagi hari (sebelum jam 12 siang)
+    const currentHour = new Date().getHours();
+    if (currentHour < 12) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayDateStr = yesterday.toISOString().slice(0, 10);
+      const overnightRec = attendanceRecords.find(
+        (a) =>
+          (a.staffId === currentStaff?.id || a.staffId === currentUser?.id) &&
+          a.date === yesterdayDateStr &&
+          Boolean(a.clockInTime && a.clockInTime >= '18:00') &&
+          (!a.clockOutTime || a.clockOutTime === '-' || Boolean(a.autoClosed))
+      );
+      if (overnightRec) return overnightRec;
+    }
+    return undefined;
+  }, [attendanceRecords, currentStaff, currentUser, todayDateStr]);
   const staffTodayReports = dailyReports.filter(
     (r) => (r.staffId === currentStaff?.id || r.staffId === currentUser?.id) && r.date === todayDateStr
   );
@@ -1018,17 +1038,23 @@ export default function App() {
     );
   };
 
-  // Handle Clock Out (Staff)
-  const handleClockOut = (selfieBase64: string, locationData: any) => {
+  // Handle Clock Out (Staff - Mendukung Clock Out Shift Malam / Overnight)
+  const handleClockOut = (selfieBase64: string, locationData: Partial<AttendanceRecord['locationCoords']>) => {
     const timeStr = getCurrentWitaTimeStr();
     const targetStaffId = currentStaff?.id || 'usr-os-default';
+    const targetRecord = staffTodayAttendance;
+    const targetDate = targetRecord?.date || todayDateStr;
 
     setAttendanceRecords((prev) =>
       prev.map((r) => {
-        if (r.staffId === targetStaffId && r.date === todayDateStr) {
+        if (
+          (targetRecord && r.id === targetRecord.id) ||
+          (r.staffId === targetStaffId && r.date === targetDate)
+        ) {
           return {
             ...r,
             clockOutTime: timeStr,
+            autoClosed: false,
           };
         }
         return r;
@@ -1037,15 +1063,16 @@ export default function App() {
 
     // Background sync to SQLite server
     apiSubmitAttendance({
+      id: targetRecord?.id,
       staffId: targetStaffId,
-      date: todayDateStr,
+      date: targetDate,
       clockOutTime: timeStr,
       selfieUrl: selfieBase64,
       locationCoords: locationData,
-      status: 'Hadir',
+      status: targetRecord?.status || 'Hadir',
+      autoClosed: false,
       verifiedBy: 'Sistem Geofence WebRTC',
     }).catch((err) => console.warn('Sync clock-out failed:', err));
-
     addAuditLog(
       'Presensi Pulang (Clock Out)',
       `Berhasil clock-out pada ${timeStr} WITA. Jam kerja harian terkunci.`,

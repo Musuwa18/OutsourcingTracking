@@ -25,6 +25,14 @@ export const PRIMARY_OFFICES: OfficeLocation[] = [
     longitude: 115.34398742731446,
     radiusMeters: 90,
   },
+  {
+    id: 'loc-lkp-mslsc',
+    name: 'Lembaga Kursus dan Pelatihan Murakata Student Learning and Support Centre (LKP MSLSC)',
+    address: 'Barabai, Kab. Hulu Sungai Tengah',
+    latitude: -2.5930812650074406,
+    longitude: 115.37153449654713,
+    radiusMeters: 85,
+  },
 ];
 
 /**

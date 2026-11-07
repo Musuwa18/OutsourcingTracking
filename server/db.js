@@ -1537,11 +1537,20 @@ export function saveAttendance(attData) {
   const autoClosed = attData.autoClosed ? 1 : 0;
 
   if (isNodeSqlite && dbEngine) {
-    // Periksa apakah sudah ada presensi staf pada tanggal yang sama
-    const existing = staffId
-      ? dbEngine.prepare('SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url FROM attendance WHERE staff_id = ? AND date = ?').get(staffId, recordDate)
-      : null;
-
+    // Periksa record presensi (prioritas ID, tanggal hari ini, atau shift malam kemarin)
+    let existing = null;
+    if (attData.id) {
+      existing = dbEngine.prepare('SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url FROM attendance WHERE id = ?').get(attData.id);
+    }
+    if (!existing && staffId) {
+      existing = dbEngine.prepare('SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url FROM attendance WHERE staff_id = ? AND date = ?').get(staffId, recordDate);
+    }
+    // Jika presensi pulang (clock-out) tapi belum ada record tanggal ini, kaitkan ke shift malam kemarin
+    if (!existing && staffId && attData.clockOutTime && !attData.clockInTime) {
+      existing = dbEngine.prepare(
+        "SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url FROM attendance WHERE staff_id = ? AND date = date(?, '-1 day') AND clock_in_time >= '18:00'"
+      ).get(staffId, recordDate);
+    }
     if (existing) {
       // Update record presensi yang sudah ada (misal update Clock Out, Istirahat, atau status)
       const finalClockIn = attData.clockInTime || existing.clock_in_time;
@@ -2046,20 +2055,25 @@ export const DEFAULT_OFFICES = [
     longitude: 115.34398742731446,
     radiusMeters: 90,
   },
+  {
+    id: 'loc-lkp-mslsc',
+    name: 'Lembaga Kursus dan Pelatihan Murakata Student Learning and Support Centre (LKP MSLSC)',
+    address: 'Barabai, Kab. Hulu Sungai Tengah',
+    latitude: -2.5930812650074406,
+    longitude: 115.37153449654713,
+    radiusMeters: 85,
+  },
 ];
 
 export function listLocations() {
   if (isNodeSqlite && dbEngine) {
-    const rows = dbEngine.prepare('SELECT * FROM locations ORDER BY name ASC').all();
-    if (rows.length === 0) {
-      // Inisialisasi awal 3 lokasi resmi
-      for (const off of DEFAULT_OFFICES) {
-        dbEngine.prepare(
-          'INSERT OR REPLACE INTO locations (id, name, address, latitude, longitude, radius_meters, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        ).run(off.id, off.name, off.address, off.latitude, off.longitude, off.radiusMeters, new Date().toISOString());
-      }
-      return DEFAULT_OFFICES;
+    // Pastikan lokasi resmi dinas terdaftar di database
+    for (const off of DEFAULT_OFFICES) {
+      dbEngine.prepare(
+        'INSERT OR IGNORE INTO locations (id, name, address, latitude, longitude, radius_meters, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(off.id, off.name, off.address, off.latitude, off.longitude, off.radiusMeters, new Date().toISOString());
     }
+    const rows = dbEngine.prepare('SELECT * FROM locations ORDER BY name ASC').all();
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
@@ -2271,9 +2285,12 @@ export function autoClosePreviousDayAttendance(todayDateStr) {
       const result = dbEngine.prepare(`
         UPDATE attendance
         SET clock_out_time = '23:59:59', auto_closed = 1
-        WHERE date < ? AND (clock_out_time IS NULL OR clock_out_time = '' OR clock_out_time = '-')
-      `).run(todayDateStr);
-      return result.changes || 0;
+        WHERE (
+          (date < ? AND (clock_in_time < '18:00' OR clock_in_time IS NULL))
+          OR (date < date(?, '-1 day'))
+        )
+        AND (clock_out_time IS NULL OR clock_out_time = '' OR clock_out_time = '-')
+      `).run(todayDateStr, todayDateStr);
     } catch (e) {
       console.warn('autoClosePreviousDayAttendance warning:', e);
     }

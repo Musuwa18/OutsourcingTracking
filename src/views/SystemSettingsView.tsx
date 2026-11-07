@@ -164,7 +164,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     }));
   };
 
-  const handleApplyPreset = (preset: 'default_disdik' | 'ramadhan' | 'six_days') => {
+  const handleApplyPreset = (preset: 'default_disdik' | 'ramadhan' | 'six_days' | 'wakar') => {
     if (preset === 'default_disdik') {
       setScheduleSettings(DEFAULT_ATTENDANCE_SETTINGS);
       onShowToast('Preset Standar Disdik HST (Jumat 11:00 & Sen-Kam 16:30) diterapkan!', 'info');
@@ -192,6 +192,30 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         },
       }));
       onShowToast('Preset Piket Operasional 6 Hari Kerja (Sabtu Aktif) diterapkan!', 'info');
+    } else if (preset === 'wakar') {
+      const nightSchedule = {
+        enabled: true,
+        clockInStart: '19:30',
+        clockInEnd: '21:00',
+        clockOutStart: '05:30',
+        clockOutEnd: '07:00',
+        enableBreak: false,
+        breakStart: '00:00',
+        breakEnd: '01:00',
+      };
+      setScheduleSettings((prev) => ({
+        ...prev,
+        workSchedule: {
+          monday: { ...prev.workSchedule.monday, ...nightSchedule, dayName: 'Senin' },
+          tuesday: { ...prev.workSchedule.tuesday, ...nightSchedule, dayName: 'Selasa' },
+          wednesday: { ...prev.workSchedule.wednesday, ...nightSchedule, dayName: 'Rabu' },
+          thursday: { ...prev.workSchedule.thursday, ...nightSchedule, dayName: 'Kamis' },
+          friday: { ...prev.workSchedule.friday, ...nightSchedule, dayName: 'Jumat' },
+          saturday: { ...prev.workSchedule.saturday, ...nightSchedule, dayName: 'Sabtu' },
+          sunday: { ...prev.workSchedule.sunday, ...nightSchedule, dayName: 'Minggu' },
+        },
+      }));
+      onShowToast('Preset Jaga Malam / Wakar (20:00 - 06:00 WITA) diterapkan!', 'info');
     }
   };
 
@@ -276,7 +300,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const [userToDelete, setUserToDelete] = useState<UserAccount | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
-
+  const [newUserLocationId, setNewUserLocationId] = useState(locations[0]?.id || 'loc-disdik-hst');
   // ================= TAB: GEOFENCE STATE =================
   const [editingLocation, setEditingLocation] = useState<OfficeLocation | null>(null);
   const [isNewLocation, setIsNewLocation] = useState(false);
@@ -770,8 +794,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         divisionName: selectedDiv?.name || 'Sub Bagian Dinas',
         vendorName: vendors[0]?.name || 'PT Handil Bakti Utama (Mitra Disdik HST)',
         password: 'Password123!',
+        customLocation: locations.find((l) => l.id === newUserLocationId) || locations[0],
       });
-
       const newUser: UserAccount = {
         id: created.id,
         name: created.name,
@@ -1686,7 +1710,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 Preset Pintas Jam Kerja Dinas:
               </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               <button
                 type="button"
                 onClick={() => handleApplyPreset('default_disdik')}
@@ -1696,7 +1720,20 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   Standar Disdik HST (Resmi)
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Senin-Kamis pulang 16:30, Jumat pulang 11:00 (tanpa istirahat siang)
+                  Sen-Kam pulang 16:30, Jumat pulang 11:00
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('wakar')}
+                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-indigo-200 dark:border-indigo-800/60 hover:border-indigo-500 hover:shadow-xs transition-all cursor-pointer group"
+              >
+                <div className="text-xs font-bold text-indigo-600 dark:text-indigo-300 group-hover:text-indigo-700 dark:group-hover:text-cyan-400">
+                  🌙 Jaga Malam / Wakar
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Masuk 20:00 (19:30-21:00) · Pulang 06:00 (05:30-07:00 WITA)
                 </div>
               </button>
 
@@ -1709,7 +1746,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   Bulan Ramadhan
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Senin-Kamis pulang 15:30, Jumat pulang 10:30
+                  Sen-Kam pulang 15:30, Jumat pulang 10:30
                 </div>
               </button>
 
@@ -1722,7 +1759,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   Piket 6 Hari Kerja
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Senin-Jumat standar, Sabtu buka piket 08:00 - 13:00 WITA
+                  Sen-Jum standar, Sabtu piket 08:00 - 13:00 WITA
                 </div>
               </button>
             </div>
@@ -3109,6 +3146,24 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Pilih Lokasi Tempat Bekerja / Titik Tugas *</span>
+                </label>
+                <select
+                  value={newUserLocationId}
+                  onChange={(e) => setNewUserLocationId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-xs"
+                >
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name} (Radius Absen: {loc.radiusMeters} meter)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
 
               <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 text-[11px] text-indigo-900 dark:text-indigo-200 flex items-start gap-2">
                 <Smartphone className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
