@@ -108,11 +108,37 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     e.preventDefault();
     setIsSavingInfo(true);
     try {
-      const updated = await apiUpdateUserProfile(currentUser.id, { phone: phone.trim() });
-      onUserUpdated({ ...currentUser, phone: phone.trim() });
-      onShowToast('Nomor kontak WhatsApp berhasil diperbarui.', 'success');
-    } catch (err: any) {
-      onShowToast(err.message || 'Gagal memperbarui informasi profil.', 'warning');
+      let updatedUser = { ...currentUser };
+      let didUpdate = false;
+
+      // 1. Update kontak WhatsApp jika berubah
+      if (phone.trim() !== (currentUser.phone || '')) {
+        await apiUpdateUserProfile(currentUser.id, { phone: phone.trim() });
+        updatedUser.phone = phone.trim();
+        didUpdate = true;
+      }
+
+      // 2. Simpan pilihan atasan mandiri pertama kali (changeCount === 0)
+      if (
+        changeCount === 0 &&
+        selectedSupervisorId &&
+        selectedSupervisorId !== currentUser.supervisorId
+      ) {
+        const res = await apiUpdateUserSupervisor(currentUser.id, selectedSupervisorId);
+        updatedUser = { ...updatedUser, ...res.user };
+        onShowToast(res.message, res.mode === 'DIRECT' ? 'success' : 'info');
+        didUpdate = true;
+      } else if (didUpdate) {
+        onShowToast('Informasi profil berhasil diperbarui.', 'success');
+      } else {
+        onShowToast('Tidak ada perubahan data.', 'info');
+      }
+
+      onUserUpdated(updatedUser);
+      localStorage.setItem('ot_session_user', JSON.stringify(updatedUser));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal memperbarui informasi profil.';
+      onShowToast(message, 'warning');
     } finally {
       setIsSavingInfo(false);
     }
@@ -315,12 +341,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
                 {/* Skenario A: Belum pernah pilih (changeCount == 0) */}
                 {changeCount === 0 && (
-                  <div className="space-y-1.5">
-                    <div className="flex gap-2">
+                  <div className="space-y-1.5 w-full min-w-0">
+                    <div className="w-full min-w-0">
                       <select
                         value={selectedSupervisorId}
                         onChange={(e) => setSelectedSupervisorId(e.target.value)}
-                        className="flex-1 px-3 py-2 rounded-xl border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 dark:text-white"
+                        className="w-full min-w-0 max-w-full px-3 py-2.5 rounded-xl border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 dark:text-white truncate cursor-pointer text-xs shadow-xs"
                       >
                         <option value="">-- Pilih Atasan Langsung (Penilai KPI) --</option>
                         {Object.entries(groupedSupervisors).map(([division, spvList]) => (
@@ -333,18 +359,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                           </optgroup>
                         ))}
                       </select>
-                      <button
-                        type="button"
-                        disabled={!selectedSupervisorId || selectedSupervisorId === currentUser.supervisorId || isSubmittingSupervisor}
-                        onClick={() => handleSupervisorSubmit()}
-                        className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs transition-colors cursor-pointer shrink-0"
-                      >
-                        {isSubmittingSupervisor ? 'Menyimpan...' : 'Pilih Atasan'}
-                      </button>
                     </div>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 italic">
-                      * Bebas memilih atasan mandiri 1 kali saat inisiasi akun.
-                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                      <span className="italic">* Bebas memilih atasan mandiri 1 kali saat inisiasi akun.</span>
+                      {selectedSupervisorId && selectedSupervisorId !== currentUser.supervisorId && (
+                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                          Klik &quot;Simpan Perubahan&quot; di bawah untuk mengaktifkan
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -430,7 +453,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>{isSavingInfo ? 'Menyimpan...' : 'Simpan Perubahan Kontak'}</span>
+                  <span>{isSavingInfo ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
                 </button>
               </div>
             </form>
