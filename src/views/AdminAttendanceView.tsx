@@ -14,16 +14,17 @@ import {
   Sparkles,
   Settings,
 } from 'lucide-react';
-import { AttendanceRecord, StaffProfile, DailyWorkReport } from '../types';
+import { AttendanceRecord, StaffProfile, DailyWorkReport, FieldCheckinRecord } from '../types';
 import { exportAttendanceToCSV } from '../utils/export';
 import { getTodayDateStr } from '../utils/date';
-import { AttendanceInspectionModal } from '../components/AttendanceInspectionModal';
+import { DetailRiwayatModal } from '../components/DetailRiwayatModal';
 import { GeofenceBreachAlertBanner } from '../components/GeofenceBreachAlertBanner';
 
 interface AdminAttendanceViewProps {
   staffList: StaffProfile[];
   attendanceRecords: AttendanceRecord[];
   dailyReports: DailyWorkReport[];
+  fieldCheckins?: FieldCheckinRecord[];
   onOpenPrintModal: () => void;
   onConfigureLocation?: (staff: StaffProfile) => void;
   onOpenAiChat?: () => void;
@@ -33,6 +34,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   staffList,
   attendanceRecords,
   dailyReports,
+  fieldCheckins = [],
   onOpenPrintModal,
   onConfigureLocation,
   onOpenAiChat,
@@ -46,6 +48,13 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<StaffProfile | null>(null);
 
+
+  const activeDayFieldCheckins = useMemo(() => {
+    if (!selectedRecord) return [];
+    return fieldCheckins.filter(
+      (fc) => fc.staffId === selectedRecord.staffId && fc.date === selectedRecord.date
+    );
+  }, [fieldCheckins, selectedRecord]);
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
 
   // Divisions list
@@ -438,12 +447,17 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
         </div>
       </div>
 
-      {/* Quick Inspection Modal */}
-      <AttendanceInspectionModal
+      {/* Detail Riwayat & Inspeksi Presensi Lengkap (Identik dengan Tampilan Staf) */}
+      <DetailRiwayatModal
         isOpen={!!selectedRecord}
-        onClose={() => setSelectedRecord(null)}
-        record={selectedRecord}
-        staff={selectedStaff}
+        onClose={() => {
+          setSelectedRecord(null);
+          setSelectedStaff(null);
+        }}
+        item={selectedRecord}
+        staff={selectedStaff || undefined}
+        dayFieldCheckins={activeDayFieldCheckins}
+        initialMode="default"
       />
     </div>
   );

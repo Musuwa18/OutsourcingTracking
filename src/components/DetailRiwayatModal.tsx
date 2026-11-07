@@ -23,6 +23,7 @@ interface DetailRiwayatModalProps {
   item: AttendanceRecord | DailyWorkReport | FieldCheckinRecord | null;
   staff?: StaffProfile;
   initialMode?: 'default' | 'break';
+  dayFieldCheckins?: FieldCheckinRecord[];
 }
 
 export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
@@ -31,6 +32,7 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
   item,
   staff,
   initialMode = 'default',
+  dayFieldCheckins = [],
 }) => {
   // Tab switcher khusus presensi harian (Clock In Masuk vs Clock Out Pulang)
   const [attendanceSubTab, setAttendanceSubTab] = useState<'clock-in' | 'clock-out'>('clock-in');
@@ -429,7 +431,8 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
                     </div>
                   </div>
                 ) : isAttendance && attRecord ? (
-                  <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-2">
+                  <div className="space-y-2.5">
+                    <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-slate-400 font-medium">
                         {isViewingClockOut ? 'Log Presensi Pulang' : 'Log Presensi Masuk'}
@@ -448,6 +451,61 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
                         {isViewingClockOut ? 'Jam Kerja Selesai' : 'Awal Hari Kerja'}
                       </span>
                     </div>
+                  </div>
+                {/* Informasi Sesi Istirahat Jika Ada */}
+                {isAttendance && attRecord?.breakOutTime && (
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-amber-500 dark:text-amber-400 font-semibold">
+                      <span className="flex items-center gap-1.5">
+                        <Coffee className="w-3.5 h-3.5" />
+                        <span>Sesi Istirahat Kerja</span>
+                      </span>
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                        {attRecord.breakInTime ? 'Sesi Istirahat Tuntas' : 'Sedang Istirahat'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-500/20 text-xs font-mono">
+                      <div>
+                        <div className="text-[10px] text-slate-400 font-sans">Clock Out Istirahat:</div>
+                        <div className="font-bold text-white">{attRecord.breakOutTime} WITA</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-400 font-sans">Clock In Kembali:</div>
+                        <div className="font-bold text-white">{attRecord.breakInTime ? `${attRecord.breakInTime} WITA` : 'Belum Kembali'}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Informasi Kunjungan Tugas Lapangan Jika Ada */}
+                {isAttendance && dayFieldCheckins && dayFieldCheckins.length > 0 && (
+                  <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] text-indigo-400 font-semibold">
+                      <span className="flex items-center gap-1.5">
+                        <Briefcase className="w-3.5 h-3.5" />
+                        <span>Kunjungan Tugas Lapangan Hari Ini ({dayFieldCheckins.length} Titik)</span>
+                      </span>
+                      <span className="text-[9px] font-mono text-slate-400">Multi-Titik Terverifikasi</span>
+                    </div>
+                    <div className="space-y-1.5 divide-y divide-indigo-500/20">
+                      {dayFieldCheckins.map((fc, idx) => (
+                        <div key={fc.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                          <div className="min-w-0 pr-2">
+                            <div className="font-bold text-slate-200 truncate">
+                              {idx + 1}. {fc.locationCoords.locationName}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono truncate">
+                              {fc.activityNotes || 'Tugas Luar'} · Akurasi ±{Math.round(fc.locationCoords.accuracy)}m
+                            </div>
+                          </div>
+                          <span className="font-mono text-[11px] font-bold text-indigo-400 shrink-0">
+                            {fc.time} WITA
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                    )}
                   </div>
                 ) : reportRecord ? (
                   <div className="grid grid-cols-2 gap-2.5">

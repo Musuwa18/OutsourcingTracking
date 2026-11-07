@@ -1577,6 +1577,7 @@ export default function App() {
                   staffList={staffList}
                   attendanceRecords={attendanceRecords}
                   dailyReports={dailyReports}
+                  fieldCheckins={fieldCheckins}
                   onOpenPrintModal={() => setPrintModalOpen(true)}
                   onOpenAiChat={() => setAiChatOpen(true)}
                 />
