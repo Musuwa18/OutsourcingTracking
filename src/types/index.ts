@@ -45,6 +45,9 @@ export interface AuthUser {
   assignedLocation?: OfficeLocation;
   workspaceNote?: string;
   supervisorId?: string;
+  pendingSupervisorId?: string | null;
+  supervisorChangeCount?: number;
+  supervisorRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
 }
 
 export interface OfficeLocation {
@@ -69,6 +72,9 @@ export interface StaffProfile {
   customLocation?: OfficeLocation | null;
   workspaceNote?: string;
   supervisorId?: string;
+  pendingSupervisorId?: string | null;
+  supervisorChangeCount?: number;
+  supervisorRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
   avatarColor: string;
   initials: string;
   joinDate: string;
@@ -243,6 +249,9 @@ export interface UserAccount {
   divisionName?: string;
   vendorName?: string;
   supervisorId?: string;
+  pendingSupervisorId?: string | null;
+  supervisorChangeCount?: number;
+  supervisorRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
   phone?: string;
   deviceId?: string | null;
   deviceBinding: {

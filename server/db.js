@@ -68,6 +68,9 @@ if (isNodeSqlite && dbEngine) {
       biometric_key TEXT,
       custom_location_json TEXT,
       supervisor_id TEXT,
+      pending_supervisor_id TEXT,
+      supervisor_change_count INTEGER DEFAULT 0,
+      supervisor_request_status TEXT DEFAULT 'NONE',
       workspace_note TEXT,
       created_at TEXT NOT NULL
     );
@@ -174,6 +177,15 @@ if (isNodeSqlite && dbEngine) {
   } catch (e) {}
   try {
     dbEngine.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'Aktif';`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN pending_supervisor_id TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN supervisor_change_count INTEGER DEFAULT 0;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN supervisor_request_status TEXT DEFAULT 'NONE';`);
   } catch (e) {}
 
   // Migrasi aman untuk kolom baru tabel attendance (Sesi istirahat & tugas lapangan)
@@ -875,6 +887,9 @@ function mapUserRow(row) {
     customLocation,
     assignedLocation: customLocation, // jika null, client fallback ke Kantor Disdik HST
     supervisorId: row.supervisor_id,
+    pendingSupervisorId: row.pending_supervisor_id || null,
+    supervisorChangeCount: Number(row.supervisor_change_count) || 0,
+    supervisorRequestStatus: row.supervisor_request_status || 'NONE',
     workspaceNote: row.workspace_note
   };
 }
@@ -981,14 +996,158 @@ export function updateUserLocation(userId, customLocation, workspaceNote) {
 
 export function updateUserSupervisor(userId, supervisorId) {
   if (isNodeSqlite && dbEngine) {
-    dbEngine.prepare('UPDATE users SET supervisor_id = ? WHERE id = ?').run(supervisorId, userId);
+    dbEngine.prepare(
+      `UPDATE users SET supervisor_id = ?, pending_supervisor_id = NULL, supervisor_request_status = 'APPROVED' WHERE id = ?`
+    ).run(supervisorId, userId);
   } else {
     const user = fallbackStore.users.find((u) => u.id === userId);
     if (user) {
       user.supervisorId = supervisorId;
+      user.pendingSupervisorId = null;
+      user.supervisorRequestStatus = 'APPROVED';
       persistFallback();
     }
   }
+}
+
+export function listSupervisors() {
+  if (isNodeSqlite && dbEngine) {
+    const rows = dbEngine.prepare(
+      "SELECT * FROM users WHERE role = 'supervisor' ORDER BY division_name ASC, name ASC"
+    ).all();
+    return rows.map((r) => mapUserRow(r));
+  } else {
+    return fallbackStore.users
+      .filter((u) => u.role === 'supervisor')
+      .map((u) => ({ ...u, passwordHash: undefined }));
+  }
+}
+
+export function requestSupervisorChange(userId, newSupervisorId) {
+  const user = getUserById(userId);
+  if (!user) {
+    throw new Error('Pengguna tidak ditemukan.');
+  }
+  if (user.supervisorId === newSupervisorId) {
+    throw new Error('Atasan yang dipilih sama dengan atasan aktif Anda saat ini.');
+  }
+
+  const targetSupervisor = getUserById(newSupervisorId);
+  const targetName = targetSupervisor ? targetSupervisor.name : 'Atasan Baru';
+  const currentCount = Number(user.supervisorChangeCount) || 0;
+
+  if (currentCount === 0) {
+    // Pilihan pertama kali: Berlaku instan (DIRECT APPROVAL)
+    if (isNodeSqlite && dbEngine) {
+      dbEngine.prepare(
+        `UPDATE users SET 
+          supervisor_id = ?, 
+          pending_supervisor_id = NULL, 
+          supervisor_change_count = 1, 
+          supervisor_request_status = 'APPROVED' 
+        WHERE id = ?`
+      ).run(newSupervisorId, userId);
+    } else {
+      const u = fallbackStore.users.find((x) => x.id === userId);
+      if (u) {
+        u.supervisorId = newSupervisorId;
+        u.pendingSupervisorId = null;
+        u.supervisorChangeCount = 1;
+        u.supervisorRequestStatus = 'APPROVED';
+        persistFallback();
+      }
+    }
+    const updated = getUserById(userId);
+    return {
+      mode: 'DIRECT',
+      user: updated,
+      message: `Atasan langsung berhasil dipilih (${targetName}) dan langsung aktif.`
+    };
+  } else {
+    // Pilihan ke-2 dan seterusnya: Menunggu persetujuan Super Admin (PENDING)
+    if (isNodeSqlite && dbEngine) {
+      dbEngine.prepare(
+        `UPDATE users SET 
+          pending_supervisor_id = ?, 
+          supervisor_request_status = 'PENDING' 
+        WHERE id = ?`
+      ).run(newSupervisorId, userId);
+    } else {
+      const u = fallbackStore.users.find((x) => x.id === userId);
+      if (u) {
+        u.pendingSupervisorId = newSupervisorId;
+        u.supervisorRequestStatus = 'PENDING';
+        persistFallback();
+      }
+    }
+    const updated = getUserById(userId);
+    return {
+      mode: 'PENDING',
+      user: updated,
+      message: `Pengajuan pergantian atasan ke ${targetName} telah dikirim dan menunggu persetujuan Super Admin.`
+    };
+  }
+}
+
+export function approveSupervisorChange(userId) {
+  const user = getUserById(userId);
+  if (!user) {
+    throw new Error('Pengguna tidak ditemukan.');
+  }
+  if (!user.pendingSupervisorId) {
+    throw new Error('Tidak ada pengajuan atasan yang tertunda untuk pengguna ini.');
+  }
+
+  const targetSupervisor = getUserById(user.pendingSupervisorId);
+  const targetName = targetSupervisor ? targetSupervisor.name : 'Atasan Baru';
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `UPDATE users SET 
+        supervisor_id = pending_supervisor_id, 
+        pending_supervisor_id = NULL, 
+        supervisor_request_status = 'APPROVED', 
+        supervisor_change_count = COALESCE(supervisor_change_count, 0) + 1 
+      WHERE id = ?`
+    ).run(userId);
+  } else {
+    const u = fallbackStore.users.find((x) => x.id === userId);
+    if (u) {
+      u.supervisorId = u.pendingSupervisorId;
+      u.pendingSupervisorId = null;
+      u.supervisorRequestStatus = 'APPROVED';
+      u.supervisorChangeCount = (u.supervisorChangeCount || 0) + 1;
+      persistFallback();
+    }
+  }
+  return getUserById(userId);
+}
+
+export function rejectSupervisorChange(userId) {
+  const user = getUserById(userId);
+  if (!user) {
+    throw new Error('Pengguna tidak ditemukan.');
+  }
+  if (!user.pendingSupervisorId && user.supervisorRequestStatus !== 'PENDING') {
+    throw new Error('Tidak ada pengajuan atasan yang tertunda untuk pengguna ini.');
+  }
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `UPDATE users SET 
+        pending_supervisor_id = NULL, 
+        supervisor_request_status = 'REJECTED' 
+      WHERE id = ?`
+    ).run(userId);
+  } else {
+    const u = fallbackStore.users.find((x) => x.id === userId);
+    if (u) {
+      u.pendingSupervisorId = null;
+      u.supervisorRequestStatus = 'REJECTED';
+      persistFallback();
+    }
+  }
+  return getUserById(userId);
 }
 
 export function listUsersByDivision(divisionId) {
@@ -1278,6 +1437,8 @@ export function updateUserProfile(userId, profileData) {
     if (profileData.supervisorId !== undefined) {
       updates.push('supervisor_id = ?');
       values.push(profileData.supervisorId);
+      updates.push('pending_supervisor_id = NULL');
+      updates.push("supervisor_request_status = 'APPROVED'");
     }
     if (profileData.role) {
       updates.push('role = ?');

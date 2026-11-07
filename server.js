@@ -15,6 +15,10 @@ import {
   updateUserDevice,
   updateUserLocation,
   updateUserSupervisor,
+  listSupervisors,
+  requestSupervisorChange,
+  approveSupervisorChange,
+  rejectSupervisorChange,
   listUsersByDivision,
   listDivisions,
   createDivision,
@@ -500,6 +504,51 @@ app.delete('/api/users/:id', (req, res) => {
     res.json({ success: true, message: 'Akun pegawai berhasil dihapus.' });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Gagal menghapus akun pegawai.' });
+  }
+});
+
+// 6.D. Manajemen Pemilihan & Persetujuan Atasan Langsung (Penilai KPI)
+app.get('/api/supervisors', (req, res) => {
+  try {
+    const supervisors = listSupervisors();
+    res.json({ success: true, supervisors });
+  } catch (err) {
+    console.error('[API GET /api/supervisors error]', err);
+    res.status(500).json({ success: false, message: 'Gagal mengambil daftar atasan.' });
+  }
+});
+
+app.put('/api/user/supervisor', (req, res) => {
+  try {
+    const { userId, supervisorId } = req.body;
+    if (!userId || !supervisorId) {
+      return res.status(400).json({ success: false, message: 'ID pengguna dan ID atasan wajib disertakan.' });
+    }
+    const result = requestSupervisorChange(userId, supervisorId);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[API PUT /api/user/supervisor error]', err);
+    res.status(400).json({ success: false, message: err.message || 'Gagal mengajukan perubahan atasan.' });
+  }
+});
+
+app.put('/api/admin/users/:id/approve-supervisor', (req, res) => {
+  try {
+    const updated = approveSupervisorChange(req.params.id);
+    res.json({ success: true, user: updated, message: 'Pengajuan atasan langsung berhasil disetujui.' });
+  } catch (err) {
+    console.error('[API PUT approve supervisor error]', err);
+    res.status(400).json({ success: false, message: err.message || 'Gagal menyetujui pengajuan atasan.' });
+  }
+});
+
+app.put('/api/admin/users/:id/reject-supervisor', (req, res) => {
+  try {
+    const updated = rejectSupervisorChange(req.params.id);
+    res.json({ success: true, user: updated, message: 'Pengajuan atasan langsung berhasil ditolak.' });
+  } catch (err) {
+    console.error('[API PUT reject supervisor error]', err);
+    res.status(400).json({ success: false, message: err.message || 'Gagal menolak pengajuan atasan.' });
   }
 });
 

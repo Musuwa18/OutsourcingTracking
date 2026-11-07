@@ -68,6 +68,8 @@ import {
   apiResetUserDevice,
   apiDeleteUser,
   apiSaveAttendanceSettings,
+  apiApproveSupervisorChange,
+  apiRejectSupervisorChange,
 } from '../services/api';
 
 interface SystemSettingsViewProps {
@@ -550,6 +552,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               divisionId: editUserDivisionId,
               divisionName: selectedDiv?.name || u.divisionName,
               supervisorId: editUserSupervisorId,
+              pendingSupervisorId: null,
+              supervisorRequestStatus: 'APPROVED' as const,
               vendorName: editUserVendorName,
               roleTitle: editUserRoleTitle.trim() || u.roleTitle,
               role: editUserRole,
@@ -686,6 +690,36 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       onShowToast(`Kunci perangkat untuk ${user.name} berhasil di-reset. Staf dapat login dari HP baru.`, 'success');
     } catch (err: any) {
       onShowToast(err.message || 'Gagal mereset kunci perangkat.', 'warning');
+    }
+  };
+
+  const handleApproveSupervisorRequest = async (userId: string) => {
+    try {
+      const res = await apiApproveSupervisorChange(userId);
+      const updated = users.map((u) => (u.id === userId ? { ...u, ...res.user } : u));
+      onUpdateUsers(updated);
+      onShowToast(res.message, 'success');
+      if (targetUserForEdit && targetUserForEdit.id === userId) {
+        setTargetUserForEdit({ ...targetUserForEdit, ...res.user });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal menyetujui pengajuan atasan.';
+      onShowToast(message, 'warning');
+    }
+  };
+
+  const handleRejectSupervisorRequest = async (userId: string) => {
+    try {
+      const res = await apiRejectSupervisorChange(userId);
+      const updated = users.map((u) => (u.id === userId ? { ...u, ...res.user } : u));
+      onUpdateUsers(updated);
+      onShowToast(res.message, 'info');
+      if (targetUserForEdit && targetUserForEdit.id === userId) {
+        setTargetUserForEdit({ ...targetUserForEdit, ...res.user });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal menolak pengajuan atasan.';
+      onShowToast(message, 'warning');
     }
   };
 
@@ -1323,16 +1357,40 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
                       {/* Divisi & Atasan Langsung */}
                       <td className="py-3 px-4">
-                        <div className="space-y-0.5">
+                        <div className="space-y-1">
                           <div className="font-medium text-slate-900 dark:text-white">
                             {u.divisionName || 'Dinas Pendidikan HST'}
                           </div>
-                          <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                          <div className="text-[10px] text-slate-500 flex items-center gap-1 flex-wrap">
                             <span className="text-slate-400">Atasan:</span>
                             <span className="font-semibold text-indigo-600 dark:text-indigo-400 truncate max-w-[140px]">
                               {getSupervisorName(u.supervisorId)}
                             </span>
                           </div>
+                          {u.supervisorRequestStatus === 'PENDING' && (
+                            <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[10px] text-amber-700 dark:text-amber-300 space-y-1">
+                              <div className="flex items-center gap-1 font-bold">
+                                <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+                                <span>Pengajuan: {getSupervisorName(u.pendingSupervisorId)}</span>
+                              </div>
+                              <div className="flex items-center gap-1 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveSupervisorRequest(u.id)}
+                                  className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[9px] cursor-pointer transition-colors"
+                                >
+                                  Setujui
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRejectSupervisorRequest(u.id)}
+                                  className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold text-[9px] cursor-pointer transition-colors"
+                                >
+                                  Tolak
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </td>
 
@@ -2672,6 +2730,30 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Atasan Langsung (Penilai KPI)
                   </label>
+                  {targetUserForEdit?.supervisorRequestStatus === 'PENDING' && (
+                    <div className="mb-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="font-bold">Pengajuan Pergantian:</span> ke{' '}
+                        <strong>{getSupervisorName(targetUserForEdit.pendingSupervisorId)}</strong>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveSupervisorRequest(targetUserForEdit.id)}
+                          className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] cursor-pointer"
+                        >
+                          Setujui
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectSupervisorRequest(targetUserForEdit.id)}
+                          className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] cursor-pointer"
+                        >
+                          Tolak
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <select
                     value={editUserSupervisorId}
                     onChange={(e) => setEditUserSupervisorId(e.target.value)}

@@ -1,8 +1,22 @@
-import React, { useState } from 'react';
-import { X, User, Lock, Phone, Building2, Briefcase, ShieldCheck, KeyRound, Eye, EyeOff, Check, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  ShieldCheck,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Check,
+  AlertCircle,
+  RefreshCw,
+  Clock,
+} from 'lucide-react';
 import { AuthUser } from '../types';
-import { apiChangePassword, apiUpdateUserProfile } from '../services/api';
-
+import {
+  apiChangePassword,
+  apiUpdateUserProfile,
+  apiGetSupervisors,
+  apiUpdateUserSupervisor,
+} from '../services/api';
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -23,8 +37,63 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   // Info form state
   const [phone, setPhone] = useState(currentUser.phone || '');
   const [isSavingInfo, setIsSavingInfo] = useState(false);
+  // Supervisor workflow state
+  const [supervisors, setSupervisors] = useState<AuthUser[]>([]);
+  const [selectedSupervisorId, setSelectedSupervisorId] = useState(currentUser.supervisorId || '');
+  const [isChangingSupervisor, setIsChangingSupervisor] = useState(false);
+  const [isSubmittingSupervisor, setIsSubmittingSupervisor] = useState(false);
 
-  // Password form state
+  useEffect(() => {
+    let isMounted = true;
+    if (isOpen) {
+      apiGetSupervisors().then((data) => {
+        if (isMounted) setSupervisors(data);
+      });
+      setSelectedSupervisorId(currentUser.supervisorId || '');
+      setIsChangingSupervisor(false);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, currentUser.supervisorId]);
+
+  const changeCount = currentUser.supervisorChangeCount ?? 0;
+  const isPending = currentUser.supervisorRequestStatus === 'PENDING';
+  const currentSupervisor = supervisors.find((s) => s.id === currentUser.supervisorId);
+  const pendingSupervisor = supervisors.find((s) => s.id === currentUser.pendingSupervisorId);
+
+  const groupedSupervisors = supervisors.reduce<Record<string, AuthUser[]>>((acc, s) => {
+    const div = s.divisionName || 'Pimpinan / Lainnya';
+    if (!acc[div]) acc[div] = [];
+    acc[div].push(s);
+    return acc;
+  }, {});
+
+  const handleSupervisorSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedSupervisorId) {
+      onShowToast('Silakan pilih atasan langsung terlebih dahulu.', 'warning');
+      return;
+    }
+    if (selectedSupervisorId === currentUser.supervisorId) {
+      onShowToast('Atasan yang dipilih sama dengan atasan aktif saat ini.', 'info');
+      setIsChangingSupervisor(false);
+      return;
+    }
+    setIsSubmittingSupervisor(true);
+    try {
+      const res = await apiUpdateUserSupervisor(currentUser.id, selectedSupervisorId);
+      onUserUpdated(res.user);
+      localStorage.setItem('ot_session_user', JSON.stringify(res.user));
+      onShowToast(res.message, res.mode === 'DIRECT' ? 'success' : 'info');
+      setIsChangingSupervisor(false);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal mengubah atasan langsung.';
+      onShowToast(message, 'warning');
+    } finally {
+      setIsSubmittingSupervisor(false);
+    }
+  };
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -204,6 +273,143 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 cursor-not-allowed"
                   />
                 </div>
+              </div>
+
+              {/* Atasan Langsung (Penilai KPI) Section */}
+              <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    Atasan Langsung (Penilai KPI)
+                  </label>
+                  {currentUser.role === 'outsourcing' && changeCount >= 1 && !isPending && !isChangingSupervisor && (
+                    <button
+                      type="button"
+                      onClick={() => setIsChangingSupervisor(true)}
+                      className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Ajukan Perubahan Atasan
+                    </button>
+                  )}
+                </div>
+
+                {/* Skenario C: Status PENDING */}
+                {isPending && (
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <Clock className="w-4 h-4 shrink-0 text-amber-500" />
+                      <span>Pengajuan Sedang Menunggu Verifikasi</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                      Pengajuan pergantian atasan ke{' '}
+                      <strong>{pendingSupervisor?.name || 'Pejabat Penilai'}</strong>{' '}
+                      ({pendingSupervisor?.roleTitle || pendingSupervisor?.divisionName || 'Atasan Baru'}) sedang menunggu verifikasi Super Admin.
+                    </p>
+                    {currentSupervisor && (
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-amber-500/20">
+                        Atasan aktif saat ini: <strong>{currentSupervisor.name}</strong> ({currentSupervisor.roleTitle})
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Skenario A: Belum pernah pilih (changeCount == 0) */}
+                {changeCount === 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex gap-2">
+                      <select
+                        value={selectedSupervisorId}
+                        onChange={(e) => setSelectedSupervisorId(e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-xl border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 dark:text-white"
+                      >
+                        <option value="">-- Pilih Atasan Langsung (Penilai KPI) --</option>
+                        {Object.entries(groupedSupervisors).map(([division, spvList]) => (
+                          <optgroup key={division} label={division}>
+                            {spvList.map((spv) => (
+                              <option key={spv.id} value={spv.id}>
+                                {spv.name} · {spv.roleTitle}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!selectedSupervisorId || selectedSupervisorId === currentUser.supervisorId || isSubmittingSupervisor}
+                        onClick={() => handleSupervisorSubmit()}
+                        className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs transition-colors cursor-pointer shrink-0"
+                      >
+                        {isSubmittingSupervisor ? 'Menyimpan...' : 'Pilih Atasan'}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 italic">
+                      * Bebas memilih atasan mandiri 1 kali saat inisiasi akun.
+                    </p>
+                  </div>
+                )}
+
+                {/* Skenario B: Sudah pernah pilih (changeCount >= 1) & bukan pending */}
+                {changeCount >= 1 && !isPending && (
+                  <>
+                    {!isChangingSupervisor ? (
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white text-xs">
+                            {currentSupervisor ? currentSupervisor.name : 'Atasan Langsung Belum Ditetapkan'}
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {currentSupervisor?.roleTitle || currentSupervisor?.divisionName || '-'}
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          Aktif
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-indigo-200 dark:border-indigo-800 space-y-2.5 animate-in fade-in duration-150">
+                        <div className="text-xs font-bold text-slate-900 dark:text-white">
+                          Formulir Pengajuan Perubahan Atasan
+                        </div>
+                        <select
+                          value={selectedSupervisorId}
+                          onChange={(e) => setSelectedSupervisorId(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-900 dark:text-white"
+                        >
+                          <option value="">-- Pilih Calon Atasan Baru --</option>
+                          {Object.entries(groupedSupervisors).map(([division, spvList]) => (
+                            <optgroup key={division} label={division}>
+                              {spvList.map((spv) => (
+                                <option key={spv.id} value={spv.id}>
+                                  {spv.name} · {spv.roleTitle}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                          * Catatan: Perubahan kedua dan seterusnya membutuhkan persetujuan Super Admin.
+                        </p>
+                        <div className="flex justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsChangingSupervisor(false)}
+                            className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold text-xs cursor-pointer"
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!selectedSupervisorId || selectedSupervisorId === currentUser.supervisorId || isSubmittingSupervisor}
+                            onClick={() => handleSupervisorSubmit()}
+                            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs transition-colors cursor-pointer"
+                          >
+                            {isSubmittingSupervisor ? 'Mengirim...' : 'Kirim Pengajuan'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {currentUser.workspaceNote && (

@@ -495,3 +495,59 @@ export async function apiSaveAttendanceSettings(settings: any): Promise<any> {
   }
   return data.settings;
 }
+
+// 14. SUPERVISOR ASSIGNMENT & APPROVAL WORKFLOW
+export async function apiGetSupervisors(): Promise<AuthUser[]> {
+  try {
+    const res = await fetch(`${API_BASE}/supervisors`);
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Gagal mengambil daftar atasan.');
+    }
+    return data.supervisors || [];
+  } catch (err: unknown) {
+    console.warn('apiGetSupervisors warning:', err);
+    return [];
+  }
+}
+
+export async function apiUpdateUserSupervisor(userId: string, supervisorId: string): Promise<{
+  mode: 'DIRECT' | 'PENDING';
+  user: AuthUser;
+  message: string;
+}> {
+  const res = await fetch(`${API_BASE}/user/supervisor`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ userId, supervisorId }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Gagal mengajukan perubahan atasan.');
+  }
+  return data;
+}
+
+export async function apiApproveSupervisorChange(userId: string): Promise<{ user: AuthUser; message: string }> {
+  const res = await fetch(`${API_BASE}/admin/users/${userId}/approve-supervisor`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Gagal menyetujui pengajuan atasan.');
+  }
+  return data;
+}
+
+export async function apiRejectSupervisorChange(userId: string): Promise<{ user: AuthUser; message: string }> {
+  const res = await fetch(`${API_BASE}/admin/users/${userId}/reject-supervisor`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Gagal menolak pengajuan atasan.');
+  }
+  return data;
+}

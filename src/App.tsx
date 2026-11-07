@@ -1619,6 +1619,20 @@ export default function App() {
         onUserUpdated={(updated) => {
           setCurrentUser(updated);
           localStorage.setItem('ot_session_user', JSON.stringify(updated));
+          setStaffList((prev) =>
+            prev.map((s) =>
+              s.id === updated.id
+                ? {
+                    ...s,
+                    phone: updated.phone || s.phone,
+                    supervisorId: updated.supervisorId,
+                    pendingSupervisorId: updated.pendingSupervisorId,
+                    supervisorChangeCount: updated.supervisorChangeCount,
+                    supervisorRequestStatus: updated.supervisorRequestStatus,
+                  }
+                : s
+            )
+          );
         }}
         onShowToast={showToast}
       />
