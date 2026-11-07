@@ -12,6 +12,7 @@ import {
   Camera,
   Briefcase,
   ExternalLink,
+  Coffee,
 } from 'lucide-react';
 import { AttendanceRecord, DailyWorkReport, StaffProfile, FieldCheckinRecord } from '../types';
 import { GeofenceRadarMap } from './GeofenceRadarMap';
@@ -321,24 +322,49 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
                 </div>
               </div>
             ) : isAttendance && attRecord ? (
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-1">
-                  <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-emerald-400" /> Jam Masuk (Clock In)
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-1">
+                    <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-emerald-400" /> Jam Masuk (Clock In)
+                    </div>
+                    <div className="font-mono text-sm font-bold text-white">
+                      {attRecord.clockInTime} WIB
+                    </div>
                   </div>
-                  <div className="font-mono text-sm font-bold text-white">
-                    {attRecord.clockInTime} WIB
+
+                  <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-1">
+                    <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-indigo-400" /> Jam Pulang (Clock Out)
+                    </div>
+                    <div className="font-mono text-sm font-bold text-white">
+                      {attRecord.clockOutTime ? `${attRecord.clockOutTime} WIB` : 'Belum Clock Out'}
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-1">
-                  <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-indigo-400" /> Jam Pulang (Clock Out)
+                {attRecord.breakOutTime && (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-amber-500 dark:text-amber-400 font-semibold">
+                      <span className="flex items-center gap-1.5">
+                        <Coffee className="w-3.5 h-3.5" /> Sesi Istirahat Kerja
+                      </span>
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                        {attRecord.breakInTime ? 'Sesi Istirahat Tuntas' : 'Sedang Istirahat'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-500/20 font-mono text-xs">
+                      <div>
+                        <div className="text-[10px] text-slate-400 font-sans">Clock Out Istirahat:</div>
+                        <div className="font-bold text-slate-200">{attRecord.breakOutTime} WIB</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-400 font-sans">Clock In Kembali:</div>
+                        <div className="font-bold text-slate-200">{attRecord.breakInTime ? `${attRecord.breakInTime} WIB` : 'Belum Kembali'}</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="font-mono text-sm font-bold text-white">
-                    {attRecord.clockOutTime ? `${attRecord.clockOutTime} WIB` : 'Belum Clock Out'}
-                  </div>
-                </div>
+                )}
               </div>
             ) : reportRecord ? (
               <div className="grid grid-cols-2 gap-2.5">

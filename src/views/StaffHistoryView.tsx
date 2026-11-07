@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Clock, FileText, Briefcase } from 'lucide-react';
+import { Calendar, Clock, FileText, Briefcase, Coffee } from 'lucide-react';
 import { AttendanceRecord, DailyWorkReport, StaffProfile, FieldCheckinRecord } from '../types';
 import { DetailRiwayatModal } from '../components/DetailRiwayatModal';
 
@@ -159,12 +159,59 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                         <div className="text-[11px] text-slate-700 dark:text-slate-300 font-mono mt-0.5 font-semibold">
                           Masuk: {dayAttendance.clockInTime} · Pulang: {dayAttendance.clockOutTime || 'Belum'}
                         </div>
+                        {dayAttendance.breakOutTime && (
+                          <div className="text-[10px] text-amber-600 dark:text-amber-400 font-mono mt-0.5 flex items-center gap-1 font-semibold">
+                            <Coffee className="w-3 h-3 text-amber-500 shrink-0" />
+                            <span>Istirahat: {dayAttendance.breakOutTime} - {dayAttendance.breakInTime || 'Sedang Istirahat'}</span>
+                            {dayAttendance.breakInTime && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20">
+                                Tuntas
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     <div className="text-right text-[11px] text-slate-700 dark:text-slate-400 font-medium">
                       <div className="font-semibold text-slate-800 dark:text-slate-300">{dayAttendance.locationCoords.locationName}</div>
                       <div className="font-mono text-[10px] text-slate-600 dark:text-slate-400">Akurasi ±{Math.round(dayAttendance.locationCoords.accuracy)}m</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Break Session Card (Sesi Istirahat Kerja) */}
+                {dayAttendance?.breakOutTime && filterType !== 'reports' && filterType !== 'field' && (
+                  <div
+                    onClick={() => handleOpenDetail(dayAttendance)}
+                    className="p-4 glass-card flex items-center justify-between text-xs cursor-pointer transition-all active:scale-[0.99] hover:border-amber-500/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                        <Coffee className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <span>Sesi Istirahat Kerja</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            {dayAttendance.breakInTime ? 'Sesi Istirahat Tuntas' : 'Sedang Istirahat'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-700 dark:text-slate-300 font-mono mt-0.5 font-semibold">
+                          {dayAttendance.breakInTime
+                            ? `Istirahat selesai (${dayAttendance.breakOutTime} - ${dayAttendance.breakInTime} WITA)`
+                            : `Sedang istirahat keluar sejak ${dayAttendance.breakOutTime} WITA`}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right text-[11px] text-slate-700 dark:text-slate-400 font-medium">
+                      <div className="font-semibold text-slate-800 dark:text-slate-300">
+                        {dayAttendance.breakInTime ? 'Status Sesi' : 'Status'}
+                      </div>
+                      <div className="font-mono text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                        {dayAttendance.breakInTime ? 'Tuntas Tercatat' : 'Keluar Istirahat'}
+                      </div>
                     </div>
                   </div>
                 )}
