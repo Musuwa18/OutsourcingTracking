@@ -107,9 +107,12 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
     const circleColor = isWithin ? '#10b981' : '#ef4444';
     const circleFill = isWithin ? '#34d399' : '#f87171';
 
+    // Batasi radius visual agar SVG tidak membebani browser jika akurasi GPS desktop melompat tinggi
+    const safeRadius = Math.min(Math.max(Number(officeRadius) || 100, 20), 5000);
+
     if (!geofenceCircleRef.current) {
       geofenceCircleRef.current = L.circle(officePos, {
-        radius: officeRadius,
+        radius: safeRadius,
         color: circleColor,
         weight: 2,
         fillColor: circleFill,
@@ -118,7 +121,7 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
       }).addTo(map);
     } else {
       geofenceCircleRef.current.setLatLng(officePos);
-      geofenceCircleRef.current.setRadius(officeRadius);
+      geofenceCircleRef.current.setRadius(safeRadius);
       geofenceCircleRef.current.setStyle({
         color: circleColor,
         fillColor: circleFill,
@@ -211,13 +214,22 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
         connectionLineRef.current.setStyle({ color: lineColor });
       }
 
-      // Fit bounds agar kedua titik (pegawai & kantor) selalu terlihat jelas
-      const bounds = L.latLngBounds([userPos, officePos]);
-      map.fitBounds(bounds, {
-        padding: [30, 30],
-        maxZoom: 18,
-        animate: true,
-      });
+      // Fit bounds hanya jika kedua titik berbeda; jika titik sama gunakan setView langsung tanpa animasi berulang
+      const isDifferentPoint = Math.abs(userPos[0] - officePos[0]) > 0.0001 || Math.abs(userPos[1] - officePos[1]) > 0.0001;
+      if (isDifferentPoint) {
+        try {
+          const bounds = L.latLngBounds([userPos, officePos]);
+          map.fitBounds(bounds, {
+            padding: [30, 30],
+            maxZoom: 17,
+            animate: false,
+          });
+        } catch {
+          map.setView(userPos, 16, { animate: false });
+        }
+      } else {
+        map.setView(userPos, 16, { animate: false });
+      }
     }
   }, [userCoords, assignedLocation, mapReady]);
 

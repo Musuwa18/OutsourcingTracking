@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -37,13 +37,23 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
   // Tab switcher khusus presensi harian (Clock In Masuk vs Clock Out Pulang)
   const [attendanceSubTab, setAttendanceSubTab] = useState<'clock-in' | 'clock-out'>('clock-in');
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Reset sub tab ke clock-in HANYA saat modal pertama kali dibuka atau item berganti
+  useEffect(() => {
+    if (isOpen) {
+      setAttendanceSubTab('clock-in');
+    }
+  }, [isOpen, item?.id]);
+
   // Close on ESC key & prevent background scroll when open
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
       }
     };
 
@@ -51,14 +61,11 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
-    // Reset sub tab ke clock-in saat modal dibuka
-    setAttendanceSubTab('clock-in');
-
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen || !item) return null;
 
@@ -556,6 +563,7 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
                   {/* Peta Interaktif Leaflet OpenStreetMap */}
                   <div className="rounded-xl overflow-hidden border border-slate-700/80 shadow-md">
                     <GeofenceRadarMap
+                      key={`radar-${attendanceSubTab}-${latStr}-${lngStr}`}
                       userCoords={{
                         latitude: Number(latStr),
                         longitude: Number(lngStr),
@@ -569,7 +577,7 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
                         address: locationName,
                         latitude: Number(latStr),
                         longitude: Number(lngStr),
-                        radiusMeters: accuracyMeters || 100,
+                        radiusMeters: Math.min(accuracyMeters || 100, 250),
                       }}
                       height="220px"
                       className="w-full"
