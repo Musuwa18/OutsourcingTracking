@@ -416,19 +416,6 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
                       {/* Quick Inspect Button */}
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {onConfigureLocation && staff && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onConfigureLocation(staff);
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors cursor-pointer"
-                              title="Setting Ruang Kerja & Titik Lokasi Staf"
-                            >
-                              <MapPin className="w-4 h-4 text-indigo-500" />
-                            </button>
-                          )}
                           <button
                             type="button"
                             onClick={(e) => {

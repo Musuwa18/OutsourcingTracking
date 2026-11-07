@@ -1573,7 +1573,6 @@ export default function App() {
                   attendanceRecords={attendanceRecords}
                   dailyReports={dailyReports}
                   onOpenPrintModal={() => setPrintModalOpen(true)}
-                  onConfigureLocation={(staff) => setCustomLocationStaff(staff)}
                   onOpenAiChat={() => setAiChatOpen(true)}
                 />
               )}
@@ -1644,6 +1643,7 @@ export default function App() {
                   onUpdateAttendanceSettings={(s) => setAttendanceSettings(s)}
                   helpDeskConfig={helpDeskConfig}
                   onUpdateHelpDeskConfig={(cfg) => setHelpDeskConfig(cfg)}
+                  onConfigureLocation={(staff) => setCustomLocationStaff(staff)}
                   onShowToast={showToast}
                 />
               )}

@@ -101,6 +101,7 @@ interface SystemSettingsViewProps {
   onUpdateAttendanceSettings?: (settings: AttendanceGlobalSettings) => void;
   helpDeskConfig?: HelpDeskConfig;
   onUpdateHelpDeskConfig?: (config: HelpDeskConfig) => void;
+  onConfigureLocation?: (staff: StaffProfile) => void;
   onShowToast: (message: string, type?: 'success' | 'warning' | 'info') => void;
 }
 
@@ -128,6 +129,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   onUpdateAttendanceSettings,
   helpDeskConfig,
   onUpdateHelpDeskConfig,
+  onConfigureLocation,
   onShowToast,
 }) => {
   const [activeTab, setActiveTab] = useState<'divisions' | 'vendors' | 'users' | 'geofence' | 'schedule' | 'rbac' | 'helpdesk'>('divisions');
@@ -747,6 +749,40 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       onShowToast(`Kunci perangkat untuk ${user.name} berhasil di-reset. Staf dapat login dari HP baru.`, 'success');
     } catch (err: any) {
       onShowToast(err.message || 'Gagal mereset kunci perangkat.', 'warning');
+    }
+  };
+
+  const handleConfigureStaffLocation = (u: UserAccount) => {
+    let targetStaff = staffList.find((s) => s.id === u.id || s.nip === u.nip || s.email === u.email);
+    if (!targetStaff) {
+      const defaultLoc = locations[0] || {
+        id: 'loc-disdik-hst',
+        name: 'Kantor Dinas Pendidikan Kab. Hulu Sungai Tengah',
+        address: 'Jalan Sibli Imansyah No. 01',
+        latitude: -2.591165,
+        longitude: 115.373661,
+        radiusMeters: 100,
+      };
+      targetStaff = {
+        id: u.id,
+        nip: u.nip,
+        name: u.name,
+        email: u.email,
+        phone: u.phone || '',
+        division: u.divisionName || 'Dinas Pendidikan Kab. HST',
+        vendorName: u.vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)',
+        roleTitle: u.roleTitle,
+        assignedLocation: defaultLoc,
+        customLocation: null,
+        workspaceNote: '',
+        avatarColor: u.avatarColor || '#4f46e5',
+        initials: u.initials || u.name.slice(0, 2).toUpperCase(),
+        joinDate: '2026-01-01',
+        status: 'Aktif',
+      };
+    }
+    if (onConfigureLocation) {
+      onConfigureLocation(targetStaff);
     }
   };
 
@@ -1502,6 +1538,15 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                       {/* Actions */}
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleConfigureStaffLocation(u)}
+                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors cursor-pointer"
+                            title="Setting Ruang Kerja & Titik Geofence Staf"
+                          >
+                            <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => handleOpenEditUser(u)}
