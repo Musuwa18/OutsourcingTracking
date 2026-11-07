@@ -413,20 +413,25 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         )}
 
         {/* Sesi Istirahat (Clock Out Istirahat & Clock In Kembali) */}
-        {todaySchedule?.enableBreak && hasClockedIn && !hasClockedOut && (
-          <div className="p-3 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-              <Coffee className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <div>
-                <span className="font-bold text-slate-900 dark:text-white">
-                  Sesi Istirahat ({todaySchedule.breakStart} - {todaySchedule.breakEnd} WITA)
+        {hasClockedIn && !hasClockedOut && (attendanceSettings?.breakSettings?.enabled !== false) && (
+          <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex items-center justify-between gap-3 text-xs shadow-xs">
+            <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300 min-w-0">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                <Coffee className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
+                  <span>Sesi Istirahat Kerja</span>
+                  <span className="font-mono text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                    ({todaySchedule?.enableBreak ? `${todaySchedule.breakStart} - ${todaySchedule.breakEnd} WITA` : '12:00 - 13:00 / Fleksibel'})
+                  </span>
                 </span>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
                   {hasBrokenOut && !hasBrokenIn
                     ? `Sedang istirahat keluar sejak ${todayAttendance?.breakOutTime} WITA`
                     : hasBrokenIn
                     ? `Istirahat selesai (${todayAttendance?.breakOutTime} - ${todayAttendance?.breakInTime} WITA)`
-                    : 'Lakukan clock-out saat keluar istirahat dan clock-in saat kembali'}
+                    : 'Klik "Clock Out Istirahat" saat keluar & "Clock In Istirahat" saat kembali.'}
                 </p>
               </div>
             </div>
@@ -434,7 +439,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleOpenAttendance('break-out')}
-                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shadow-xs cursor-pointer transition-all shrink-0"
+                className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-all shrink-0 active:scale-95 whitespace-nowrap"
               >
                 Clock Out Istirahat
               </button>
@@ -442,12 +447,12 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleOpenAttendance('break-in')}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs cursor-pointer transition-all shrink-0"
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-all shrink-0 active:scale-95 whitespace-nowrap"
               >
                 Clock In Istirahat
               </button>
             ) : (
-              <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 shrink-0">
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20 shrink-0 whitespace-nowrap">
                 Sesi Istirahat Tuntas
               </span>
             )}
