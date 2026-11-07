@@ -76,6 +76,7 @@ import {
   apiFetchFieldCheckins,
   apiSubmitFieldCheckin,
   apiGetHelpDeskSettings,
+  apiUpdateStaffSupervisor,
 } from './services/api';
 import { getTodayDateStr, getCurrentWitaTimeStr } from './utils/date';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
@@ -253,6 +254,37 @@ export default function App() {
         });
         setStaffList(mappedStaff);
         localStorage.setItem('ot_staff_list', JSON.stringify(mappedStaff));
+
+        // Sinkronisasi otomatis supervisorMappings dengan atasan aktif dan penugasan riil dari database
+        const spvUsers = usrs.filter((u: UserAccount) => u.role === 'supervisor');
+        setSupervisorMappings((prev) => {
+          const currentSpvIds = new Set(spvUsers.map((s: UserAccount) => s.id));
+          const updatedMappings: SupervisorMapping[] = spvUsers.map((spv: UserAccount) => {
+            const existing = prev.find((m) => m.supervisorId === spv.id || (spv.nip && m.supervisorId === spv.nip));
+            const staffDirectlyAssigned = mappedStaff
+              .filter((s: StaffProfile) => s.supervisorId === spv.id || (spv.nip && s.supervisorId === spv.nip))
+              .map((s: StaffProfile) => s.id);
+            const mergedIds = Array.from(new Set([
+              ...(existing ? existing.assignedStaffIds : []),
+              ...staffDirectlyAssigned,
+            ]));
+            return {
+              supervisorId: spv.id,
+              supervisorName: spv.name,
+              supervisorRole: spv.roleTitle || 'Supervisor Operasional',
+              assignedStaffIds: mergedIds,
+            };
+          });
+
+          for (const m of prev) {
+            if (!currentSpvIds.has(m.supervisorId)) {
+              updatedMappings.push(m);
+            }
+          }
+
+          localStorage.setItem('ot_supervisor_mappings', JSON.stringify(updatedMappings));
+          return updatedMappings;
+        });
 
         // Sinkronisasi otomatis session user aktif dengan data terbaru dari server
         setCurrentUser((prevUser) => {
@@ -687,6 +719,83 @@ export default function App() {
     setSupervisorMappings(newMappings);
     localStorage.setItem('ot_supervisor_mappings', JSON.stringify(newMappings));
     addAuditLog('Pembaruan Relasi Hierarki', `Pemetaan atasan dan bawahan diperbarui.`, 'Pengaturan');
+  };
+
+  const handleAssignSupervisorStaff = async (supervisorId: string, staffId: string, assign: boolean) => {
+    const targetSupervisor =
+      users.find((u) => u.id === supervisorId || (u.nip && u.nip === supervisorId)) ||
+      supervisorMappings.find((m) => m.supervisorId === supervisorId);
+    const targetStaff = staffList.find((s) => s.id === staffId);
+
+    // 1. Update supervisorMappings state & localStorage
+    setSupervisorMappings((prev) => {
+      const updated = prev.map((m) => {
+        if (m.supervisorId === supervisorId) {
+          const exists = m.assignedStaffIds.includes(staffId);
+          const newIds = assign
+            ? (exists ? m.assignedStaffIds : [...m.assignedStaffIds, staffId])
+            : m.assignedStaffIds.filter((id) => id !== staffId);
+          return { ...m, assignedStaffIds: newIds };
+        }
+        // Single supervisor invariant: cabut dari supervisor lain jika di-assign ke supervisor baru
+        if (assign && m.assignedStaffIds.includes(staffId)) {
+          return { ...m, assignedStaffIds: m.assignedStaffIds.filter((id) => id !== staffId) };
+        }
+        return m;
+      });
+      localStorage.setItem('ot_supervisor_mappings', JSON.stringify(updated));
+      return updated;
+    });
+
+    // 2. Update staffList state & localStorage
+    setStaffList((prev) => {
+      const updated = prev.map((s) => {
+        if (s.id === staffId) {
+          return {
+            ...s,
+            supervisorId: assign ? supervisorId : undefined,
+          };
+        }
+        return s;
+      });
+      localStorage.setItem('ot_staff_list', JSON.stringify(updated));
+      return updated;
+    });
+
+    // 3. Update users state & localStorage
+    setUsers((prev) => {
+      const updated = prev.map((u) => {
+        if (u.id === staffId) {
+          return {
+            ...u,
+            supervisorId: assign ? supervisorId : null,
+            pendingSupervisorId: null,
+            supervisorRequestStatus: assign ? ('APPROVED' as const) : ('NONE' as const),
+          };
+        }
+        return u;
+      });
+      localStorage.setItem('ot_users', JSON.stringify(updated));
+      return updated;
+    });
+
+    // 4. Persist to Backend SQLite database
+    try {
+      await apiUpdateStaffSupervisor(staffId, assign ? supervisorId : '');
+      const spvName =
+        targetSupervisor?.name ||
+        ('supervisorName' in (targetSupervisor || {})
+          ? (targetSupervisor as SupervisorMapping).supervisorName
+          : supervisorId);
+      const actionText = assign
+        ? `Staf ${targetStaff?.name || staffId} berhasil ditugaskan ke atasan ${spvName}.`
+        : `Penugasan staf ${targetStaff?.name || staffId} dari atasan ${spvName} berhasil dicabut.`;
+      showToast(actionText, 'success');
+      addAuditLog('Pembaruan Relasi Hierarki', actionText, 'Pengaturan');
+    } catch (err: unknown) {
+      console.error('Failed to sync supervisor assignment to backend:', err);
+      showToast('Gagal menyinkronkan penugasan ke server. Perubahan disimpan secara lokal.', 'warning');
+    }
   };
 
   const handleUpdateSecurityConfig = (newSec: EnterpriseSecurityConfig) => {
@@ -1667,6 +1776,7 @@ export default function App() {
                   onUpdateRolePermissions={handleUpdateRolePermissions}
                   supervisorMappings={supervisorMappings}
                   onUpdateSupervisorMappings={handleUpdateSupervisorMappings}
+                  onAssignSupervisorStaff={handleAssignSupervisorStaff}
                   securityConfig={securityConfig}
                   onUpdateSecurityConfig={handleUpdateSecurityConfig}
                   attendanceSettings={attendanceSettings}

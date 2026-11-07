@@ -96,6 +96,7 @@ interface SystemSettingsViewProps {
   onUpdateRolePermissions: (perms: Record<string, RolePermissions>) => void;
   supervisorMappings: SupervisorMapping[];
   onUpdateSupervisorMappings: (mappings: SupervisorMapping[]) => void;
+  onAssignSupervisorStaff?: (supervisorId: string, staffId: string, assign: boolean) => Promise<void> | void;
   securityConfig: EnterpriseSecurityConfig;
   onUpdateSecurityConfig: (cfg: EnterpriseSecurityConfig) => void;
   attendanceSettings?: AttendanceGlobalSettings;
@@ -126,6 +127,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   onUpdateRolePermissions,
   supervisorMappings,
   onUpdateSupervisorMappings,
+  onAssignSupervisorStaff,
   securityConfig,
   onUpdateSecurityConfig,
   attendanceSettings,
@@ -931,22 +933,45 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     onShowToast('Matriks hak akses (RBAC) berhasil disimpan dan diterapkan.', 'success');
   };
 
-  const handleToggleSupervisorStaff = (mappingId: string, staffId: string) => {
-    const updated = supervisorMappings.map((m) => {
-      if (m.supervisorId === mappingId) {
-        const hasStaff = m.assignedStaffIds.includes(staffId);
-        const newStaffIds = hasStaff
-          ? m.assignedStaffIds.filter((id) => id !== staffId)
-          : [...m.assignedStaffIds, staffId];
-        return {
-          ...m,
-          assignedStaffIds: newStaffIds,
-        };
-      }
-      return m;
-    });
-    onUpdateSupervisorMappings(updated);
-    onShowToast('Pemetaan atasan-bawahan berhasil diperbarui.', 'info');
+  const handleToggleSupervisorStaff = async (mappingId: string, staffId: string) => {
+    const mapping = supervisorMappings.find((m) => m.supervisorId === mappingId);
+    const staff = staffList.find((s) => s.id === staffId);
+    const isCurrentlyAssigned = Boolean(
+      (mapping && mapping.assignedStaffIds.includes(staffId)) ||
+      (staff && staff.supervisorId === mappingId)
+    );
+
+    const willAssign = !isCurrentlyAssigned;
+
+    if (onAssignSupervisorStaff) {
+      await onAssignSupervisorStaff(mappingId, staffId, willAssign);
+    } else {
+      const updated = supervisorMappings.map((m) => {
+        if (m.supervisorId === mappingId) {
+          const newStaffIds = willAssign
+            ? (m.assignedStaffIds.includes(staffId) ? m.assignedStaffIds : [...m.assignedStaffIds, staffId])
+            : m.assignedStaffIds.filter((id) => id !== staffId);
+          return {
+            ...m,
+            assignedStaffIds: newStaffIds,
+          };
+        }
+        if (willAssign && m.assignedStaffIds.includes(staffId)) {
+          return {
+            ...m,
+            assignedStaffIds: m.assignedStaffIds.filter((id) => id !== staffId),
+          };
+        }
+        return m;
+      });
+      onUpdateSupervisorMappings(updated);
+      onShowToast(
+        willAssign
+          ? 'Pemetaan atasan-bawahan berhasil diperbarui.'
+          : 'Penugasan staf berhasil dicabut.',
+        'info'
+      );
+    }
   };
 
   const handleToggleSecurityOption = (key: keyof EnterpriseSecurityConfig) => {
@@ -2513,13 +2538,16 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                       </span>
                     </div>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-semibold">
-                      {mapping.assignedStaffIds.length} Staf Dibawahi
+                      {staffList.filter((st) => mapping.assignedStaffIds.includes(st.id) || st.supervisorId === mapping.supervisorId).length} Staf Dibawahi
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
                     {staffList.map((st) => {
-                      const isAssigned = mapping.assignedStaffIds.includes(st.id);
+                      const isAssigned = Boolean(
+                        mapping.assignedStaffIds.includes(st.id) ||
+                        st.supervisorId === mapping.supervisorId
+                      );
                       return (
                         <label
                           key={st.id}

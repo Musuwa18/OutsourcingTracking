@@ -632,6 +632,7 @@ app.put('/api/staff/:id/supervisor', (req, res) => {
       message: 'Atasan langsung (Kasi/Kasubag) staf berhasil disetel.'
     });
   } catch (err) {
+    console.error('[API Error] Update Staff Direct Supervisor:', err);
     res.status(500).json({ error: 'Gagal memperbarui atasan langsung staf.' });
   }
 });

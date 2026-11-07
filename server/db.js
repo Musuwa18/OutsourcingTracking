@@ -1032,16 +1032,18 @@ export function updateUserLocation(userId, customLocation, workspaceNote) {
 }
 
 export function updateUserSupervisor(userId, supervisorId) {
+  const spvId = supervisorId && String(supervisorId).trim() !== '' ? String(supervisorId).trim() : null;
+  const status = spvId ? 'APPROVED' : 'NONE';
   if (isNodeSqlite && dbEngine) {
     dbEngine.prepare(
-      `UPDATE users SET supervisor_id = ?, pending_supervisor_id = NULL, supervisor_request_status = 'APPROVED' WHERE id = ?`
-    ).run(supervisorId, userId);
+      `UPDATE users SET supervisor_id = ?, pending_supervisor_id = NULL, supervisor_request_status = ? WHERE id = ?`
+    ).run(spvId, status, userId);
   } else {
     const user = fallbackStore.users.find((u) => u.id === userId);
     if (user) {
-      user.supervisorId = supervisorId;
+      user.supervisorId = spvId || undefined;
       user.pendingSupervisorId = null;
-      user.supervisorRequestStatus = 'APPROVED';
+      user.supervisorRequestStatus = status;
       persistFallback();
     }
   }
