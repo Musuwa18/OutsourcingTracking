@@ -114,6 +114,25 @@ export interface AttendanceRecord {
   verifiedBy?: string;
 }
 
+export interface FieldCheckinRecord {
+  id: string;
+  staffId: string;
+  staffName: string;
+  divisionId: string;
+  date: string;
+  time: string;
+  selfieUrl: string;
+  locationCoords: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    locationName: string;
+  };
+  activityNotes?: string;
+  verifiedBy?: string;
+  createdAt: string;
+}
+
 export interface AiDuplicateFlag {
   isDuplicate: boolean;
   similarityScore: number; // 0.0 - 100.0%

@@ -163,6 +163,23 @@ if (isNodeSqlite && dbEngine) {
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS field_checkins (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL,
+      staff_name TEXT NOT NULL,
+      division_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      time TEXT NOT NULL,
+      selfie_url TEXT NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      accuracy REAL NOT NULL,
+      location_name TEXT NOT NULL,
+      activity_notes TEXT,
+      verified_by TEXT DEFAULT 'Sistem GPS WebRTC',
+      created_at TEXT NOT NULL
+    );
   `);
 
   // Migrasi aman untuk kolom baru users jika database sudah ada sebelumnya
@@ -1751,6 +1768,119 @@ export function listAttendance(filters = {}) {
     return fallbackStore.attendance.filter((r) => {
       if (staffId && r.staffId !== staffId) return false;
       if (divisionId && divisionId !== 'div-all' && r.divisionId !== divisionId) return false;
+      if (date && r.date !== date) return false;
+      return true;
+    });
+  }
+}
+
+// ==========================================================
+// TUGAS LAPANGAN / FIELD CHECK-INS (MULTI-TITIK PER HARI)
+// ==========================================================
+export function saveFieldCheckin(data) {
+  const now = new Date().toISOString();
+  const date = data.date || now.slice(0, 10);
+  const time = data.time || now.slice(11, 19);
+  const id = data.id || `fld-${data.staffId || 'staff'}-${Date.now()}`;
+  const selfieUrl = saveBase64Image(data.selfieUrl, 'attendance');
+
+  let staffName = data.staffName;
+  let divisionId = data.divisionId;
+  if (!staffName || !divisionId) {
+    const user = getUserById(data.staffId);
+    if (user) {
+      staffName = staffName || user.name;
+      divisionId = divisionId || user.divisionId;
+    }
+  }
+
+  const lat = data.locationCoords?.latitude ?? data.latitude ?? -2.591165;
+  const lon = data.locationCoords?.longitude ?? data.longitude ?? 115.373661;
+  const acc = data.locationCoords?.accuracy ?? data.accuracy ?? 15;
+  const locName = data.locationCoords?.locationName ?? data.locationName ?? 'Lokasi Tugas Lapangan';
+  const notes = data.activityNotes || data.notes || '';
+  const verifiedBy = data.verifiedBy || 'Sistem GPS WebRTC';
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      INSERT INTO field_checkins (
+        id, staff_id, staff_name, division_id, date, time, selfie_url,
+        latitude, longitude, accuracy, location_name, activity_notes, verified_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, data.staffId, staffName || 'Staf Lapangan', divisionId || 'div-umpeg',
+      date, time, selfieUrl, lat, lon, acc, locName, notes, verifiedBy, now
+    );
+  } else {
+    if (!fallbackStore.field_checkins) fallbackStore.field_checkins = [];
+    fallbackStore.field_checkins.push({
+      id, staffId: data.staffId, staffName, divisionId, date, time, selfieUrl,
+      latitude: lat, longitude: lon, accuracy: acc, locationName: locName,
+      activityNotes: notes, verifiedBy, createdAt: now
+    });
+    persistFallback();
+  }
+
+  return {
+    id,
+    staffId: data.staffId,
+    staffName,
+    divisionId,
+    date,
+    time,
+    selfieUrl,
+    locationCoords: {
+      latitude: lat,
+      longitude: lon,
+      accuracy: acc,
+      locationName: locName,
+    },
+    activityNotes: notes,
+    verifiedBy,
+    createdAt: now,
+  };
+}
+
+export function listFieldCheckins(filters = {}) {
+  const { staffId, divisionId, date } = filters;
+  if (isNodeSqlite && dbEngine) {
+    let query = 'SELECT * FROM field_checkins WHERE 1=1';
+    const params = [];
+    if (staffId) {
+      query += ' AND staff_id = ?';
+      params.push(staffId);
+    }
+    if (divisionId && divisionId !== 'div-all') {
+      query += ' AND division_id = ?';
+      params.push(divisionId);
+    }
+    if (date) {
+      query += ' AND date = ?';
+      params.push(date);
+    }
+    query += ' ORDER BY created_at DESC';
+    const rows = dbEngine.prepare(query).all(...params);
+    return rows.map((r) => ({
+      id: r.id,
+      staffId: r.staff_id,
+      staffName: r.staff_name,
+      divisionId: r.division_id,
+      date: r.date,
+      time: r.time,
+      selfieUrl: r.selfie_url,
+      locationCoords: {
+        latitude: r.latitude,
+        longitude: r.longitude,
+        accuracy: r.accuracy,
+        locationName: r.location_name,
+      },
+      activityNotes: r.activity_notes,
+      verifiedBy: r.verified_by,
+      createdAt: r.created_at,
+    }));
+  } else {
+    return (fallbackStore.field_checkins || []).filter((r) => {
+      if (staffId && r.staffId !== staffId) return false;
       if (date && r.date !== date) return false;
       return true;
     });

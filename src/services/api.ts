@@ -3,7 +3,7 @@
  * Menghubungkan frontend React ke backend Express REST API di Port 3010
  * Dinas Pendidikan Kabupaten Hulu Sungai Tengah
  */
-import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation } from '../types';
+import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord } from '../types';
 
 const API_BASE = '/api';
 
@@ -550,4 +550,54 @@ export async function apiRejectSupervisorChange(userId: string): Promise<{ user:
     throw new Error(data.message || 'Gagal menolak pengajuan atasan.');
   }
   return data;
+}
+
+// 15. FIELD DUTY CHECK-INS (MULTI-TITIK HARIAN)
+export async function apiSubmitFieldCheckin(data: {
+  staffId: string;
+  staffName?: string;
+  divisionId?: string;
+  date?: string;
+  time?: string;
+  selfieUrl: string;
+  locationCoords: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    locationName: string;
+  };
+  activityNotes?: string;
+  verifiedBy?: string;
+}): Promise<FieldCheckinRecord> {
+  const res = await fetch(`${API_BASE}/attendance/field-checkin`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || 'Gagal menyimpan presensi tugas lapangan.');
+  }
+  return json.checkin;
+}
+
+export async function apiFetchFieldCheckins(filters: {
+  staffId?: string;
+  date?: string;
+  divisionId?: string;
+} = {}): Promise<FieldCheckinRecord[]> {
+  try {
+    const params = new URLSearchParams();
+    if (filters.staffId) params.append('staffId', filters.staffId);
+    if (filters.date) params.append('date', filters.date);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+
+    const res = await fetch(`${API_BASE}/attendance/field-checkins?${params.toString()}`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    return json.checkins || [];
+  } catch (err: unknown) {
+    console.warn('apiFetchFieldCheckins warning:', err);
+    return [];
+  }
 }

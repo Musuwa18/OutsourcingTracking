@@ -1,33 +1,38 @@
 import React, { useState } from 'react';
-import { Calendar, Clock, FileText } from 'lucide-react';
-import { AttendanceRecord, DailyWorkReport, StaffProfile } from '../types';
+import { Calendar, Clock, FileText, Briefcase } from 'lucide-react';
+import { AttendanceRecord, DailyWorkReport, StaffProfile, FieldCheckinRecord } from '../types';
 import { DetailRiwayatModal } from '../components/DetailRiwayatModal';
+
 interface StaffHistoryViewProps {
   staff: StaffProfile;
   attendanceRecords: AttendanceRecord[];
+  fieldCheckins?: FieldCheckinRecord[];
   workReports: DailyWorkReport[];
 }
 
 export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
   staff,
   attendanceRecords,
+  fieldCheckins = [],
   workReports,
 }) => {
-  const [filterType, setFilterType] = useState<'all' | 'attendance' | 'reports'>('all');
-  const [selectedItem, setSelectedItem] = useState<AttendanceRecord | DailyWorkReport | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'attendance' | 'field' | 'reports'>('all');
+  const [selectedItem, setSelectedItem] = useState<AttendanceRecord | DailyWorkReport | FieldCheckinRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleOpenDetail = (item: AttendanceRecord | DailyWorkReport) => {
+  const handleOpenDetail = (item: AttendanceRecord | DailyWorkReport | FieldCheckinRecord) => {
     setSelectedItem(item);
     setIsModalOpen(true);
   };
   // Filter records belonging to this staff
   const staffAttendance = attendanceRecords.filter((r) => r.staffId === staff.id);
+  const staffFieldCheckins = fieldCheckins.filter((fc) => fc.staffId === staff.id);
   const staffReports = workReports.filter((r) => r.staffId === staff.id);
 
   // Group by date
   const dateSet = new Set<string>();
   staffAttendance.forEach((a) => dateSet.add(a.date));
+  staffFieldCheckins.forEach((fc) => dateSet.add(fc.date));
   staffReports.forEach((r) => dateSet.add(r.date));
   const sortedDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
 
@@ -45,22 +50,22 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
         </div>
 
         {/* Filter Segmented Control */}
-        <div className="flex items-center gap-1.5 p-1 glass-pill rounded-xl text-xs font-semibold">
+        <div className="flex items-center gap-1.5 p-1 glass-pill rounded-xl text-xs font-semibold overflow-x-auto">
           <button
             type="button"
             onClick={() => setFilterType('all')}
-            className={`flex-1 py-1.5 px-3 rounded-lg transition-all cursor-pointer text-center ${
+            className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer text-center whitespace-nowrap ${
               filterType === 'all'
                 ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
                 : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-medium'
             }`}
           >
-            Semua ({staffAttendance.length + staffReports.length})
+            Semua ({staffAttendance.length + staffFieldCheckins.length + staffReports.length})
           </button>
           <button
             type="button"
             onClick={() => setFilterType('attendance')}
-            className={`flex-1 py-1.5 px-3 rounded-lg transition-all cursor-pointer text-center ${
+            className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer text-center whitespace-nowrap ${
               filterType === 'attendance'
                 ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
                 : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-medium'
@@ -70,8 +75,19 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
           </button>
           <button
             type="button"
+            onClick={() => setFilterType('field')}
+            className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer text-center whitespace-nowrap ${
+              filterType === 'field'
+                ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md shadow-amber-500/20 font-bold'
+                : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-medium'
+            }`}
+          >
+            Tugas Lapangan ({staffFieldCheckins.length})
+          </button>
+          <button
+            type="button"
             onClick={() => setFilterType('reports')}
-            className={`flex-1 py-1.5 px-3 rounded-lg transition-all cursor-pointer text-center ${
+            className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer text-center whitespace-nowrap ${
               filterType === 'reports'
                 ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md shadow-indigo-500/20 font-bold'
                 : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-medium'
@@ -86,9 +102,11 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
       <div className="space-y-4">
         {sortedDates.map((dateStr) => {
           const dayAttendance = staffAttendance.find((a) => a.date === dateStr);
+          const dayFieldCheckins = staffFieldCheckins.filter((fc) => fc.date === dateStr);
           const dayReports = staffReports.filter((r) => r.date === dateStr);
 
           if (filterType === 'attendance' && !dayAttendance) return null;
+          if (filterType === 'field' && dayFieldCheckins.length === 0) return null;
           if (filterType === 'reports' && dayReports.length === 0) return null;
 
           const dateObj = new Date(dateStr);
@@ -150,6 +168,42 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                     </div>
                   </div>
                 )}
+                {/* Field Duty Check-in Cards */}
+                {filterType !== 'attendance' && filterType !== 'reports' &&
+                  dayFieldCheckins.map((fc) => (
+                    <div
+                      key={fc.id}
+                      onClick={() => handleOpenDetail(fc)}
+                      className="p-4 glass-card flex items-center justify-between text-xs cursor-pointer transition-all active:scale-[0.99] hover:border-amber-500/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                          <Briefcase className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>Presensi Tugas Lapangan</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
+                              Titik Lapangan
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-700 dark:text-slate-300 font-mono mt-0.5 font-semibold">
+                            Jam: {fc.time} WITA · {fc.activityNotes || 'Tugas Luar'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right text-[11px] text-slate-700 dark:text-slate-400 font-medium">
+                        <div className="font-semibold text-slate-800 dark:text-slate-300 truncate max-w-[150px]">
+                          {fc.locationCoords.locationName}
+                        </div>
+                        <div className="font-mono text-[10px] text-slate-600 dark:text-slate-400">
+                          Akurasi ±{Math.round(fc.locationCoords.accuracy)}m
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
 
                 {/* Day Reports Cards */}
                 {filterType !== 'attendance' &&

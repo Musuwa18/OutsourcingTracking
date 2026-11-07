@@ -19,7 +19,7 @@ interface CameraCaptureModalProps {
     fieldDutyNotes?: string;
   }) => void;
   assignedLocation?: OfficeLocation;
-  actionType: 'clock-in' | 'clock-out' | 'break-out' | 'break-in';
+  actionType: 'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin';
 }
 
 export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
@@ -103,8 +103,10 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       setActiveViewTab('camera');
       return;
     }
+    if (actionType === 'field-checkin') {
+      setIsFieldDuty(true);
+    }
 
-    // Format current server timestamp
     const now = new Date();
     const timeFormatted = now.toLocaleTimeString('id-ID', {
       hour: '2-digit',
@@ -309,8 +311,15 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
     ctx.fillStyle = '#38bdf8';
     ctx.font = 'bold 12px "JetBrains Mono", monospace';
-    ctx.fillText(`PRESENSI RESMI · ${actionType === 'clock-in' ? 'CLOCK IN' : 'CLOCK OUT'}`, 16, canvas.height - 38);
-
+    const actionLabel =
+      actionType === 'clock-in'
+        ? 'CLOCK IN'
+        : actionType === 'clock-out'
+        ? 'CLOCK OUT'
+        : actionType === 'field-checkin'
+        ? 'TUGAS LAPANGAN'
+        : 'ISTIRAHAT';
+    ctx.fillText(`PRESENSI RESMI · ${actionLabel}`, 16, canvas.height - 38);
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '10px "JetBrains Mono", monospace';
     const locText = coords ? `GPS: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)} (±${Math.round(coords.accuracy)}m)` : 'GPS LOCKED';
@@ -350,10 +359,10 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       case 'clock-out': return 'Presensi Pulang (Clock Out)';
       case 'break-out': return 'Presensi Istirahat Keluar';
       case 'break-in': return 'Presensi Selesai Istirahat';
+      case 'field-checkin': return 'Presensi Tugas Lapangan (Multi-Titik)';
       default: return 'Presensi WebRTC';
     }
   };
-
   const modalContent = (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200 sm:p-4">
       {/* Container Dialog: Full screen di HP, centered card di Desktop */}

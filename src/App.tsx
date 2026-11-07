@@ -58,7 +58,7 @@ import { NotificationDrawer } from './components/NotificationDrawer';
 import { AiAnalyticsChatModal } from './components/AiAnalyticsChatModal';
 import { CustomLocationModal } from './components/CustomLocationModal';
 import { AuthView } from './views/AuthView';
-import { AuthUser, Division, Vendor } from './types';
+import { AuthUser, Division, Vendor, FieldCheckinRecord } from './types';
 import {
   apiFetchDivisions,
   apiFetchVendors,
@@ -73,6 +73,8 @@ import {
   apiApproveReport,
   apiSubmitEvaluation,
   apiGetAttendanceSettings,
+  apiFetchFieldCheckins,
+  apiSubmitFieldCheckin,
 } from './services/api';
 import { getTodayDateStr, getCurrentWitaTimeStr } from './utils/date';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
@@ -311,6 +313,13 @@ export default function App() {
         localStorage.setItem('ot_weekly_evaluations', JSON.stringify(evalList));
       }
     });
+
+    // 4. Sinkronisasi Kunjungan Tugas Lapangan (Multi-Titik) dari SQLite
+    apiFetchFieldCheckins().then((fcList) => {
+      if (fcList && fcList.length > 0) {
+        setFieldCheckins(fcList);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -431,6 +440,7 @@ export default function App() {
     }
     return generateInitialEvaluations();
   });
+  const [fieldCheckins, setFieldCheckins] = useState<FieldCheckinRecord[]>([]);
   const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(() => {
     const saved = localStorage.getItem('ot_audit_logs');
     if (saved) {
@@ -1087,6 +1097,58 @@ export default function App() {
     );
   };
 
+  // Handle Field Duty Checkin (Staff - Multi-titik kunjungan harian)
+  const handleFieldCheckin = (selfieBase64: string, locationData: Partial<AttendanceRecord['locationCoords']>) => {
+    const timeStr = getCurrentWitaTimeStr();
+    const targetStaffId = currentStaff?.id || 'usr-os-default';
+
+    const newCheckin: FieldCheckinRecord = {
+      id: `fld-${targetStaffId}-${Date.now()}`,
+      staffId: targetStaffId,
+      staffName: currentStaff?.name || 'Staf Lapangan',
+      divisionId: currentStaff?.division || 'div-umpeg',
+      date: todayDateStr,
+      time: timeStr,
+      selfieUrl: selfieBase64,
+      locationCoords: {
+        latitude: locationData.latitude || -2.591165,
+        longitude: locationData.longitude || 115.373661,
+        accuracy: locationData.accuracy || 15,
+        locationName: locationData.locationName || 'Lokasi Tugas Lapangan',
+      },
+      activityNotes: locationData.fieldDutyNotes || 'Presensi tugas lapangan',
+      verifiedBy: 'Sistem GPS WebRTC',
+      createdAt: new Date().toISOString(),
+    };
+
+    setFieldCheckins((prev) => [newCheckin, ...prev]);
+
+    apiSubmitFieldCheckin({
+      staffId: targetStaffId,
+      staffName: currentStaff?.name,
+      divisionId: currentStaff?.division,
+      date: todayDateStr,
+      time: timeStr,
+      selfieUrl: selfieBase64,
+      locationCoords: {
+        latitude: locationData.latitude || -2.591165,
+        longitude: locationData.longitude || 115.373661,
+        accuracy: locationData.accuracy || 15,
+        locationName: locationData.locationName || 'Lokasi Tugas Lapangan',
+      },
+      activityNotes: locationData.fieldDutyNotes,
+      verifiedBy: 'Sistem GPS WebRTC',
+    }).catch((err: unknown) => console.warn('Submit field checkin failed:', err));
+
+    addAuditLog(
+      'Presensi Tugas Lapangan',
+      `Check-in titik lapangan: "${locationData.locationName || 'Tugas Lapangan'}" pada ${timeStr} WITA.`,
+      'Kehadiran'
+    );
+
+    showToast(`Presensi tugas lapangan di "${locationData.locationName || 'Lokasi Tugas'}" berhasil dicatat!`, 'success');
+  };
+
   // Handle Submit Report (Staff)
   const handleSubmitReport = (newReportData: Omit<DailyWorkReport, 'id' | 'createdAt'>) => {
     const now = new Date();
@@ -1393,7 +1455,9 @@ export default function App() {
                   staffList={staffList}
                   activeStaffId={currentStaff?.id || ''}
                   attendanceSettings={attendanceSettings}
+                  fieldCheckins={fieldCheckins}
                   onClockIn={handleClockIn}
+                  onFieldCheckin={handleFieldCheckin}
                   onBreakOut={handleBreakOut}
                   onBreakIn={handleBreakIn}
                   onClockOut={handleClockOut}
@@ -1412,7 +1476,9 @@ export default function App() {
                   staffList={staffList}
                   activeStaffId={currentStaff?.id || ''}
                   attendanceSettings={attendanceSettings}
+                  fieldCheckins={fieldCheckins}
                   onClockIn={handleClockIn}
+                  onFieldCheckin={handleFieldCheckin}
                   onBreakOut={handleBreakOut}
                   onBreakIn={handleBreakIn}
                   onClockOut={handleClockOut}
@@ -1424,6 +1490,7 @@ export default function App() {
                 <StaffHistoryView
                   staff={currentStaff}
                   attendanceRecords={attendanceRecords}
+                  fieldCheckins={fieldCheckins}
                   workReports={dailyReports}
                 />
               )}

@@ -17,7 +17,7 @@ import {
   Briefcase,
   Coffee,
 } from 'lucide-react';
-import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS } from '../types';
+import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, FieldCheckinRecord } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
 import { getDayOfWeekKey } from '../utils/date';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
@@ -29,6 +29,7 @@ import { createWorkPhotoThumbnail } from '../data/mockData';
 interface StaffHomeViewProps {
   staff: StaffProfile;
   todayAttendance: AttendanceRecord | undefined;
+  fieldCheckins?: FieldCheckinRecord[];
   todayReports: DailyWorkReport[];
   allReports?: DailyWorkReport[];
   staffList?: StaffProfile[];
@@ -38,6 +39,7 @@ interface StaffHomeViewProps {
   onNavigateToReports?: () => void;
   onSwitchStaff?: (staffId: string) => void;
   onClockIn: (selfieBase64: string, locationData: any) => void;
+  onFieldCheckin?: (selfieBase64: string, locationData: any) => void;
   onBreakOut?: (selfieBase64: string, locationData: any) => void;
   onBreakIn?: (selfieBase64: string, locationData: any) => void;
   onClockOut: (selfieBase64: string, locationData: any) => void;
@@ -46,6 +48,7 @@ interface StaffHomeViewProps {
 export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   staff,
   todayAttendance,
+  fieldCheckins = [],
   todayReports,
   allReports = [],
   staffList = [],
@@ -55,6 +58,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   onNavigateToReports,
   onSwitchStaff,
   onClockIn,
+  onFieldCheckin,
   onBreakOut,
   onBreakIn,
   onClockOut,
@@ -62,7 +66,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 }) => {
   const safeOffice = staff?.assignedLocation || PRIMARY_OFFICES[0];
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
-  const [actionType, setActionType] = useState<'clock-in' | 'clock-out' | 'break-out' | 'break-in'>('clock-in');
+  const [actionType, setActionType] = useState<'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin'>('clock-in');
 
   const isNightShiftWorker = Boolean(
     staff?.roleTitle?.toLowerCase().includes('jaga malam') ||
@@ -175,7 +179,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
     return `${hours}j ${mins}m`;
   };
 
-  const handleOpenAttendance = (type: 'clock-in' | 'clock-out' | 'break-out' | 'break-in') => {
+  const handleOpenAttendance = (type: 'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin') => {
     setActionType(type);
     setCameraModalOpen(true);
   };
@@ -183,6 +187,8 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   const handleAttendanceCapture = (selfieBase64: string, locationData: any) => {
     if (actionType === 'clock-in') {
       onClockIn(selfieBase64, locationData);
+    } else if (actionType === 'field-checkin') {
+      if (onFieldCheckin) onFieldCheckin(selfieBase64, locationData);
     } else if (actionType === 'break-out') {
       if (onBreakOut) onBreakOut(selfieBase64, locationData);
       else onClockOut(selfieBase64, locationData);
@@ -406,7 +412,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           </div>
         )}
 
-        {/* Sesi Istirahat Siang (Jika Diaktifkan Superadmin & Staf Sudah Clock-In) */}
+        {/* Sesi Istirahat (Clock Out Istirahat & Clock In Kembali) */}
         {todaySchedule?.enableBreak && hasClockedIn && !hasClockedOut && (
           <div className="p-3 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
@@ -417,10 +423,10 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 </span>
                 <p className="text-[10px] text-slate-500">
                   {hasBrokenOut && !hasBrokenIn
-                    ? `Sedang istirahat sejak ${todayAttendance?.breakOutTime} WITA`
+                    ? `Sedang istirahat keluar sejak ${todayAttendance?.breakOutTime} WITA`
                     : hasBrokenIn
                     ? `Istirahat selesai (${todayAttendance?.breakOutTime} - ${todayAttendance?.breakInTime} WITA)`
-                    : 'Tekan tombol saat keluar istirahat'}
+                    : 'Lakukan clock-out saat keluar istirahat dan clock-in saat kembali'}
                 </p>
               </div>
             </div>
@@ -428,29 +434,52 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleOpenAttendance('break-out')}
-                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shadow-xs cursor-pointer transition-all"
+                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shadow-xs cursor-pointer transition-all shrink-0"
               >
-                Istirahat Keluar
+                Clock Out Istirahat
               </button>
             ) : !hasBrokenIn ? (
               <button
                 type="button"
                 onClick={() => handleOpenAttendance('break-in')}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs cursor-pointer transition-all"
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs cursor-pointer transition-all shrink-0"
               >
-                Selesai Istirahat
+                Clock In Istirahat
               </button>
             ) : (
-              <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
-                Tuntas
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 shrink-0">
+                Sesi Istirahat Tuntas
               </span>
             )}
           </div>
         )}
 
-        {/* Floating Action Card for Smart Attendance */}
-        <div className="pt-2 grid grid-cols-2 gap-3">
-          {/* Clock In Button */}
+        {/* Daftar Singkat Kunjungan Tugas Lapangan Hari Ini */}
+        {fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length > 0 && (
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
+            <div className="flex items-center justify-between text-amber-800 dark:text-amber-300">
+              <span className="font-bold flex items-center gap-1.5">
+                <Briefcase className="w-3.5 h-3.5" />
+                Riwayat Kunjungan Lapangan Hari Ini ({fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length} Titik)
+              </span>
+              <span className="text-[10px] font-mono">Tersimpan di Server</span>
+            </div>
+            <div className="space-y-1">
+              {fieldCheckins
+                .filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10)))
+                .map((fc, idx) => (
+                  <div key={fc.id} className="flex items-center justify-between text-[11px] text-slate-700 dark:text-slate-300 font-mono pl-5">
+                    <span>{idx + 1}. {fc.locationCoords.locationName}</span>
+                    <span className="font-bold text-amber-600 dark:text-amber-400">{fc.time} WITA</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Menu Utama: 3 Tombol Aksi Presensi (Masuk, Tugas Lapangan Multi-Titik, Pulang) */}
+        <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* 1. Clock In Button */}
           <button
             type="button"
             onClick={() => handleOpenAttendance('clock-in')}
@@ -472,7 +501,24 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
             </span>
           </button>
 
-          {/* Clock Out Button */}
+          {/* 2. Tombol Tugas Lapangan (Multi-Titik, Bisa Berkali-kali) */}
+          <button
+            type="button"
+            onClick={() => handleOpenAttendance('field-checkin')}
+            className="p-3.5 rounded-xl border border-amber-600/60 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-amber-500/25 active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-1.5">
+              <Briefcase className="w-4 h-4" />
+              <span className="text-xs font-bold">Presensi Lapangan</span>
+            </div>
+            <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
+              {fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length > 0
+                ? `${fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length} Titik Tercatat`
+                : 'Multi-Titik (Bebas)'}
+            </span>
+          </button>
+
+          {/* 3. Clock Out Button */}
           <button
             type="button"
             onClick={() => handleOpenAttendance('clock-out')}

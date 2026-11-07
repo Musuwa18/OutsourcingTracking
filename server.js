@@ -35,6 +35,8 @@ import {
   deleteUser,
   saveAttendance,
   listAttendance,
+  saveFieldCheckin,
+  listFieldCheckins,
   saveDailyReport,
   listDailyReports,
   approveReport,
@@ -653,6 +655,28 @@ app.post('/api/attendance', (req, res) => {
   } catch (err) {
     console.error('[API Error] Save Attendance:', err);
     res.status(500).json({ error: 'Gagal menyimpan data presensi.' });
+  }
+});
+
+// 11.A. Field Duty Check-in (Multi-titik harian)
+app.post('/api/attendance/field-checkin', (req, res) => {
+  try {
+    const saved = saveFieldCheckin(req.body);
+    res.status(201).json({ success: true, checkin: saved, message: 'Presensi tugas lapangan berhasil dicatat.' });
+  } catch (err) {
+    console.error('[API Error] Field Checkin:', err);
+    res.status(500).json({ error: 'Gagal mencatat presensi tugas lapangan.' });
+  }
+});
+
+app.get('/api/attendance/field-checkins', (req, res) => {
+  try {
+    const { staffId, divisionId, date } = req.query;
+    const checkins = listFieldCheckins({ staffId, divisionId, date });
+    res.json({ success: true, checkins });
+  } catch (err) {
+    console.error('[API Error] List Field Checkins:', err);
+    res.status(500).json({ error: 'Gagal memuat riwayat tugas lapangan.' });
   }
 });
 
