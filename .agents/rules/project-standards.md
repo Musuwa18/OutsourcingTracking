@@ -44,3 +44,12 @@ Agregasi bulanan menghitung rata-rata Minggu 1-4, menghasilkan predikat otomatis
 ## 4. HTTPS & Sensor Requirements (Mobile PWA)
 - Fitur `navigator.mediaDevices.getUserMedia` dan `navigator.geolocation` **wajib** dijalankan di atas protokol **HTTPS** (Secure Context) agar dapat beroperasi di smartphone Android/iOS.
 - Di lingkungan VPS, aplikasi disajikan di belakang Cloudflare Tunnel (`https://outsourcing.renlapdisdikhst.pro`) yang menyediakan SSL/TLS otomatis.
+
+## 5. Akun Sandbox / Test & Trial Pengembang
+- **Nama Akun**: `Sugengemon`
+- **NIP / ID**: `19821218`
+- **Jabatan**: Administrasi Perkantoran
+- **Unit / Divisi**: Sub Bagian Perencanaan dan Pelaporan (`div-renlap`)
+- **Vendor**: PT. YASMINE BUIH PERSADA
+- **Lokasi Tugas**: Kantor Dinas Pendidikan Kab. Hulu Sungai Tengah
+- **Catatan**: Akun resmi pengujian (*test and trial*) langsung oleh user pengembang untuk memverifikasi alur presensi, geofencing, laporan kinerja, dan evaluasi.
