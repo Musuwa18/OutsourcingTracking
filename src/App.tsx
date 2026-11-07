@@ -738,6 +738,24 @@ export default function App() {
   const geofenceBreachCount = attendanceRecords.filter(
     (r) => r.date === todayDateStr && (r.locationCoords ? !r.locationCoords.withinRadius && !r.isFieldDuty : false)
   ).length;
+  // Isolasi Notifikasi: hanya tampilkan notifikasi yang relevan dengan pengguna yang sedang login
+  const userNotifications = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'admin') return notifications;
+    if (currentUser.role === 'supervisor') {
+      return notifications.filter(
+        (n) => n.type === 'geofence_alert' || n.type === 'approval' || n.type === 'evaluation' || !n.staffId || n.userId === currentUser.id
+      );
+    }
+    // Staf outsourcing: hanya notifikasi pribadi miliknya
+    return notifications.filter((n) => {
+      if (n.staffId && n.staffId !== currentUser.id && n.staffId !== currentStaff?.id) return false;
+      if (n.userId && n.userId !== currentUser.id && n.userId !== currentStaff?.id) return false;
+      if (n.type === 'geofence_alert' && n.staffId !== currentUser.id && n.staffId !== currentStaff?.id) return false;
+      if (n.title.toLowerCase().includes('laporan baru masuk') || n.title.toLowerCase().includes('menunggu konfirmasi')) return false;
+      return true;
+    });
+  }, [notifications, currentUser, currentStaff]);
 
   // Dark mode effect
   useEffect(() => {
@@ -792,7 +810,12 @@ export default function App() {
   };
 
   // Add notification helper
-  const addNotification = (title: string, message: string, type: NotificationItem['type']) => {
+  const addNotification = (
+    title: string,
+    message: string,
+    type: NotificationItem['type'],
+    meta?: Partial<NotificationItem>
+  ) => {
     const now = new Date();
     const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
     const newNotif: NotificationItem = {
@@ -802,6 +825,7 @@ export default function App() {
       message,
       type,
       read: false,
+      ...meta,
     };
     setNotifications((prev) => [newNotif, ...prev]);
   };
@@ -857,7 +881,8 @@ export default function App() {
       addNotification(
         'Presensi Tugas Lapangan Berhasil',
         `Clock In Tugas Lapangan tercatat pada pukul ${timeStr} WITA (${fieldDutyNotes || 'Dinas Luar'}).`,
-        'attendance'
+        'attendance',
+        { staffId: targetStaffId, userId: currentUser.id }
       );
     } else if (!locationData.withinRadius) {
       addAuditLog(
@@ -869,7 +894,8 @@ export default function App() {
       addNotification(
         'Peringatan Geofence: Presensi di Luar Radius',
         `${currentStaff?.name || 'Staf'} (${currentStaff?.nip || '-'}) melakukan Clock-In berjarak ${locationData.distanceMeters} meter dari ${locationData.locationName} (Batas Radius Aman: ${currentStaff?.assignedLocation?.radiusMeters || 80}m).`,
-        'geofence_alert'
+        'geofence_alert',
+        { staffId: targetStaffId, severity: 'warning', distanceExceededMeters: locationData.distanceMeters, locationName: locationData.locationName }
       );
     } else {
       addAuditLog(
@@ -881,7 +907,8 @@ export default function App() {
       addNotification(
         'Presensi Masuk Berhasil',
         `Clock In Anda pada pukul ${timeStr} WITA telah diverifikasi dan terkunci otomatis oleh server.`,
-        'attendance'
+        'attendance',
+        { staffId: targetStaffId, userId: currentUser.id }
       );
     }
   };
@@ -920,7 +947,8 @@ export default function App() {
     addNotification(
       'Istirahat Dimulai',
       `Jam istirahat keluar tercatat pada ${timeStr} WITA. Selamat beristirahat.`,
-      'attendance'
+      'attendance',
+      { staffId: targetStaffId, userId: currentUser.id }
     );
   };
 
@@ -958,7 +986,8 @@ export default function App() {
     addNotification(
       'Kembali Bertugas',
       `Jam selesai istirahat tercatat pada ${timeStr} WITA. Selamat melanjutkan tugas!`,
-      'attendance'
+      'attendance',
+      { staffId: targetStaffId, userId: currentUser.id }
     );
   };
 
@@ -999,7 +1028,8 @@ export default function App() {
     addNotification(
       'Presensi Pulang Terkunci',
       `Clock Out tercatat pada ${timeStr} WITA. Terima kasih atas dedikasi kerja Anda hari ini!`,
-      'attendance'
+      'attendance',
+      { staffId: targetStaffId, userId: currentUser.id }
     );
   };
 
@@ -1039,7 +1069,8 @@ export default function App() {
       addNotification(
         'Peringatan AI: Foto Terindikasi Duplikat',
         `${currentStaff?.name || 'Staf'} mengirimkan laporan "${newReport.title}" dengan foto terindikasi duplikat (${newReport.aiDuplicateFlag.similarityScore}% kesamaan). Harap periksa di feed supervisi.`,
-        'approval'
+        'approval',
+        { staffId: currentStaff?.id, severity: 'warning' }
       );
 
       showToast('Laporan terkirim dengan flag AI Duplicate ke Supervisor.', 'warning');
@@ -1053,7 +1084,8 @@ export default function App() {
       addNotification(
         'Laporan Kinerja Dikirim',
         `Laporan "${newReport.title}" telah diterima sistem dan menunggu konfirmasi Supervisor.`,
-        'approval'
+        'approval',
+        { staffId: currentStaff?.id, userId: currentUser.id }
       );
 
       showToast('Laporan berhasil dikirim (Validasi AI: Foto Unik & Otentik).', 'success');
@@ -1092,7 +1124,8 @@ export default function App() {
     addNotification(
       'Laporan Telah Disetujui',
       `Laporan "${report?.title || ''}" telah disetujui oleh Supervisor.`,
-      'approval'
+      'approval',
+      { staffId: report?.staffId, userId: report?.staffId }
     );
   };
 
@@ -1128,7 +1161,8 @@ export default function App() {
     addNotification(
       'Laporan Memerlukan Revisi',
       `Catatan Supervisor: "${notes}". Harap perbarui data laporan Anda.`,
-      'approval'
+      'approval',
+      { staffId: report?.staffId, userId: report?.staffId }
     );
   };
 
@@ -1267,7 +1301,7 @@ export default function App() {
         onToggleHighContrast={() => setHighContrast(!highContrast)}
         glassMode={glassMode}
         onToggleGlassMode={handleToggleGlassMode}
-        notifications={notifications}
+        notifications={userNotifications}
         onOpenNotifications={() => setNotificationDrawerOpen(true)}
         onOpenCloudSync={() => setCloudSyncOpen(true)}
         onOpenSecurityModal={() => setSecurityModalOpen(true)}
@@ -1297,6 +1331,7 @@ export default function App() {
             <div>
               {mobileTab === 'beranda' && (
                 <StaffHomeView
+                  tabMode="presensi"
                   staff={currentStaff}
                   todayAttendance={staffTodayAttendance}
                   todayReports={staffTodayReports}
@@ -1309,11 +1344,13 @@ export default function App() {
                   onBreakIn={handleBreakIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
+                  onNavigateToReports={() => setMobileTab('laporan')}
                 />
               )}
 
               {mobileTab === 'laporan' && (
                 <StaffHomeView
+                  tabMode="laporan"
                   staff={currentStaff}
                   todayAttendance={staffTodayAttendance}
                   todayReports={staffTodayReports}
@@ -1527,7 +1564,8 @@ export default function App() {
       <NotificationDrawer
         isOpen={notificationDrawerOpen}
         onClose={() => setNotificationDrawerOpen(false)}
-        notifications={notifications}
+        notifications={userNotifications}
+        userRole={currentUser?.role}
         onMarkAsRead={(id) => {
           setNotifications((prev) =>
             prev.map((n) => (n.id === id ? { ...n, read: true } : n))

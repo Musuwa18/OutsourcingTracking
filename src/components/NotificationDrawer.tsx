@@ -1,11 +1,12 @@
 import React from 'react';
 import { X, Bell, CheckCircle2, Clock, Star, ShieldAlert, AlertTriangle, MapPin } from 'lucide-react';
-import { NotificationItem } from '../types';
+import { NotificationItem, UserRole } from '../types';
 
 interface NotificationDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   notifications: NotificationItem[];
+  userRole?: UserRole;
   onMarkAsRead: (id: string) => void;
   onMarkAllAsRead: () => void;
   onSimulatePushNotification: () => void;
@@ -15,6 +16,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
   isOpen,
   onClose,
   notifications,
+  userRole,
   onMarkAsRead,
   onMarkAllAsRead,
   onSimulatePushNotification,
@@ -73,15 +75,16 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
             Tandai Semua Telah Dibaca
           </button>
 
-          <button
-            type="button"
-            onClick={onSimulatePushNotification}
-            className="text-xs px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 font-medium transition-colors cursor-pointer"
-          >
-            + Uji Alert Geofence
-          </button>
+          {userRole === 'admin' && (
+            <button
+              type="button"
+              onClick={onSimulatePushNotification}
+              className="text-xs px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 font-medium transition-colors cursor-pointer"
+            >
+              + Uji Alert Geofence
+            </button>
+          )}
         </div>
-
         {/* List of notifications */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
           {notifications.length === 0 ? (

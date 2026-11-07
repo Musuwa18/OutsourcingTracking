@@ -746,6 +746,7 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     type: 'geofence_alert',
     read: false,
     staffId: 'usr-os-002',
+    userId: 'usr-os-002',
     distanceExceededMeters: 112,
     locationName: 'Kantor Dinas Pendidikan Kab. Hulu Sungai Tengah',
     severity: 'warning',
@@ -757,6 +758,8 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     message: 'Budi Santoso telah mengirimkan Laporan Pemeliharaan TI untuk ditinjau Kasubag Renlap.',
     type: 'approval',
     read: false,
+    staffId: 'usr-os-001',
+    userId: 'usr-spv-renlap',
   },
   {
     id: 'notif-2',
@@ -765,6 +768,8 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     message: 'Laporan kebersihan ruang rapat utama oleh Siti Nurhaliza telah disetujui Kasubag Umpeg.',
     type: 'approval',
     read: false,
+    staffId: 'usr-os-003',
+    userId: 'usr-os-003',
   },
   {
     id: 'notif-3',
@@ -781,6 +786,7 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     message: 'Jadwal penilaian evaluasi kinerja berkala 4 pilar telah dapat diisi oleh Para Kasi dan Kasubag.',
     type: 'evaluation',
     read: true,
+    userId: 'usr-spv-renlap',
   },
 ];
 

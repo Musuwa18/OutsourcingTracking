@@ -3,18 +3,17 @@ import {
   Bell,
   Sun,
   Moon,
-  Cloud,
   ChevronDown,
   User,
-  Eye,
-  Lock,
   Sparkles,
   LogOut,
   Download,
+  HelpCircle,
+  Phone,
+  X,
 } from 'lucide-react';
 import { UserRole, NotificationItem, AuthUser } from '../types';
 import { usePwa } from '../context/PwaContext';
-
 interface HeaderProps {
   currentRole: UserRole;
   currentUser?: AuthUser | null;
@@ -23,17 +22,16 @@ interface HeaderProps {
   onRoleChange: (role: UserRole) => void;
   darkMode: boolean;
   onToggleDarkMode: () => void;
-  highContrast: boolean;
-  onToggleHighContrast: () => void;
+  highContrast?: boolean;
+  onToggleHighContrast?: () => void;
   glassMode?: boolean;
   onToggleGlassMode?: () => void;
   notifications: NotificationItem[];
   onOpenNotifications: () => void;
-  onOpenCloudSync: () => void;
-  onOpenSecurityModal: () => void;
+  onOpenCloudSync?: () => void;
+  onOpenSecurityModal?: () => void;
   onOpenAiChat?: () => void;
 }
-
 export const Header: React.FC<HeaderProps> = ({
   currentRole,
   currentUser,
@@ -53,8 +51,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAiChat,
 }) => {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [helpModalOpen, setHelpModalOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
-
   const { isInstallable, isInstalled, promptInstall } = usePwa();
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -94,7 +92,8 @@ export const Header: React.FC<HeaderProps> = ({
   const currentRoleInfo = roleLabels[currentRole];
 
   return (
-    <header
+    <>
+      <header
       className={`sticky top-0 z-40 w-full transition-all duration-200 ${
         glassMode
           ? 'glass-surface border-b border-slate-200/80 dark:border-slate-800/80 shadow-xs'
@@ -237,59 +236,13 @@ export const Header: React.FC<HeaderProps> = ({
                     type="button"
                     onClick={() => {
                       setProfileMenuOpen(false);
-                      onOpenSecurityModal();
+                      setHelpModalOpen(true);
                     }}
                     className="w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center gap-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer font-medium transition-colors"
                   >
-                    <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>Keamanan Akun & MFA</span>
+                    <HelpCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>Pusat Bantuan & Kontak Admin</span>
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProfileMenuOpen(false);
-                      onOpenCloudSync();
-                    }}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center gap-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer font-medium transition-colors"
-                  >
-                    <Cloud className="w-4 h-4 text-blue-500 shrink-0" />
-                    <span>Sinkronisasi Cloud Backup</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onToggleHighContrast();
-                    }}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer font-medium transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Eye className="w-4 h-4 text-amber-500 shrink-0" />
-                      <span>Mode Kontras Tinggi</span>
-                    </div>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${highContrast ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                      {highContrast ? 'ON' : 'OFF'}
-                    </span>
-                  </button>
-
-                  {onToggleGlassMode && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onToggleGlassMode();
-                      }}
-                      className="w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer font-medium transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
-                        <span>Mode Material Glass</span>
-                      </div>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${glassMode ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                        {glassMode ? 'ON' : 'OFF'}
-                      </span>
-                    </button>
-                  )}
 
                   {isInstallable && !isInstalled && (
                     <button
@@ -328,5 +281,86 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
     </header>
+      {/* Help & IT Support Modal */}
+      {helpModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-cyan-400 shrink-0">
+                  <HelpCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Pusat Bantuan & Layanan IT Disdik
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Subbag Umum & Kepegawaian · Disdik Kab. HST
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHelpModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-2.5">
+                <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Kontak Admin / Helpdesk Resmi</span>
+                </div>
+                <div className="space-y-1.5 pl-5.5 text-[11px] text-slate-600 dark:text-slate-300">
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">WhatsApp Helpdesk:</span>{' '}
+                    <a
+                      href="https://wa.me/628115001234?text=Halo%20Admin%20IT%20Disdik%20HST,%20saya%20membutuhkan%20bantuan%20terkait%20aplikasi%20OutsourceTrack"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-indigo-600 dark:text-cyan-400 hover:underline font-bold"
+                    >
+                      +62 811-5001-234 (Chat WhatsApp)
+                    </a>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">Email Resmi:</span>{' '}
+                    <span className="font-mono text-slate-700 dark:text-slate-300">disdik@hulusungaitengahkab.go.id</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">Alamat Kantor:</span>{' '}
+                    <span>Jl. Jenderal Sudirman No. 1, Barabai, Kab. Hulu Sungai Tengah</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 space-y-2">
+                <div className="font-bold text-indigo-950 dark:text-indigo-200">
+                  Panduan Cepat Kendala Presensi & Laporan
+                </div>
+                <ul className="text-[11px] text-slate-600 dark:text-slate-300 space-y-1 list-disc pl-4 leading-relaxed">
+                  <li><strong>Kendala Geofence:</strong> Pastikan GPS pada perangkat aktif dengan mode "Akurasi Tinggi" dan browser diizinkan mengakses lokasi.</li>
+                  <li><strong>Kendala Kamera WebRTC:</strong> Berikan izin kamera pada browser saat diminta. Jika layar hitam, muat ulang (refresh) halaman.</li>
+                  <li><strong>Lupa Sandi / Masalah Akun:</strong> Hubungi admin TI atau Subbag Kepegawaian Disdik untuk verifikasi & reset akun dinas Anda.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setHelpModalOpen(false)}
+                className="w-full sm:w-auto px-4 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Tutup Pusat Bantuan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };

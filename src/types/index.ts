@@ -215,6 +215,7 @@ export interface NotificationItem {
   type: 'approval' | 'attendance' | 'evaluation' | 'system' | 'geofence_alert';
   read: boolean;
   staffId?: string;
+  userId?: string;
   distanceExceededMeters?: number;
   locationName?: string;
   severity?: 'warning' | 'critical' | 'info';
