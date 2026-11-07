@@ -360,6 +360,15 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
                   </span>
                 </div>
 
+                {isViewingClockOut && attRecord?.clockOutTime && !attRecord?.clockOutSelfieUrl && (
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-300 flex items-start gap-2">
+                    <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <span>
+                      Sesi pulang ini tercatat sebelum fitur foto ganda diaktifkan (menampilkan foto sesi masuk sebagai arsip). Simulasi/presensi berikutnya otomatis menyimpan 2 foto selfie berbeda.
+                    </span>
+                  </div>
+                )}
+
                 {/* Photo Preview Container with Watermark Overlay */}
                 <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center group shadow-inner">
                   {currentSelfieUrl ? (
