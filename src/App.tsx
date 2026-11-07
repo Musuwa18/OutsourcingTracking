@@ -1064,6 +1064,13 @@ export default function App() {
           return {
             ...r,
             clockOutTime: timeStr,
+            clockOutSelfieUrl: selfieBase64,
+            clockOutLocationCoords: locationData ? {
+              latitude: locationData.latitude || -2.591165,
+              longitude: locationData.longitude || 115.373661,
+              accuracy: locationData.accuracy || 15,
+              locationName: locationData.locationName || 'Lokasi Pulang',
+            } : null,
             autoClosed: false,
           };
         }
@@ -1078,11 +1085,13 @@ export default function App() {
       date: targetDate,
       clockOutTime: timeStr,
       selfieUrl: selfieBase64,
+      clockOutSelfieUrl: selfieBase64,
       locationCoords: locationData,
       status: targetRecord?.status || 'Hadir',
       autoClosed: false,
       verifiedBy: 'Sistem Geofence WebRTC',
     }).catch((err) => console.warn('Sync clock-out failed:', err));
+
     addAuditLog(
       'Presensi Pulang (Clock Out)',
       `Berhasil clock-out pada ${timeStr} WITA. Jam kerja harian terkunci.`,

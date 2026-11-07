@@ -92,6 +92,11 @@ if (isNodeSqlite && dbEngine) {
       is_geofence_valid INTEGER,
       distance_meters REAL,
       device_fingerprint TEXT,
+      clock_out_selfie_url TEXT,
+      clock_out_latitude REAL,
+      clock_out_longitude REAL,
+      clock_out_accuracy REAL,
+      clock_out_location_name TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -220,6 +225,21 @@ if (isNodeSqlite && dbEngine) {
   } catch (e) {}
   try {
     dbEngine.exec(`ALTER TABLE attendance ADD COLUMN auto_closed INTEGER DEFAULT 0;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN clock_out_selfie_url TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN clock_out_latitude REAL;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN clock_out_longitude REAL;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN clock_out_accuracy REAL;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN clock_out_location_name TEXT;`);
   } catch (e) {}
 }
 
@@ -1569,12 +1589,16 @@ export function saveAttendance(attData) {
       ).get(staffId, recordDate);
     }
     if (existing) {
-      // Update record presensi yang sudah ada (misal update Clock Out, Istirahat, atau status)
+      // Update record presensi yang sudah ada (dukung snapshot mandiri untuk Clock Out)
+      const isClockOutAction = Boolean(attData.clockOutTime && (!attData.clockInTime || attData.clockInTime === existing.clock_in_time));
+      const clockOutSelfie = isClockOutAction ? (selfieUrl || existing.clock_out_selfie_url) : (attData.clockOutSelfieUrl ? saveBase64Image(attData.clockOutSelfieUrl, 'attendance') : existing.clock_out_selfie_url);
+
       const finalClockIn = attData.clockInTime || existing.clock_in_time;
       const finalBreakOut = breakOut || existing.break_out_time;
       const finalBreakIn = breakIn || existing.break_in_time;
       const finalClockOut = attData.clockOutTime || existing.clock_out_time;
-      const finalSelfie = selfieUrl || existing.selfie_url;
+      // Foto selfie Clock In tidak tertimpa saat Clock Out dilakukan
+      const finalSelfie = isClockOutAction ? existing.selfie_url : (selfieUrl || existing.selfie_url);
 
       dbEngine.prepare(
         `UPDATE attendance SET
@@ -1584,10 +1608,15 @@ export function saveAttendance(attData) {
           clock_out_time = ?,
           status = ?,
           selfie_url = ?,
-          latitude = COALESCE(?, latitude),
-          longitude = COALESCE(?, longitude),
-          accuracy = COALESCE(?, accuracy),
-          location_name = COALESCE(?, location_name),
+          clock_out_selfie_url = COALESCE(?, clock_out_selfie_url),
+          clock_out_latitude = CASE WHEN ? = 1 THEN ? ELSE clock_out_latitude END,
+          clock_out_longitude = CASE WHEN ? = 1 THEN ? ELSE clock_out_longitude END,
+          clock_out_accuracy = CASE WHEN ? = 1 THEN ? ELSE clock_out_accuracy END,
+          clock_out_location_name = CASE WHEN ? = 1 THEN ? ELSE clock_out_location_name END,
+          latitude = CASE WHEN ? = 1 THEN latitude ELSE COALESCE(?, latitude) END,
+          longitude = CASE WHEN ? = 1 THEN longitude ELSE COALESCE(?, longitude) END,
+          accuracy = CASE WHEN ? = 1 THEN accuracy ELSE COALESCE(?, accuracy) END,
+          location_name = CASE WHEN ? = 1 THEN location_name ELSE COALESCE(?, location_name) END,
           is_geofence_valid = COALESCE(?, is_geofence_valid),
           distance_meters = COALESCE(?, distance_meters),
           device_fingerprint = COALESCE(?, device_fingerprint),
@@ -1602,10 +1631,15 @@ export function saveAttendance(attData) {
         finalClockOut,
         attData.status || 'Hadir',
         finalSelfie,
-        lat,
-        lon,
-        acc,
-        locName,
+        clockOutSelfie,
+        isClockOutAction ? 1 : 0, lat,
+        isClockOutAction ? 1 : 0, lon,
+        isClockOutAction ? 1 : 0, acc,
+        isClockOutAction ? 1 : 0, locName,
+        isClockOutAction ? 1 : 0, lat,
+        isClockOutAction ? 1 : 0, lon,
+        isClockOutAction ? 1 : 0, acc,
+        isClockOutAction ? 1 : 0, locName,
         isGeoValid,
         dist,
         attData.deviceFingerprint || null,
@@ -1742,6 +1776,13 @@ export function listAttendance(filters = {}) {
       clockOutTime: r.clock_out_time,
       status: r.status,
       selfieUrl: r.selfie_url,
+      clockOutSelfieUrl: r.clock_out_selfie_url || null,
+      clockOutLocationCoords: r.clock_out_latitude ? {
+        latitude: r.clock_out_latitude,
+        longitude: r.clock_out_longitude,
+        accuracy: r.clock_out_accuracy || 15,
+        locationName: r.clock_out_location_name || r.location_name || 'Lokasi Pulang',
+      } : null,
       latitude: r.latitude,
       longitude: r.longitude,
       accuracy: r.accuracy,

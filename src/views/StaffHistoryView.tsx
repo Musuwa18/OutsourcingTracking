@@ -18,10 +18,15 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'attendance' | 'field' | 'reports'>('all');
   const [selectedItem, setSelectedItem] = useState<AttendanceRecord | DailyWorkReport | FieldCheckinRecord | null>(null);
+  const [modalMode, setModalMode] = useState<'default' | 'break'>('default');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleOpenDetail = (item: AttendanceRecord | DailyWorkReport | FieldCheckinRecord) => {
+  const handleOpenDetail = (
+    item: AttendanceRecord | DailyWorkReport | FieldCheckinRecord,
+    mode: 'default' | 'break' = 'default'
+  ) => {
     setSelectedItem(item);
+    setModalMode(mode);
     setIsModalOpen(true);
   };
   // Filter records belonging to this staff
@@ -132,7 +137,7 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                 {/* Attendance Record Card */}
                 {dayAttendance && filterType !== 'reports' && (
                   <div
-                    onClick={() => handleOpenDetail(dayAttendance)}
+                    onClick={() => handleOpenDetail(dayAttendance, 'default')}
                     className="p-4 glass-card flex items-center justify-between text-xs cursor-pointer transition-all active:scale-[0.99] hover:border-blue-500/50"
                   >
                     <div className="flex items-center gap-3">
@@ -159,17 +164,6 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                         <div className="text-[11px] text-slate-700 dark:text-slate-300 font-mono mt-0.5 font-semibold">
                           Masuk: {dayAttendance.clockInTime} · Pulang: {dayAttendance.clockOutTime || 'Belum'}
                         </div>
-                        {dayAttendance.breakOutTime && (
-                          <div className="text-[10px] text-amber-600 dark:text-amber-400 font-mono mt-0.5 flex items-center gap-1 font-semibold">
-                            <Coffee className="w-3 h-3 text-amber-500 shrink-0" />
-                            <span>Istirahat: {dayAttendance.breakOutTime} - {dayAttendance.breakInTime || 'Sedang Istirahat'}</span>
-                            {dayAttendance.breakInTime && (
-                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20">
-                                Tuntas
-                              </span>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -183,7 +177,7 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                 {/* Break Session Card (Sesi Istirahat Kerja) */}
                 {dayAttendance?.breakOutTime && filterType !== 'reports' && filterType !== 'field' && (
                   <div
-                    onClick={() => handleOpenDetail(dayAttendance)}
+                    onClick={() => handleOpenDetail(dayAttendance, 'break')}
                     className="p-4 glass-card flex items-center justify-between text-xs cursor-pointer transition-all active:scale-[0.99] hover:border-amber-500/50"
                   >
                     <div className="flex items-center gap-3">
@@ -220,7 +214,7 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                   dayFieldCheckins.map((fc) => (
                     <div
                       key={fc.id}
-                      onClick={() => handleOpenDetail(fc)}
+                      onClick={() => handleOpenDetail(fc, 'default')}
                       className="p-4 glass-card flex items-center justify-between text-xs cursor-pointer transition-all active:scale-[0.99] hover:border-amber-500/50"
                     >
                       <div className="flex items-center gap-3">
@@ -257,7 +251,7 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                   dayReports.map((report) => (
                     <div
                       key={report.id}
-                      onClick={() => handleOpenDetail(report)}
+                      onClick={() => handleOpenDetail(report, 'default')}
                       className="p-4 glass-card text-xs space-y-2 cursor-pointer transition-all active:scale-[0.99] hover:border-blue-500/50"
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -298,6 +292,7 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
         onClose={() => setIsModalOpen(false)}
         item={selectedItem}
         staff={staff}
+        initialMode={modalMode}
       />
     </div>
   );

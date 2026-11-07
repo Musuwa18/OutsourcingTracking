@@ -98,6 +98,7 @@ export interface AttendanceRecord {
   breakInTime?: string; // HH:mm:ss (Istirahat Masuk Kembali)
   clockOutTime?: string; // HH:mm:ss
   selfieUrl: string; // Data URL or styled SVG capture
+  clockOutSelfieUrl?: string | null;
   locationCoords: {
     latitude: number;
     longitude: number;
@@ -106,6 +107,12 @@ export interface AttendanceRecord {
     withinRadius: boolean;
     locationName: string;
   };
+  clockOutLocationCoords?: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    locationName: string;
+  } | null;
   status: 'Hadir' | 'Terlambat' | 'Izin' | 'Alpha';
   isFieldDuty?: boolean;
   fieldDutyNotes?: string;
