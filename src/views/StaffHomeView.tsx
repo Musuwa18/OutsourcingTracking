@@ -60,6 +60,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   onClockOut,
   onSubmitReport,
 }) => {
+  const safeOffice = staff?.assignedLocation || PRIMARY_OFFICES[0];
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
   const [actionType, setActionType] = useState<'clock-in' | 'clock-out' | 'break-out' | 'break-in'>('clock-in');
 
@@ -221,7 +222,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
     imageHash: string
   ) => {
     onSubmitReport({
-      staffId: staff.id,
+      staffId: staff?.id || activeStaffId || 'usr-os-default',
       date: new Date().toISOString().slice(0, 10),
       title: reportTitle,
       category: reportCategory,
@@ -265,7 +266,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         matchedReportId: duplicateMatchInfo.matchedReport.id,
         matchedReportTitle: duplicateMatchInfo.matchedReport.title,
         matchedReportDate: duplicateMatchInfo.matchedReport.date,
-        matchedStaffName: staff.name,
+        matchedStaffName: staff?.name || 'Staf',
         flagSeverity: duplicateMatchInfo.flagSeverity,
         reason: duplicateMatchInfo.reason,
         justificationNote: justificationNote || 'Justifikasi diserahkan staf untuk peninjauan supervisor.',
@@ -283,23 +284,23 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         <div className="flex items-center gap-3">
           <span
             className="w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-bold text-white shadow-md shadow-indigo-500/20 shrink-0"
-            style={{ backgroundColor: staff.avatarColor }}
+            style={{ backgroundColor: staff?.avatarColor || '#4f46e5' }}
           >
-            {staff.initials}
+            {staff?.initials || 'OS'}
           </span>
           <div>
             <div className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">
-              {staff.name}
+              {staff?.name || 'Staf Alih Daya'}
             </div>
             <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
-              {staff.roleTitle} · <span className="font-mono text-indigo-600 dark:text-cyan-400 font-bold">{staff.nip}</span>
+              {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono text-indigo-600 dark:text-cyan-400 font-bold">{staff?.nip || '-'}</span>
             </div>
           </div>
         </div>
         <div className="text-right shrink-0">
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800/60">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            {staff.division.split(' ')[0]}
+            {staff?.division ? staff.division.split(' ')[0] : 'Umum'}
           </span>
         </div>
       </div>
@@ -338,21 +339,21 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           <div className="flex items-center gap-3">
             <div
               className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white text-base shadow-md shadow-indigo-500/20 border border-white/30 shrink-0"
-              style={{ backgroundColor: staff.avatarColor }}
+              style={{ backgroundColor: staff?.avatarColor || '#4f46e5' }}
             >
-              {staff.initials}
+              {staff?.initials || 'OS'}
             </div>
             <div>
               <h1 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
-                {staff.name}
+                {staff?.name || 'Staf Alih Daya'}
               </h1>
               <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                {staff.roleTitle} · <span className="font-mono">{staff.nip}</span>
+                {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono">{staff?.nip || '-'}</span>
               </p>
             </div>
           </div>
           <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full glass-pill text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
-            {staff.vendorName}
+            {staff?.vendorName || 'Mitra Disdik'}
           </span>
         </div>
 
