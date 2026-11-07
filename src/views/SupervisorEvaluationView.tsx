@@ -829,8 +829,8 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
               </div>
             ) : (
               displayedDailyReports.map((report) => {
-              const noteText = reportNoteInputs[report.id] || '';
-
+                const staff = staffList.find((s) => s.id === report.staffId);
+                const noteText = reportNoteInputs[report.id] || '';
               return (
                 <div
                   key={report.id}
