@@ -46,7 +46,7 @@ Agregasi bulanan menghitung rata-rata Minggu 1-4, menghasilkan predikat otomatis
 - Di lingkungan VPS, aplikasi disajikan di belakang Cloudflare Tunnel (`https://outsourcing.renlapdisdikhst.pro`) yang menyediakan SSL/TLS otomatis.
 
 ## 5. Akun Sandbox / Test & Trial Pengembang
-- **Nama Akun**: `Sugengemon`
+- **Nama Akun**: `Musuwarahmi`
 - **NIP / ID**: `19821218`
 - **Jabatan**: Administrasi Perkantoran
 - **Unit / Divisi**: Sub Bagian Perencanaan dan Pelaporan (`div-renlap`)
