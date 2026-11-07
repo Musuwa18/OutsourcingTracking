@@ -413,7 +413,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         )}
 
         {/* Sesi Istirahat (Clock Out Istirahat & Clock In Kembali) */}
-        {hasClockedIn && !hasClockedOut && (attendanceSettings?.breakSettings?.enabled !== false) && (
+        {hasClockedIn && (attendanceSettings?.breakSettings?.enabled !== false) && (
           <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex items-center justify-between gap-3 text-xs shadow-xs">
             <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300 min-w-0">
               <div className="p-2 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
@@ -431,11 +431,17 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                     ? `Sedang istirahat keluar sejak ${todayAttendance?.breakOutTime} WITA`
                     : hasBrokenIn
                     ? `Istirahat selesai (${todayAttendance?.breakOutTime} - ${todayAttendance?.breakInTime} WITA)`
+                    : hasClockedOut
+                    ? 'Jam kerja telah dikunci (Clock Out).'
                     : 'Klik "Clock Out Istirahat" saat keluar & "Clock In Istirahat" saat kembali.'}
                 </p>
               </div>
             </div>
-            {!hasBrokenOut ? (
+            {hasClockedOut ? (
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 shrink-0 whitespace-nowrap">
+                {hasBrokenIn ? 'Sesi Istirahat Tuntas' : 'Sesi Selesai (Clock Out)'}
+              </span>
+            ) : !hasBrokenOut ? (
               <button
                 type="button"
                 onClick={() => handleOpenAttendance('break-out')}

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, RefreshCw, X, ShieldCheck, AlertCircle, MapPin, CheckCircle2, Navigation, Briefcase, FileText, Check } from 'lucide-react';
+import { Camera, RefreshCw, X, ShieldCheck, AlertCircle, MapPin, CheckCircle2, Navigation, Briefcase, FileText, Check, Coffee } from 'lucide-react';
 import { OfficeLocation } from '../types';
 import { formatDistance, PRIMARY_OFFICES } from '../utils/geo';
 import { GeofenceRadarMap } from './GeofenceRadarMap';
@@ -105,8 +105,9 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     }
     if (actionType === 'field-checkin') {
       setIsFieldDuty(true);
+    } else if (actionType === 'break-out' || actionType === 'break-in') {
+      setIsFieldDuty(false);
     }
-
     const now = new Date();
     const timeFormatted = now.toLocaleTimeString('id-ID', {
       hour: '2-digit',
@@ -351,8 +352,8 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   if (!isOpen) return null;
 
+  const isBreakAction = actionType === 'break-out' || actionType === 'break-in';
   const isLocationDisallowed = !isFieldDuty && (coords ? !coords.withinRadius : false);
-
   const getActionTitle = () => {
     switch (actionType) {
       case 'clock-in': return 'Presensi Masuk (Clock In)';
@@ -520,76 +521,97 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             </div>
           </div>
 
-          {/* Toggle Mode Penugasan Lapangan / Dinas Luar */}
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className={`p-1.5 rounded-lg transition-colors ${
-                  isFieldDuty ? 'bg-amber-500 text-white shadow-xs' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+          {/* Toggle Mode Penugasan Lapangan / Peringatan Wajib Kantor untuk Istirahat */}
+          {isBreakAction ? (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1">
+              <div className="font-bold text-amber-600 dark:text-amber-400 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Coffee className="w-4 h-4" />
+                  <span>Lokasi Istirahat Terkunci di Kantor</span>
+                </span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  coords?.withinRadius
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
                 }`}>
-                  <Briefcase className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span>Tugas Lapangan / Dinas Luar</span>
-                    {isFieldDuty && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold">
-                        Aktif
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    {isFieldDuty
-                      ? 'Lolos geofence radius kantor untuk tugas resmi luar'
-                      : 'Presensi di titik kantor resmi yang ditugaskan'}
-                  </p>
-                </div>
+                  {coords?.withinRadius ? 'Radius Valid' : 'Luar Radius'}
+                </span>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isFieldDuty}
-                  onChange={(e) => setIsFieldDuty(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-10 h-5 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-amber-600"></div>
-              </label>
+              <p className="text-[11px] text-slate-300 leading-snug">
+                Presensi sesi istirahat wajib dilakukan di dalam radius kantor tempat Anda ditugaskan (<strong>{targetName}</strong>).
+              </p>
             </div>
-
-            {isFieldDuty && (
-              <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700/60 space-y-2 animate-in fade-in duration-150">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    Jenis Penugasan Lapangan:
-                  </label>
-                  <select
-                    value={fieldDutyPurpose}
-                    onChange={(e) => setFieldDutyPurpose(e.target.value)}
-                    className="w-full text-xs py-1.5 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium focus:ring-1 focus:ring-amber-500 outline-hidden"
-                  >
-                    <option value="Monitoring & Pengawasan Sekolah">Monitoring & Pengawasan Sekolah</option>
-                    <option value="Inspeksi & Pemeliharaan Sarpras">Inspeksi & Pemeliharaan Sarpras</option>
-                    <option value="Pelayanan Operasional Korwil">Pelayanan Operasional Korwil</option>
-                    <option value="Pendampingan Acara Kedinasan">Pendampingan Acara Kedinasan</option>
-                    <option value="Pengantaran Berkas & Logistik Dinas">Pengantaran Berkas & Logistik Dinas</option>
-                    <option value="Tugas Lapangan Khusus">Tugas Lapangan Khusus</option>
-                  </select>
+          ) : actionType !== 'field-checkin' ? (
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-lg transition-colors ${
+                    isFieldDuty ? 'bg-amber-500 text-white shadow-xs' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                  }`}>
+                    <Briefcase className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>Tugas Lapangan / Dinas Luar</span>
+                      {isFieldDuty && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold">
+                          Aktif
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      {isFieldDuty
+                        ? 'Lolos geofence radius kantor untuk tugas resmi luar'
+                        : 'Presensi di titik kantor resmi yang ditugaskan'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    Catatan Lokasi / Surat Tugas (Opsional):
-                  </label>
+                <label className="relative inline-flex items-center cursor-pointer">
                   <input
-                    type="text"
-                    value={fieldDutyNotes}
-                    onChange={(e) => setFieldDutyNotes(e.target.value)}
-                    placeholder="Contoh: SDN 1 Barabai Timur / Giat Apel"
-                    className="w-full text-xs py-1.5 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-1 focus:ring-amber-500 outline-hidden"
+                    type="checkbox"
+                    checked={isFieldDuty}
+                    onChange={(e) => setIsFieldDuty(e.target.checked)}
+                    className="sr-only peer"
                   />
-                </div>
+                  <div className="w-10 h-5 bg-slate-300 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-amber-600"></div>
+                </label>
               </div>
-            )}
-          </div>
+
+              {isFieldDuty && (
+                <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700/60 space-y-2 animate-in fade-in duration-150">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                      Jenis Penugasan Lapangan:
+                    </label>
+                    <select
+                      value={fieldDutyPurpose}
+                      onChange={(e) => setFieldDutyPurpose(e.target.value)}
+                      className="w-full text-xs py-1.5 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium focus:ring-1 focus:ring-amber-500 outline-hidden"
+                    >
+                      <option value="Monitoring & Pengawasan Sekolah">Monitoring & Pengawasan Sekolah</option>
+                      <option value="Inspeksi & Pemeliharaan Sarpras">Inspeksi & Pemeliharaan Sarpras</option>
+                      <option value="Pelayanan Operasional Korwil">Pelayanan Operasional Korwil</option>
+                      <option value="Pendampingan Acara Kedinasan">Pendampingan Acara Kedinasan</option>
+                      <option value="Pengantaran Berkas & Logistik Dinas">Pengantaran Berkas & Logistik Dinas</option>
+                      <option value="Tugas Lapangan Khusus">Tugas Lapangan Khusus</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                      Catatan Lokasi / Surat Tugas (Opsional):
+                    </label>
+                    <input
+                      type="text"
+                      value={fieldDutyNotes}
+                      onChange={(e) => setFieldDutyNotes(e.target.value)}
+                      placeholder="Contoh: SDN 1 Barabai Timur / Giat Apel"
+                      className="w-full text-xs py-1.5 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-1 focus:ring-amber-500 outline-hidden"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
 
           {/* Rincian Status Lokasi & GPS */}
           <div className={`p-3.5 rounded-2xl border text-xs transition-colors ${
@@ -668,7 +690,16 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-[11px] text-rose-800 dark:text-rose-200 flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div className="leading-relaxed">
-                <strong>Peringatan Pelanggaran Geofence:</strong> Anda berada di luar radius resmi tugas ({formatDistance(coords?.distance || 0)} dari batas {targetRadius}m). Jika Anda sedang tugas luar, aktifkan tombol <strong>"Tugas Lapangan / Dinas Luar"</strong> di atas.
+                <strong>Peringatan Pelanggaran Geofence:</strong> Anda berada di luar radius resmi tugas ({formatDistance(coords?.distance || 0)} dari batas {targetRadius}m).{' '}
+                {isBreakAction ? (
+                  <span className="font-semibold text-rose-300 block mt-0.5">
+                    Presensi istirahat wajib dilakukan di dalam radius kantor tempat Anda bekerja ({targetName}).
+                  </span>
+                ) : (
+                  <>
+                    Jika Anda sedang tugas luar, aktifkan tombol <strong>&quot;Tugas Lapangan / Dinas Luar&quot;</strong> di atas.
+                  </>
+                )}
               </div>
             </div>
           ) : null}
@@ -709,16 +740,23 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               <button
                 type="button"
                 onClick={handleConfirm}
-                disabled={!capturedImage || !coords || !!gpsError}
+                disabled={!capturedImage || !coords || !!gpsError || (isBreakAction && !coords.withinRadius)}
                 className={`w-2/3 py-3 px-4 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.99] ${
                   isFieldDuty
                     ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
+                    : isBreakAction && !coords?.withinRadius
+                    ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-60'
                     : coords?.withinRadius
                     ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
                     : 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
                 }`}
               >
-                {isFieldDuty ? (
+                {isBreakAction && !coords?.withinRadius ? (
+                  <>
+                    <AlertCircle className="w-4 h-4" />
+                    <span>Luar Radius Kantor (Dilarang)</span>
+                  </>
+                ) : isFieldDuty ? (
                   <>
                     <Briefcase className="w-4 h-4" />
                     <span>Kirim Presensi Tugas Lapangan</span>
