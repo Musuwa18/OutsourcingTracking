@@ -80,7 +80,7 @@ import {
   apiGetInstitutionSettings,
   apiSaveInstitutionSettings,
 } from './services/api';
-import { getTodayDateStr, getCurrentWitaTimeStr } from './utils/date';
+import { getTodayDateStr, getCurrentWitaTimeStr, getYesterdayWitaDateStr, getWitaHour } from './utils/date';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { SessionTimeoutModal } from './components/SessionTimeoutModal';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
@@ -921,26 +921,42 @@ export default function App() {
   // Today's attendance for active staff (mendukung shift malam / overnight shift H ke H+1)
   const todayDateStr = getTodayDateStr();
   const staffTodayAttendance = useMemo(() => {
-    const todayRec = attendanceRecords.find(
-      (a) => (a.staffId === currentStaff?.id || a.staffId === currentUser?.id) && a.date === todayDateStr
-    );
-    if (todayRec) return todayRec;
+    const currentWitaHour = getWitaHour();
+    const yesterdayDateStr = getYesterdayWitaDateStr();
+    const currentStaffId = currentStaff?.id || currentUser?.id;
 
-    // Cek shift malam aktif dari hari kemarin jika saat ini masih pagi hari (sebelum jam 12 siang)
-    const currentHour = new Date().getHours();
-    if (currentHour < 12) {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayDateStr = yesterday.toISOString().slice(0, 10);
-      const overnightRec = attendanceRecords.find(
+    // Prioritas 1: Jika pagi hari (sebelum jam 11:00 WITA), periksa apakah ada shift malam kemarin yang belum selesai/clock-out
+    if (currentWitaHour < 11) {
+      const activeOvernightRec = attendanceRecords.find(
         (a) =>
-          (a.staffId === currentStaff?.id || a.staffId === currentUser?.id) &&
+          a.staffId === currentStaffId &&
           a.date === yesterdayDateStr &&
           Boolean(a.clockInTime && a.clockInTime >= '18:00') &&
           (!a.clockOutTime || a.clockOutTime === '-' || Boolean(a.autoClosed))
       );
-      if (overnightRec) return overnightRec;
+      if (activeOvernightRec) {
+        return activeOvernightRec;
+      }
     }
+
+    // Prioritas 2: Presensi hari ini (tanggal hari ini di WITA)
+    const todayRec = attendanceRecords.find(
+      (a) => a.staffId === currentStaffId && a.date === todayDateStr
+    );
+    if (todayRec) return todayRec;
+
+    // Prioritas 3: Jika siang hari (setelah jam 11:00 WITA), tetap izinkan melihat/clock-out shift malam kemarin jika belum clock out
+    if (currentWitaHour >= 11 && currentWitaHour < 18) {
+      const lateOvernightRec = attendanceRecords.find(
+        (a) =>
+          a.staffId === currentStaffId &&
+          a.date === yesterdayDateStr &&
+          Boolean(a.clockInTime && a.clockInTime >= '18:00') &&
+          (!a.clockOutTime || a.clockOutTime === '-')
+      );
+      if (lateOvernightRec) return lateOvernightRec;
+    }
+
     return undefined;
   }, [attendanceRecords, currentStaff, currentUser, todayDateStr]);
   const staffTodayReports = dailyReports.filter(

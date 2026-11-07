@@ -2463,15 +2463,30 @@ export function autoClosePreviousDayAttendance(todayDateStr) {
   if (!todayDateStr) return 0;
   if (isNodeSqlite && dbEngine) {
     try {
-      const result = dbEngine.prepare(`
-        UPDATE attendance
-        SET clock_out_time = '23:59:59', auto_closed = 1
-        WHERE (
-          (date < ? AND (clock_in_time < '18:00' OR clock_in_time IS NULL))
-          OR (date < date(?, '-1 day'))
-        )
-        AND (clock_out_time IS NULL OR clock_out_time = '' OR clock_out_time = '-')
-      `).run(todayDateStr, todayDateStr);
+      // Dapatkan jam saat ini di WITA (Asia/Makassar)
+      const nowWitaHour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Makassar' })).getHours();
+
+      // Jika masih pagi hari (sebelum jam 10:00 WITA), lindungi shift malam kemarin (clock_in >= 18:00) agar wakar bisa clock-out
+      if (nowWitaHour < 10) {
+        dbEngine.prepare(`
+          UPDATE attendance
+          SET clock_out_time = '23:59:59', auto_closed = 1
+          WHERE (
+            (date < ? AND (clock_in_time < '18:00' OR clock_in_time IS NULL))
+            OR (date < date(?, '-1 day'))
+          )
+          AND (clock_out_time IS NULL OR clock_out_time = '' OR clock_out_time = '-')
+        `).run(todayDateStr, todayDateStr);
+      } else {
+        // Jika sudah lewat jam 10:00 pagi WITA, shift malam kemarin yang belum clock-out ditutup otomatis jam 07:00:00
+        dbEngine.prepare(`
+          UPDATE attendance
+          SET clock_out_time = CASE WHEN clock_in_time >= '18:00' THEN '07:00:00' ELSE '23:59:59' END,
+              auto_closed = 1
+          WHERE date < ?
+            AND (clock_out_time IS NULL OR clock_out_time = '' OR clock_out_time = '-')
+        `).run(todayDateStr);
+      }
     } catch (e) {
       console.warn('autoClosePreviousDayAttendance warning:', e);
     }

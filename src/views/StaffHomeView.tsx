@@ -16,10 +16,11 @@ import {
   AlertTriangle,
   Briefcase,
   Coffee,
+  Moon,
 } from 'lucide-react';
 import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, FieldCheckinRecord } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
-import { getDayOfWeekKey } from '../utils/date';
+import { getDayOfWeekKey, getTodayDateStr } from '../utils/date';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { WatermarkCameraModal } from '../components/WatermarkCameraModal';
 import { AiDuplicateValidationModal } from '../components/AiDuplicateValidationModal';
@@ -132,6 +133,12 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   const hasBrokenOut = !!todayAttendance?.breakOutTime && todayAttendance.breakOutTime !== '-';
   const hasBrokenIn = !!todayAttendance?.breakInTime && todayAttendance.breakInTime !== '-';
   const hasClockedOut = !!todayAttendance?.clockOutTime && todayAttendance.clockOutTime !== '-';
+  const isOvernightShift = Boolean(
+    todayAttendance &&
+    todayAttendance.clockInTime &&
+    todayAttendance.clockInTime >= '18:00' &&
+    todayAttendance.date !== getTodayDateStr()
+  );
 
   const isPresensiMode = tabMode === 'presensi';
   const isLaporanMode = tabMode === 'laporan';
@@ -412,6 +419,21 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           </div>
         )}
 
+        {/* Overnight Shift Active Banner */}
+        {isOvernightShift && (
+          <div className="flex items-center gap-2 p-3 rounded-2xl bg-indigo-50/90 dark:bg-indigo-950/50 text-xs text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800/80 font-medium shadow-xs">
+            <div className="p-1.5 rounded-xl bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0">
+              <Moon className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 flex-1 leading-snug">
+              <span className="font-bold text-slate-900 dark:text-white">Shift Jaga Malam (Lintas Hari) Aktif</span>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                Clock In tercatat sejak kemarin pukul <strong className="text-indigo-600 dark:text-cyan-400">{todayAttendance?.clockInTime} WITA</strong> ({todayAttendance?.date}). Silakan tekan tombol <strong>Clock Out</strong> di bawah untuk menyelesaikan piket malam.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Sesi Istirahat (Clock Out Istirahat & Clock In Kembali) */}
         {hasClockedIn && (attendanceSettings?.breakSettings?.enabled !== false) && (
           <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex items-center justify-between gap-3 text-xs shadow-xs">
@@ -504,7 +526,11 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
             <div className="flex items-center gap-1.5">
               <Camera className="w-4 h-4" />
               <span className="text-xs font-bold">
-                {hasClockedIn ? 'Sudah Clock In' : 'Clock In Masuk'}
+                {hasClockedIn
+                  ? isOvernightShift
+                    ? 'Piket Malam Aktif'
+                    : 'Sudah Clock In'
+                  : 'Clock In Masuk'}
               </span>
             </div>
             <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
@@ -545,7 +571,11 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
             <div className="flex items-center gap-1.5">
               <Clock className="w-4 h-4" />
               <span className="text-xs font-bold">
-                {hasClockedOut ? 'Sudah Clock Out' : `Clock Out (${todaySchedule?.clockOutStart || '16:30'})`}
+                {hasClockedOut
+                  ? 'Sudah Clock Out'
+                  : isOvernightShift
+                  ? 'Clock Out (Selesai Jaga Malam)'
+                  : `Clock Out (${todaySchedule?.clockOutStart || '16:30'})`}
               </span>
             </div>
             <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
