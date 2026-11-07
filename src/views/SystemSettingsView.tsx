@@ -53,6 +53,7 @@ import {
   AttendanceGlobalSettings,
   DEFAULT_ATTENDANCE_SETTINGS,
   DayWorkSchedule,
+  WakarSchedule,
 } from '../types';
 import { VisualMapPicker } from '../components/VisualMapPicker';
 import {
@@ -164,9 +165,12 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     }));
   };
 
-  const handleApplyPreset = (preset: 'default_disdik' | 'ramadhan' | 'six_days' | 'wakar') => {
+  const handleApplyPreset = (preset: 'default_disdik' | 'ramadhan' | 'six_days') => {
     if (preset === 'default_disdik') {
-      setScheduleSettings(DEFAULT_ATTENDANCE_SETTINGS);
+      setScheduleSettings((prev) => ({
+        ...prev,
+        workSchedule: DEFAULT_ATTENDANCE_SETTINGS.workSchedule,
+      }));
       onShowToast('Preset Standar Disdik HST (Jumat 11:00 & Sen-Kam 16:30) diterapkan!', 'info');
     } else if (preset === 'ramadhan') {
       setScheduleSettings((prev) => ({
@@ -192,31 +196,24 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         },
       }));
       onShowToast('Preset Piket Operasional 6 Hari Kerja (Sabtu Aktif) diterapkan!', 'info');
-    } else if (preset === 'wakar') {
-      const nightSchedule = {
-        enabled: true,
-        clockInStart: '19:30',
-        clockInEnd: '21:00',
-        clockOutStart: '05:30',
-        clockOutEnd: '07:00',
-        enableBreak: false,
-        breakStart: '00:00',
-        breakEnd: '01:00',
-      };
-      setScheduleSettings((prev) => ({
-        ...prev,
-        workSchedule: {
-          monday: { ...prev.workSchedule.monday, ...nightSchedule, dayName: 'Senin' },
-          tuesday: { ...prev.workSchedule.tuesday, ...nightSchedule, dayName: 'Selasa' },
-          wednesday: { ...prev.workSchedule.wednesday, ...nightSchedule, dayName: 'Rabu' },
-          thursday: { ...prev.workSchedule.thursday, ...nightSchedule, dayName: 'Kamis' },
-          friday: { ...prev.workSchedule.friday, ...nightSchedule, dayName: 'Jumat' },
-          saturday: { ...prev.workSchedule.saturday, ...nightSchedule, dayName: 'Sabtu' },
-          sunday: { ...prev.workSchedule.sunday, ...nightSchedule, dayName: 'Minggu' },
-        },
-      }));
-      onShowToast('Preset Jaga Malam / Wakar (20:00 - 06:00 WITA) diterapkan!', 'info');
     }
+  };
+
+  const handleWakarFieldChange = (field: keyof WakarSchedule, val: boolean | string) => {
+    setScheduleSettings((prev) => ({
+      ...prev,
+      wakarSchedule: {
+        ...(prev.wakarSchedule || DEFAULT_ATTENDANCE_SETTINGS.wakarSchedule || {
+          enabled: true,
+          dayName: 'Jaga Malam / Wakar',
+          clockInStart: '19:30',
+          clockInEnd: '21:00',
+          clockOutStart: '05:30',
+          clockOutEnd: '07:00',
+        }),
+        [field]: val,
+      },
+    }));
   };
 
   const handleAddPurpose = () => {
@@ -1710,7 +1707,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 Preset Pintas Jam Kerja Dinas:
               </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <button
                 type="button"
                 onClick={() => handleApplyPreset('default_disdik')}
@@ -1721,19 +1718,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                   Sen-Kam pulang 16:30, Jumat pulang 11:00
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleApplyPreset('wakar')}
-                className="p-3 text-left rounded-xl bg-white dark:bg-slate-800/90 border border-indigo-200 dark:border-indigo-800/60 hover:border-indigo-500 hover:shadow-xs transition-all cursor-pointer group"
-              >
-                <div className="text-xs font-bold text-indigo-600 dark:text-indigo-300 group-hover:text-indigo-700 dark:group-hover:text-cyan-400">
-                  🌙 Jaga Malam / Wakar
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Masuk 20:00 (19:30-21:00) · Pulang 06:00 (05:30-07:00 WITA)
                 </div>
               </button>
 
@@ -1936,6 +1920,95 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Card Khusus Shift Malam: Penjaga Malam / Wakar */}
+          <div className="p-5 glass-card space-y-4 border-2 border-indigo-500/30 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-950/20 via-slate-900/30 to-slate-950/40">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🌙 Jadwal Khusus Shift Malam: Penjaga Malam / Wakar</span>
+                  </h3>
+                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                    Otomatis Khusus Formasi Wakar
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Jadwal presensi lintas hari (overnight) ini diterapkan <strong>hanya bagi tenaga outsourcing dengan formasi tugas Penjaga Malam / Wakar</strong>, tanpa mengubah jam kerja staf dinas harian lainnya.
+                </p>
+              </div>
+
+              <label className="inline-flex items-center gap-2 cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={scheduleSettings.wakarSchedule?.enabled ?? true}
+                  onChange={(e) => handleWakarFieldChange('enabled', e.target.checked)}
+                  className="w-4 h-4 accent-indigo-600 rounded"
+                />
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  {scheduleSettings.wakarSchedule?.enabled ?? true ? 'Shift Wakar Aktif' : 'Nonaktif'}
+                </span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+              {/* Jam Masuk Malam */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2">
+                <div className="font-bold text-slate-900 dark:text-white flex items-center justify-between">
+                  <span>Presensi Masuk (Clock In Malam Hari H)</span>
+                  <span className="font-mono text-[10px] text-indigo-500 font-semibold">Target: 20:00 WITA</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Toleransi Mulai</label>
+                    <input
+                      type="time"
+                      value={scheduleSettings.wakarSchedule?.clockInStart || '19:30'}
+                      onChange={(e) => handleWakarFieldChange('clockInStart', e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Batas Akhir Masuk</label>
+                    <input
+                      type="time"
+                      value={scheduleSettings.wakarSchedule?.clockInEnd || '21:00'}
+                      onChange={(e) => handleWakarFieldChange('clockInEnd', e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Jam Pulang Pagi */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2">
+                <div className="font-bold text-slate-900 dark:text-white flex items-center justify-between">
+                  <span>Presensi Pulang (Clock Out Pagi Hari H+1)</span>
+                  <span className="font-mono text-[10px] text-emerald-500 font-semibold">Target: 06:00 WITA</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Boleh Pulang Mulai</label>
+                    <input
+                      type="time"
+                      value={scheduleSettings.wakarSchedule?.clockOutStart || '05:30'}
+                      onChange={(e) => handleWakarFieldChange('clockOutStart', e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Batas Akhir Pulang</label>
+                    <input
+                      type="time"
+                      value={scheduleSettings.wakarSchedule?.clockOutEnd || '07:00'}
+                      onChange={(e) => handleWakarFieldChange('clockOutEnd', e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

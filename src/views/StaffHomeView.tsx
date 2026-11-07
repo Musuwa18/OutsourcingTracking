@@ -64,8 +64,40 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
   const [actionType, setActionType] = useState<'clock-in' | 'clock-out' | 'break-out' | 'break-in'>('clock-in');
 
+  const isNightShiftWorker = Boolean(
+    staff?.roleTitle?.toLowerCase().includes('jaga malam') ||
+    staff?.roleTitle?.toLowerCase().includes('wakar')
+  );
+
   const todayDayKey = getDayOfWeekKey();
-  const todaySchedule = attendanceSettings?.workSchedule?.[todayDayKey] || DEFAULT_ATTENDANCE_SETTINGS.workSchedule[todayDayKey];
+  const regularSchedule =
+    attendanceSettings?.workSchedule?.[todayDayKey] ||
+    DEFAULT_ATTENDANCE_SETTINGS.workSchedule[todayDayKey];
+
+  const wakarConfig =
+    attendanceSettings?.wakarSchedule ||
+    DEFAULT_ATTENDANCE_SETTINGS.wakarSchedule || {
+      enabled: true,
+      dayName: 'Jaga Malam / Wakar',
+      clockInStart: '19:30',
+      clockInEnd: '21:00',
+      clockOutStart: '05:30',
+      clockOutEnd: '07:00',
+    };
+
+  const todaySchedule: DayWorkSchedule = isNightShiftWorker
+    ? {
+        enabled: wakarConfig.enabled,
+        dayName: wakarConfig.dayName || 'Jaga Malam / Wakar',
+        clockInStart: wakarConfig.clockInStart,
+        clockInEnd: wakarConfig.clockInEnd,
+        clockOutStart: wakarConfig.clockOutStart,
+        clockOutEnd: wakarConfig.clockOutEnd,
+        enableBreak: false,
+        breakStart: '00:00',
+        breakEnd: '01:00',
+      }
+    : regularSchedule;
 
   // Report modal state
   const [watermarkModalOpen, setWatermarkModalOpen] = useState(false);
@@ -311,13 +343,17 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           <AlertCircle className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="text-xs text-amber-950 dark:text-amber-200 space-y-1 w-full">
             <div className="flex items-center justify-between">
-              <span className="font-bold">Jadwal Tugas Hari Ini ({todaySchedule?.dayName || 'Hari Kerja'}):</span>
+              <span className="font-bold">
+                Jadwal Tugas Hari Ini ({isNightShiftWorker ? '🌙 Shift Jaga Malam' : todaySchedule?.dayName || 'Hari Kerja'}):
+              </span>
               <span className="font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
-                Pulang: {todaySchedule?.clockOutStart || '16:30'} WITA
+                Pulang: {todaySchedule?.clockOutStart || (isNightShiftWorker ? '06:00' : '16:30')} WITA
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-amber-900 dark:text-amber-300 font-medium">
-              {!todaySchedule?.enabled
+              {isNightShiftWorker
+                ? `Shift Khusus Wakar: Masuk pukul ${todaySchedule.clockInStart} - ${todaySchedule.clockInEnd} WITA (Target 20:00) · Pulang pukul ${todaySchedule.clockOutStart} - ${todaySchedule.clockOutEnd} WITA (Target 06:00 Pagi).`
+                : !todaySchedule?.enabled
                 ? 'Hari ini dijadwalkan libur / non-operasional resmi dinas.'
                 : todaySchedule?.enableBreak
                 ? `Masuk: ${todaySchedule.clockInStart} - ${todaySchedule.clockInEnd} WITA · Istirahat: ${todaySchedule.breakStart} - ${todaySchedule.breakEnd} WITA · Pulang: ${todaySchedule.clockOutStart} WITA.`

@@ -2246,6 +2246,14 @@ export const DEFAULT_ATTENDANCE_SETTINGS = {
     ],
   },
   autoCloseMissingClockOut: true,
+  wakarSchedule: {
+    enabled: true,
+    dayName: 'Jaga Malam / Wakar',
+    clockInStart: '19:30',
+    clockInEnd: '21:00',
+    clockOutStart: '05:30',
+    clockOutEnd: '07:00',
+  },
 };
 
 export function getAttendanceSettings() {

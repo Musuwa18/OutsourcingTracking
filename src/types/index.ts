@@ -336,8 +336,18 @@ export interface DayWorkSchedule {
   breakEnd: string;          // Contoh: '13:00'
 }
 
+export interface WakarSchedule {
+  enabled: boolean;
+  clockInStart: string; // '19:30'
+  clockInEnd: string;   // '21:00'
+  clockOutStart: string;// '05:30'
+  clockOutEnd: string;  // '07:00'
+  dayName?: string;     // 'Jaga Malam / Wakar'
+}
+
 export interface AttendanceGlobalSettings {
   workSchedule: Record<string, DayWorkSchedule>;
+  wakarSchedule?: WakarSchedule;
   breakSettings: {
     enabled: boolean;
     mandatory: boolean;
@@ -450,6 +460,14 @@ export const DEFAULT_ATTENDANCE_SETTINGS: AttendanceGlobalSettings = {
     ],
   },
   autoCloseMissingClockOut: true,
+  wakarSchedule: {
+    enabled: true,
+    dayName: 'Jaga Malam / Wakar',
+    clockInStart: '19:30',
+    clockInEnd: '21:00',
+    clockOutStart: '05:30',
+    clockOutEnd: '07:00',
+  },
 };
 
 
