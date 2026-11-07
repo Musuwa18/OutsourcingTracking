@@ -85,14 +85,13 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
     return true;
   });
 
-  // KPI summary counters for the selected date
-  const dayLogs = attendanceRecords.filter((r) => r.date === selectedDate);
+  // KPI summary counters for the selected date (strictly scoped to staffMap)
+  const dayLogs = attendanceRecords.filter((r) => r.date === selectedDate && staffMap.has(r.staffId));
   const hadirCount = dayLogs.filter((r) => r.status === 'Hadir').length;
   const terlambatCount = dayLogs.filter((r) => r.status === 'Terlambat').length;
   const izinCount = dayLogs.filter((r) => r.status === 'Izin').length;
-  const dayReports = dailyReports.filter((r) => r.date === selectedDate);
+  const dayReports = dailyReports.filter((r) => r.date === selectedDate && staffMap.has(r.staffId));
   const dayBreaches = dayLogs.filter((r) => !r.locationCoords.withinRadius && !r.isFieldDuty);
-
   const handleRowClick = (rec: AttendanceRecord) => {
     const staff = staffMap.get(rec.staffId) || null;
     setSelectedRecord(rec);
@@ -100,7 +99,8 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   };
 
   const handleExportCSV = () => {
-    exportAttendanceToCSV(attendanceRecords, staffMap);
+    const relevantRecords = attendanceRecords.filter((r) => staffMap.has(r.staffId));
+    exportAttendanceToCSV(relevantRecords, staffMap);
   };
 
   return (

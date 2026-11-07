@@ -101,6 +101,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
+  const isSupervisor = currentRole === 'supervisor';
+  const displayedNavItems = isSupervisor
+    ? adminNavItems.filter((item) =>
+        ['monitoring-presensi', 'persetujuan-laporan', 'evaluasi-mingguan', 'analitik-bulanan'].includes(
+          item.id
+        )
+      )
+    : adminNavItems;
+
   return (
     <aside
       className={`hidden md:flex flex-col w-72 shrink-0 h-[calc(100vh-3.75rem)] sticky top-15 overflow-y-auto z-10 transition-all ${
@@ -117,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {currentRole === 'admin' ? 'Konsol Administrasi' : 'Menu Supervisi'}
           </div>
           <nav className="space-y-1.5">
-            {adminNavItems.map((item) => {
+            {displayedNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentTab === item.id;
 

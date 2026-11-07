@@ -47,6 +47,24 @@ interface SupervisorEvaluationViewProps {
   onSubmitEvaluation: (evalData: Omit<WeeklyEvaluation, 'id' | 'submittedAt'>) => void;
 }
 
+export const DEFAULT_ONE_STAR_RATINGS: CompetencyRatings = {
+  // Pillar A: Kualitas & Produktivitas Kerja
+  qualityOfWork: 1,
+  quantityOfWork: 1,
+  timeManagement: 1,
+  // Pillar B: Sikap Kerja & Profesionalisme
+  initiative: 1,
+  accountability: 1,
+  punctuality: 1,
+  // Pillar C: Kompetensi Interpersonal
+  teamwork: 1,
+  communication: 1,
+  customerOrientation: 1,
+  // Pillar D: Adaptabilitas & Pengembangan Diri
+  adaptability: 1,
+  problemSolving: 1,
+};
+
 export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> = ({
   currentUser,
   staffList,
@@ -127,24 +145,8 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
     (r) => r.date === evaluationDate && !r.locationCoords.withinRadius && !r.isFieldDuty
   );
 
-  // 4 Pillars & 11 Competencies
-  const [ratings, setRatings] = useState<CompetencyRatings>({
-    // Pillar A
-    qualityOfWork: 5,
-    quantityOfWork: 4,
-    timeManagement: 5,
-    // Pillar B
-    initiative: 4,
-    accountability: 5,
-    punctuality: 5,
-    // Pillar C
-    teamwork: 5,
-    communication: 4,
-    customerOrientation: 5,
-    // Pillar D
-    adaptability: 4,
-    problemSolving: 5,
-  });
+  // 4 Pillars & 11 Competencies - Default 1-star (1.00) for objective evaluation
+  const [ratings, setRatings] = useState<CompetencyRatings>(DEFAULT_ONE_STAR_RATINGS);
 
   const [qualitativeNotes, setQualitativeNotes] = useState('');
   const [evalSubmittedSuccess, setEvalSubmittedSuccess] = useState(false);
@@ -152,7 +154,44 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
   // Reviewing single daily report notes
   const [reportNoteInputs, setReportNoteInputs] = useState<Record<string, string>>({});
 
+
+  // Keep selectedStaffId valid when staffList updates
+  useEffect(() => {
+    if (staffList.length > 0 && !staffList.some((s) => s.id === selectedStaffId)) {
+      setSelectedStaffId(staffList[0].id);
+    }
+  }, [staffList, selectedStaffId]);
+
+  // Synchronize ratings & notes with saved evaluation or reset to 1-star default
+  useEffect(() => {
+    if (!selectedStaffId) return;
+    const existingEval = weeklyEvaluations.find(
+      (ev) => ev.staffId === selectedStaffId && ev.weekNumber === selectedWeek
+    );
+    if (existingEval) {
+      setRatings(existingEval.ratings);
+      let feedback = existingEval.qualitativeFeedback || '';
+      if (!feedback && 'notes' in existingEval) {
+        const possibleNotes = existingEval.notes;
+        if (typeof possibleNotes === 'string') {
+          feedback = possibleNotes;
+        }
+      }
+      setQualitativeNotes(feedback);
+    } else {
+      setRatings(DEFAULT_ONE_STAR_RATINGS);
+      setQualitativeNotes('');
+    }
+  }, [selectedStaffId, selectedWeek, weeklyEvaluations]);
   const selectedStaff = staffList.find((s) => s.id === selectedStaffId);
+
+  // Filter daily reports to subordinate staff when logged in as supervisor
+  const displayedDailyReports = useMemo(() => {
+    if (currentUser?.role === 'supervisor') {
+      return dailyReports.filter((rep) => staffList.some((s) => s.id === rep.staffId));
+    }
+    return dailyReports;
+  }, [dailyReports, staffList, currentUser]);
 
   // Calculate live overall weekly score
   const totalPoints =
@@ -191,7 +230,11 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
             Belum Ada Staf Outsourcing untuk Dievaluasi
           </h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-            Silakan daftarkan tenaga alih daya resmi di unit kerja Anda melalui menu <strong>Pusat Pengaturan Sistem</strong> untuk memulai siklus penilaian kinerja mingguan.
+            {currentUser?.role === 'supervisor' ? (
+              <>Belum ada staf yang memilih Anda sebagai atasan penilai. Staf dapat memilih atasan langsung melalui profil mereka atau melalui pemetaan administrator.</>
+            ) : (
+              <>Silakan daftarkan tenaga alih daya resmi di unit kerja Anda melalui menu <strong>Pusat Pengaturan Sistem</strong> untuk memulai siklus penilaian kinerja mingguan.</>
+            )}
           </p>
         </div>
       </div>
@@ -780,8 +823,12 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {dailyReports.map((report) => {
-              const staff = staffList.find((s) => s.id === report.staffId);
+            {displayedDailyReports.length === 0 ? (
+              <div className="col-span-full p-12 text-center glass-card rounded-2xl text-xs text-slate-500">
+                Belum ada laporan pekerjaan harian staf outsourcing untuk ditinjau.
+              </div>
+            ) : (
+              displayedDailyReports.map((report) => {
               const noteText = reportNoteInputs[report.id] || '';
 
               return (
@@ -921,7 +968,8 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                   </div>
                 </div>
               );
-            })}
+              })
+            )}
           </div>
         </div>
       )}

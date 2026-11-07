@@ -400,6 +400,15 @@ export default function App() {
     enabled: Boolean(currentUser),
   });
 
+  // Route guard: Redirect supervisor if accessing admin-only tabs
+  useEffect(() => {
+    if (currentRole === 'supervisor') {
+      if (adminTab === 'pengaturan-keamanan' || adminTab === 'audit-log') {
+        setAdminTab('persetujuan-laporan');
+      }
+    }
+  }, [currentRole, adminTab]);
+
   // Modals state
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [cloudSyncOpen, setCloudSyncOpen] = useState(false);
@@ -744,22 +753,31 @@ export default function App() {
     return DEFAULT_FALLBACK_STAFF;
   }, [currentUser, staffList, activeStaffId]);
 
-  // Filtered staff list for Supervisor (strictly shows staff in their division)
+  // Filtered staff list for Supervisor (strictly shows staff who selected them as supervisor or mapped by admin)
   const filteredStaffList = useMemo<StaffProfile[]>(() => {
     if (currentUser?.role === 'supervisor') {
-      const match = staffList.filter((s) => {
-        if (currentUser.divisionId === 'div-all') return true;
-        if (currentUser.divisionId === 'div-it' && s.id === 'usr-os-001') return true;
-        if (currentUser.divisionId === 'div-sec' && s.id === 'usr-os-002') return true;
-        if (currentUser.divisionId === 'div-cln' && s.id === 'usr-os-003') return true;
-        if (currentUser.divisionId === 'div-drv' && s.id === 'usr-os-004') return true;
-        if (currentUser.divisionId === 'div-adm' && s.id === 'usr-os-005') return true;
-        return s.division.toLowerCase().includes(currentUser.divisionName.toLowerCase());
+      const currentSpvId = currentUser.id;
+      const currentSpvNip = currentUser.nip;
+
+      // Check admin mappings for this supervisor
+      const mapping = supervisorMappings.find(
+        (m) =>
+          (currentSpvId && m.supervisorId === currentSpvId) ||
+          (currentSpvNip && m.supervisorId === currentSpvNip)
+      );
+      const assignedFromMapping = mapping?.assignedStaffIds || [];
+
+      return staffList.filter((s) => {
+        const matchesDirectSupervisor = Boolean(
+          s.supervisorId &&
+            (s.supervisorId === currentSpvId || (currentSpvNip && s.supervisorId === currentSpvNip))
+        );
+        const matchesMapping = assignedFromMapping.includes(s.id);
+        return matchesDirectSupervisor || matchesMapping;
       });
-      return match.length > 0 ? match : staffList;
     }
     return staffList;
-  }, [currentUser, staffList]);
+  }, [currentUser, staffList, supervisorMappings]);
 
   // Derived Monthly Aggregates
   const monthlyAggregates = useMemo(() => {
@@ -1449,13 +1467,19 @@ export default function App() {
         {currentRole !== 'outsourcing' && (
           <Sidebar
             currentTab={adminTab}
-            onTabChange={(tab) => setAdminTab(tab)}
+            onTabChange={(tab) => {
+              if (currentRole === 'supervisor' && (tab === 'pengaturan-keamanan' || tab === 'audit-log')) {
+                return;
+              }
+              setAdminTab(tab);
+            }}
             currentRole={currentRole}
             pendingReportsCount={pendingReportsCount}
             geofenceBreachCount={geofenceBreachCount}
             glassMode={glassMode}
             settingsSubTab={settingsSubTab}
             onSettingsSubTabChange={(sub) => {
+              if (currentRole !== 'admin') return;
               setAdminTab('pengaturan-keamanan');
               setSettingsSubTab(sub as SettingsTab);
             }}
@@ -1574,7 +1598,7 @@ export default function App() {
             <div>
               {adminTab === 'monitoring-presensi' && (
                 <AdminAttendanceView
-                  staffList={staffList}
+                  staffList={filteredStaffList}
                   attendanceRecords={attendanceRecords}
                   dailyReports={dailyReports}
                   fieldCheckins={fieldCheckins}
@@ -1620,11 +1644,11 @@ export default function App() {
                 />
               )}
 
-              {adminTab === 'audit-log' && (
+              {adminTab === 'audit-log' && currentRole === 'admin' && (
                 <AuditLogView auditLogs={auditLogs} />
               )}
 
-              {adminTab === 'pengaturan-keamanan' && (
+              {adminTab === 'pengaturan-keamanan' && currentRole === 'admin' && (
                 <SystemSettingsView
                   locations={locations}
                   onUpdateLocations={handleUpdateLocations}
@@ -1668,6 +1692,9 @@ export default function App() {
           if (currentRole === 'outsourcing') {
             setMobileTab(tab);
           } else {
+            if (currentRole === 'supervisor' && (tab === 'pengaturan-keamanan' || tab === 'audit-log')) {
+              return;
+            }
             setAdminTab(tab);
           }
         }}

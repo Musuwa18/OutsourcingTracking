@@ -156,7 +156,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
             Belum Ada Data Tenaga Outsourcing Terdaftar
           </h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-            Data analitik dan rekapitulasi KPI akan muncul secara otomatis setelah tenaga outsourcing resmi didaftarkan melalui menu <strong>Pusat Pengaturan Sistem &gt; Manajemen Pengguna & Staf</strong>.
+            Data analitik dan rekapitulasi KPI akan muncul secara otomatis setelah staf alih daya resmi memilih Anda sebagai atasan penilai atau setelah didaftarkan oleh Administrator.
           </p>
         </div>
       </div>
@@ -164,7 +164,8 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
   }
 
   const handleExportCSV = () => {
-    exportMonthlyKpiToCSV(monthlyAggregates, staffMap);
+    const relevantAggregates = monthlyAggregates.filter((agg) => staffMap.has(agg.staffId));
+    exportMonthlyKpiToCSV(relevantAggregates.length > 0 ? relevantAggregates : monthlyAggregates, staffMap);
   };
 
   // Komponen Reusable Daftar Vertikal Pegawai
