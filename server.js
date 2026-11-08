@@ -1026,6 +1026,29 @@ app.post('/api/attendance/auto-close', (req, res) => {
   }
 });
 
+// 11g. EXPORT REKAP PRESENSI EXCEL (.XLSX MULTI-SHEET IDENTIK REFERENSI)
+app.get('/api/reports/rekap-presensi/excel', async (req, res) => {
+  try {
+    const { month, staffId, vendor } = req.query;
+    const monthStr = month || new Date().toISOString().slice(0, 7);
+    const { generateRekapPresensiWorkbook } = await import('./server/excelReport.js');
+    const xlsxModule = await import('xlsx');
+    const XLSX = xlsxModule.default || xlsxModule;
+    const wb = generateRekapPresensiWorkbook({
+      monthStr,
+      targetStaffId: staffId || null,
+      vendorFilter: vendor || null
+    });
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="rekap_presensi_outsourcing_${monthStr}.xlsx"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error('[API Error] Export Rekap Excel:', err);
+    res.status(500).json({ error: 'Gagal mengekspor berkas Excel rekap presensi.' });
+  }
+});
+
 // 12. Daily Reports
 app.get('/api/reports', (req, res) => {
   try {
