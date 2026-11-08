@@ -75,6 +75,15 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   const selectedMonthName = monthNames[monthNum - 1];
   const selectedYear = yearNum;
 
+  const today = new Date().toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const staffMap = new Map(staffList.map((s) => [s.id, s]));
+  const inst = institutionSettings || DEFAULT_INSTITUTION_SETTINGS;
+  const selectedStaff = staffMap.get(selectedStaffId) || staffList[0];
   const attLookup = useMemo(() => {
     const map = new Map<string, AttendanceRecord>();
     attendanceRecords.forEach((a) => {
@@ -310,17 +319,6 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   const handlePrint = () => {
     window.print();
   };
-
-  const today = new Date().toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-
-  const staffMap = new Map(staffList.map((s) => [s.id, s]));
-  const inst = institutionSettings || DEFAULT_INSTITUTION_SETTINGS;
-
-  const selectedStaff = staffMap.get(selectedStaffId) || staffList[0];
 
   // Hitung statistik rekap kehadiran
   const totalLogs = attendanceRecords.length;

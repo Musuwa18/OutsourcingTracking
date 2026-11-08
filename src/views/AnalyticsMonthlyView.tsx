@@ -299,7 +299,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
             className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors flex items-center gap-2 cursor-pointer shadow-xs"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Cetak Rekap</span>
+            <span>Cetak Rekapitulasi</span>
           </button>
         </div>
       </div>
