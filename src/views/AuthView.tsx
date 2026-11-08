@@ -113,14 +113,24 @@ export const AuthView: React.FC<AuthViewProps> = ({
     : (serverLocations.length > 0 ? serverLocations : PRIMARY_OFFICES);
   
   const fallbackVendors: Vendor[] = [
-    { id: 'ven-001', name: 'PT Handil Bakti Utama (Mitra Disdik HST)', code: 'HBU-HST', category: 'vendor', status: 'Aktif' },
-    { id: 'ven-002', name: 'CV Murakata Sarana Mandiri', code: 'MSM-HST', category: 'vendor', status: 'Aktif' },
-    { id: 'ven-003', name: 'PT. YASMINE BUIH PERSADA', code: 'YBP-HST', category: 'vendor', status: 'Aktif' },
+    { id: 'ven-1793854918283', name: 'PT. YASMINE BUIH PERSADA', code: 'YASMINE', category: 'vendor', status: 'Aktif' },
     { id: 'ven-004', name: 'PPPK Paruh Waktu Disdik HST', code: 'PPPK-PW', category: 'pppk_paruh_waktu', status: 'Aktif' },
     { id: 'ven-005', name: 'Siswa / Mahasiswa Magang Disdik HST', code: 'MAGANG-HST', category: 'magang', status: 'Aktif' },
   ];
   const activeVendors = React.useMemo(() => {
-    const list = [...(vendors && vendors.length > 0 ? vendors : fallbackVendors)];
+    const rawList = (vendors && vendors.length > 0) ? vendors : fallbackVendors;
+    const list = rawList.filter(
+      (v) => !v.name.includes('Handil Bakti') && !v.name.includes('Murakata Sarana Mandiri')
+    );
+    if (!list.some((v) => v.name.toUpperCase().includes('YASMINE'))) {
+      list.unshift({
+        id: 'ven-1793854918283',
+        name: 'PT. YASMINE BUIH PERSADA',
+        code: 'YASMINE',
+        category: 'vendor',
+        status: 'Aktif',
+      });
+    }
     if (!list.some((v) => v.category === 'pppk_paruh_waktu' || v.name.toLowerCase().includes('pppk'))) {
       list.push({
         id: 'ven-004',
@@ -139,7 +149,17 @@ export const AuthView: React.FC<AuthViewProps> = ({
         status: 'Aktif',
       });
     }
-    return list;
+    // Deduplikasi ketat berdasarkan nama agar PT. YASMINE BUIH PERSADA tidak pernah muncul dobel
+    const seen = new Set<string>();
+    const deduped: Vendor[] = [];
+    for (const v of list) {
+      const key = v.name.trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(v);
+      }
+    }
+    return deduped;
   }, [vendors]);
   const vendorRekanan = activeVendors.filter((v) => !v.category || v.category === 'vendor');
   const pppkParuhWaktu = activeVendors.filter((v) => v.category === 'pppk_paruh_waktu');
@@ -168,7 +188,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [osDivisionId, setOsDivisionId] = useState(activeDivisions[0]?.id || 'div-it');
   const [osLocationId, setOsLocationId] = useState(activeLocations[0]?.id || 'loc-disdik-hst');
   const [osRoleTitle, setOsRoleTitle] = useState<string>(OUTSOURCING_JOB_ROLES[0]);
-  const [osVendor, setOsVendor] = useState<string>(availableVendors[0] || 'PT Handil Bakti Utama (Mitra Disdik HST)');
+  const [osVendor, setOsVendor] = useState<string>(availableVendors[0] || 'PT. YASMINE BUIH PERSADA');
 
   // Pastikan ID lokasi sinkron saat master lokasi diperbarui
   React.useEffect(() => {

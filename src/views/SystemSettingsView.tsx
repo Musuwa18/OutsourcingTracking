@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   MapPin,
   Users,
@@ -433,7 +433,23 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
 
   const allVendors = useMemo(() => {
-    const list = [...(vendors || [])];
+    const rawList = (vendors && vendors.length > 0) ? vendors : [
+      { id: 'ven-1793854918283', name: 'PT. YASMINE BUIH PERSADA', code: 'YASMINE', category: 'vendor', status: 'Aktif' },
+      { id: 'ven-004', name: 'PPPK Paruh Waktu Disdik HST', code: 'PPPK-PW', category: 'pppk_paruh_waktu', status: 'Aktif' },
+      { id: 'ven-005', name: 'Siswa / Mahasiswa Magang Disdik HST', code: 'MAGANG-HST', category: 'magang', status: 'Aktif' },
+    ];
+    const list = rawList.filter(
+      (v) => !v.name.includes('Handil Bakti') && !v.name.includes('Murakata Sarana Mandiri')
+    );
+    if (!list.some((v) => v.name.toUpperCase().includes('YASMINE'))) {
+      list.unshift({
+        id: 'ven-1793854918283',
+        name: 'PT. YASMINE BUIH PERSADA',
+        code: 'YASMINE',
+        category: 'vendor',
+        status: 'Aktif',
+      });
+    }
     if (!list.some((v) => v.category === 'pppk_paruh_waktu' || v.name.toLowerCase().includes('pppk'))) {
       list.push({
         id: 'ven-004',
@@ -452,7 +468,16 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         status: 'Aktif',
       });
     }
-    return list;
+    const seen = new Set<string>();
+    const deduped: Vendor[] = [];
+    for (const v of list) {
+      const key = v.name.trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(v);
+      }
+    }
+    return deduped;
   }, [vendors]);
   // ================= ACTION HANDLERS: DIVISIONS =================
   const handleOpenAddDivision = () => {

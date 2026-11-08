@@ -841,42 +841,16 @@ export const INITIAL_USERS = [
 
 export const INITIAL_VENDORS = [
   {
-    id: 'ven-001',
-    name: 'PT Handil Bakti Utama (Mitra Disdik HST)',
-    code: 'HBU-HST',
-    category: 'vendor',
-    contractNumber: 'SPK/027/DISDIK-HST/2026',
-    contractStart: '2026-01-02',
-    contractEnd: '2026-12-31',
-    picName: 'H. Akhmad Zaini, S.E.',
-    picPhone: '0812-5100-8899',
-    address: 'Jl. Murakata No. 45, Barabai, Kab. Hulu Sungai Tengah',
-    status: 'Aktif'
-  },
-  {
-    id: 'ven-002',
-    name: 'CV Murakata Sarana Mandiri',
-    code: 'MSM-HST',
-    category: 'vendor',
-    contractNumber: 'SPK/028/DISDIK-HST/2026',
-    contractStart: '2026-01-02',
-    contractEnd: '2026-12-31',
-    picName: 'M. Noor Irfan, S.T.',
-    picPhone: '0852-4800-1122',
-    address: 'Jl. Perintis Kemerdekaan No. 12, Barabai',
-    status: 'Aktif'
-  },
-  {
-    id: 'ven-003',
+    id: 'ven-1793854918283',
     name: 'PT. YASMINE BUIH PERSADA',
-    code: 'YBP-HST',
+    code: 'YASMINE',
     category: 'vendor',
-    contractNumber: 'SPK/029/DISDIK-HST/2026',
+    contractNumber: 'EP-01M5XX726VD68KCYTTK3HYTB75',
     contractStart: '2026-01-02',
     contractEnd: '2026-12-31',
-    picName: 'Hj. Yasmine Agustina, S.Kom.',
+    picName: 'AKHMAD NABEHAN',
     picPhone: '0813-4900-5566',
-    address: 'Jl. H. Damanhuri No. 88, Barabai Timur, HST',
+    address: 'Jl. KH. Ideham Khalid RT 04 No. 38 Gang Ketapi, Kab. Hulu Sungai Utara (71419)',
     status: 'Aktif'
   },
   {
@@ -916,6 +890,15 @@ export function seedDatabaseIfEmpty() {
   if (isNodeSqlite && dbEngine) {
     // Sinkronisasi Tabel Vendors
     try {
+      // Hapus vendor dummy lawas (Handil Bakti & Murakata)
+      dbEngine.prepare("DELETE FROM vendors WHERE id IN ('ven-001', 'ven-002') OR name LIKE '%Handil Bakti%' OR name LIKE '%Murakata Sarana Mandiri%'").run();
+      // Deduplikasi YASMINE jika ada duplikat (ven-003 vs ven-yasmine vs ven-1793854918283)
+      const yasmineRows = dbEngine.prepare("SELECT id FROM vendors WHERE name = 'PT. YASMINE BUIH PERSADA' ORDER BY id DESC").all();
+      if (yasmineRows.length > 1) {
+        const keepId = yasmineRows[0].id;
+        dbEngine.prepare("DELETE FROM vendors WHERE name = 'PT. YASMINE BUIH PERSADA' AND id != ?").run(keepId);
+      }
+
       const insertVen = dbEngine.prepare(
         'INSERT OR IGNORE INTO vendors (id, name, code, category, contract_number, contract_start, contract_end, pic_name, pic_phone, address, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
@@ -1449,14 +1432,25 @@ export function deleteDivision(id) {
 // VENDORS (PERUSAHAAN PENYEDIA OUTSOURCING)
 export function listVendors() {
   if (isNodeSqlite && dbEngine) {
-    const rows = dbEngine.prepare('SELECT * FROM vendors ORDER BY name ASC').all();
+    const rows = dbEngine.prepare("SELECT * FROM vendors WHERE name NOT LIKE '%Handil Bakti%' AND name NOT LIKE '%Murakata Sarana Mandiri%' ORDER BY name ASC").all();
     const staffCounts = dbEngine.prepare("SELECT vendor_name, COUNT(*) as count FROM users WHERE role = 'outsourcing' GROUP BY vendor_name").all();
     const countMap = {};
     for (const sc of staffCounts) {
       if (sc.vendor_name) countMap[sc.vendor_name] = sc.count;
     }
 
-    return rows.map((r) => ({
+    // Deduplikasi berdasarkan nama agar tidak pernah ada vendor ganda
+    const seen = new Set();
+    const uniqueRows = [];
+    for (const r of rows) {
+      const key = r.name.trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueRows.push(r);
+      }
+    }
+
+    return uniqueRows.map((r) => ({
       id: r.id,
       name: r.name,
       code: r.code,
@@ -1472,7 +1466,8 @@ export function listVendors() {
       createdAt: r.created_at
     }));
   } else {
-    return (fallbackStore.vendors || []).map((v) => ({ ...v, category: v.category || 'vendor', staffCount: 0 }));
+    const list = (fallbackStore.vendors || []).filter((v) => !v.name.includes('Handil Bakti') && !v.name.includes('Murakata Sarana Mandiri'));
+    return list.map((v) => ({ ...v, category: v.category || 'vendor', staffCount: 0 }));
   }
 }
 
