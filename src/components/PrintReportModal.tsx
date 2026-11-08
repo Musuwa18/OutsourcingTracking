@@ -453,11 +453,11 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
       : `Rapor Kinerja Individu - ${selectedStaff.name}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block">
-      <div className="relative w-full max-w-[96vw] 2xl:max-w-7xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden my-2 sm:my-4 print:border-none print:shadow-none print:m-0 print:w-full print:max-w-none print:rounded-none">
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block">
+      <div className="relative w-full max-w-[96vw] 2xl:max-w-7xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl my-2 sm:my-4 print:border-none print:shadow-none print:m-0 print:w-full print:max-w-none print:rounded-none">
         
         {/* Navigation Toolbar (No-Print) */}
-        <div className="no-print flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-800 bg-[#161f2e] text-slate-200">
+        <div className="sticky top-0 z-30 no-print flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-800 bg-[#161f2e] text-slate-200 shadow-md">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/25 shrink-0">
               <Printer className="w-4 h-4" />

@@ -70,7 +70,7 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
   const [zoom, setZoom] = useState<number>(100);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<"single" | "all">("all");
+  const [viewMode, setViewMode] = useState<"single" | "all">("single");
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -404,7 +404,7 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
         </div>
 
         {/* Toolbar PDF Viewer */}
-        <div className="no-print bg-[#252c38] border-b border-slate-700/70 px-3 py-2 text-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs select-none">
+        <div className="sticky top-0 z-20 no-print bg-[#252c38] border-b border-slate-700/70 px-3 py-2 text-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs select-none shadow-sm">
           {/* Sisi Kiri: Toggle Sidebar Thumbnail & Selector Info */}
           <div className="flex items-center space-x-1 sm:space-x-2">
             <button
