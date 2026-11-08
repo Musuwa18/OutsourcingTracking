@@ -101,6 +101,10 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
                     ? item.read
                       ? 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40 opacity-80'
                       : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 shadow-sm'
+                    : item.type === 'approval'
+                    ? item.read
+                      ? 'bg-emerald-50/20 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/40 opacity-75'
+                      : 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 shadow-xs ring-1 ring-emerald-500/20'
                     : item.read
                     ? 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/80 opacity-75'
                     : 'bg-indigo-50/40 dark:bg-indigo-950/20 border-indigo-100 dark:border-indigo-900/50 shadow-xs'
@@ -112,6 +116,8 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
                     <span className={`text-xs font-bold ${
                       item.type === 'geofence_alert'
                         ? 'text-rose-900 dark:text-rose-200'
+                        : item.type === 'approval'
+                        ? 'text-emerald-900 dark:text-emerald-300'
                         : 'text-slate-900 dark:text-white'
                     }`}>
                       {item.title}

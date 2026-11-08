@@ -772,6 +772,24 @@ app.post('/api/settings/institution', (req, res) => {
 app.post('/api/overtime/request', (req, res) => {
   try {
     const created = createOvertimeRequest(req.body);
+    if (created && created.supervisorId) {
+      try {
+        const now = new Date();
+        const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+        createNotification({
+          id: `notif-ot-req-${created.id}`,
+          userId: created.supervisorId,
+          staffId: created.staffId,
+          title: 'Pengajuan Tugas Lembur Baru',
+          message: `${created.staffName || 'Staf'} mengajukan tugas lembur (${created.date}, estimasi ${created.estimatedHours} jam): "${created.reason}".`,
+          type: 'approval',
+          read: false,
+          timestamp: timeFormatted,
+        });
+      } catch (ne) {
+        console.error('[Notification Error] Overtime Request:', ne);
+      }
+    }
     res.status(201).json({ success: true, overtime: created, message: 'Izin lembur berhasil diajukan, menunggu persetujuan atasan langsung.' });
   } catch (err) {
     console.error('[API Error] Overtime Request:', err);
@@ -794,6 +812,24 @@ app.patch('/api/overtime/:id/approve', (req, res) => {
     const { id } = req.params;
     const { approved, supervisorNotes } = req.body;
     const updated = approveOvertimeRequest(id, { approved: Boolean(approved), supervisorNotes });
+    if (updated && updated.staffId) {
+      try {
+        const now = new Date();
+        const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+        createNotification({
+          id: `notif-ot-${updated.id}-${approved ? 'app' : 'rej'}`,
+          userId: updated.staffId,
+          staffId: updated.staffId,
+          title: approved ? 'Pengajuan Lembur Disetujui' : 'Pengajuan Lembur Ditolak',
+          message: `Pengajuan lembur Anda tanggal ${updated.date} telah ${approved ? 'disetujui' : 'ditolak'} oleh atasan (${updated.supervisorName || 'Supervisor'}).${updated.supervisorNotes ? ` Catatan: "${updated.supervisorNotes}"` : ''}`,
+          type: 'approval',
+          read: false,
+          timestamp: timeFormatted,
+        });
+      } catch (ne) {
+        console.error('[Notification Error] Overtime Approval:', ne);
+      }
+    }
     res.json({ success: true, overtime: updated, message: approved ? 'Pengajuan lembur disetujui.' : 'Pengajuan lembur ditolak.' });
   } catch (err) {
     res.status(500).json({ error: 'Gagal memperbarui status persetujuan lembur.' });
@@ -828,6 +864,30 @@ app.post('/api/overtime/:id/finish', (req, res) => {
 app.post('/api/leave/request', (req, res) => {
   try {
     const created = createLeaveRequest(req.body);
+    if (created && created.supervisorId) {
+      try {
+        const now = new Date();
+        const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+        const leaveLabel =
+          created.leaveType === 'SAKIT'
+            ? 'Izin Sakit'
+            : created.leaveType === 'CUTI_TAHUNAN'
+            ? 'Cuti Tahunan'
+            : 'Izin Keperluan Mendesak';
+        createNotification({
+          id: `notif-leave-req-${created.id}`,
+          userId: created.supervisorId,
+          staffId: created.staffId,
+          title: 'Permohonan Izin / Cuti Baru',
+          message: `${created.staffName || 'Staf'} mengajukan ${leaveLabel} (${created.startDate} s/d ${created.endDate}): "${created.reason}".`,
+          type: 'approval',
+          read: false,
+          timestamp: timeFormatted,
+        });
+      } catch (ne) {
+        console.error('[Notification Error] Leave Request:', ne);
+      }
+    }
     res.status(201).json({ success: true, leave: created, message: 'Permohonan izin/cuti berhasil diajukan, menunggu persetujuan atasan langsung.' });
   } catch (err) {
     console.error('[API Error] Leave Request:', err);
@@ -851,6 +911,32 @@ app.patch('/api/leave/:id/approve', (req, res) => {
     const { id } = req.params;
     const { approved, supervisorNotes, verifiedBy } = req.body;
     const updated = approveLeaveRequest(id, { approved, supervisorNotes, verifiedBy });
+    if (updated && updated.staffId) {
+      try {
+        const now = new Date();
+        const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+        const leaveLabel =
+          updated.leaveType === 'SAKIT'
+            ? 'Izin Sakit'
+            : updated.leaveType === 'CUTI_TAHUNAN'
+            ? 'Cuti Tahunan'
+            : 'Izin Keperluan Mendesak';
+        const statusLabel = approved ? 'disetujui' : 'ditolak';
+        const notesSuffix = updated.supervisorNotes ? ` Catatan: "${updated.supervisorNotes}"` : '';
+        createNotification({
+          id: `notif-leave-${updated.id}-${approved ? 'app' : 'rej'}`,
+          userId: updated.staffId,
+          staffId: updated.staffId,
+          title: approved ? 'Permohonan Izin / Cuti Disetujui' : 'Permohonan Izin / Cuti Ditolak',
+          message: `Permohonan ${leaveLabel} Anda (${updated.startDate} s/d ${updated.endDate}) telah ${statusLabel} oleh atasan (${updated.verifiedBy || updated.supervisorName || 'Supervisor'}).${notesSuffix}`,
+          type: 'approval',
+          read: false,
+          timestamp: timeFormatted,
+        });
+      } catch (ne) {
+        console.error('[Notification Error] Leave Approval:', ne);
+      }
+    }
     res.json({
       success: true,
       leave: updated,
