@@ -41,6 +41,22 @@ Agregasi bulanan menghitung rata-rata Minggu 1-4, menghasilkan predikat otomatis
 - **Dynamic RBAC**: Permission Matrix untuk 4 peran (Outsourcing, Koordinator, Supervisor, Super Admin).
 - **Enterprise Security**: Google Workspace SSO, 2FA TOTP Authenticator, Audit Log Trail.
 
+### E. Tugas Lembur Resmi (Overtime Pro) & SPTL Kedinasan
+- **Validasi Lokasi Lembur**: Lembur wajib dilakukan di kantor dinas (geofence radius terverifikasi).
+- **Persetujuan Berjenjang**: Pengajuan wajib disetujui atasan langsung (Supervisor) sebelum staf dapat melakukan presensi mulai lembur.
+- **Durasi Minimal Sah**: Standar keuangan daerah mewajibkan durasi lembur minimal **60 menit (1 Jam)**. Clock-out ditolak jika durasi < 60 menit.
+- **Bukti & Output Kerja**: Wajib melampirkan foto selfie WebRTC di kantor serta ringkasan hasil kerja (*work summary*).
+- **Format Cetak Dokumen**: Tersedia mode cetak Surat Perintah Tugas Lembur (SPTL) resmi sesuai tata naskah dinas di modal cetak laporan.
+
+### F. Presensi Wakar / Jaga Malam Lintas Hari (Overnight Shift)
+- **Jadwal Kerja Lintas Hari**: Jam masuk malam (19:30 - 21:00 WITA) dan jam pulang pagi hari berikutnya (05:30 - 07:00 WITA).
+- **Proteksi Auto-Close**: Pengecualian auto-close pukul 23:59/00:00 untuk posisi Jaga Malam/Wakar.
+- **Pencarian Sesi Masuk H-1**: Logika clock-out subuh/pagi otomatis mengaitkan kehadiran ke sesi tanggal kemarin ($D-1$).
+
+### G. Identitas Instansi & Kop Surat Dinamis (Multi-SKPD)
+- **Replikasi Antar-SKPD**: Konfigurasi nama pemda, SKPD, alamat, nomor surat, logo ganda (daerah & dinas), dan pejabat penandatangan tersimpan dinamis di SQLite (`system_settings`).
+- **Pejabat Penandatangan Definitif**: Sekretaris Dinas Pendidikan (`Salihin, S.Pd.SD`, NIP `19780502 200604 1 017`).
+
 ## 4. HTTPS & Sensor Requirements (Mobile PWA)
 - Fitur `navigator.mediaDevices.getUserMedia` dan `navigator.geolocation` **wajib** dijalankan di atas protokol **HTTPS** (Secure Context) agar dapat beroperasi di smartphone Android/iOS.
 - Di lingkungan VPS, aplikasi disajikan di belakang Cloudflare Tunnel (`https://outsourcing.renlapdisdikhst.pro`) yang menyediakan SSL/TLS otomatis.

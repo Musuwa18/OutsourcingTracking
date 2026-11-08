@@ -60,6 +60,11 @@ import {
   startOvertime,
   finishOvertime,
   getOvertimeById,
+  createLeaveRequest,
+  listLeaveRequests,
+  approveLeaveRequest,
+  getLeaveById,
+  getLeaveQuota,
 } from './server/db.js';
 dotenv.config();
 
@@ -812,6 +817,56 @@ app.post('/api/overtime/:id/finish', (req, res) => {
   } catch (err) {
     console.error('[API Error] Overtime Finish:', err);
     res.status(500).json({ error: 'Gagal mengunci jam selesai lembur.' });
+  }
+});
+
+// 11f. MODUL MANAJEMEN IZIN & CUTI TERPADU (SMART LEAVE PRO)
+app.post('/api/leave/request', (req, res) => {
+  try {
+    const created = createLeaveRequest(req.body);
+    res.status(201).json({ success: true, leave: created, message: 'Permohonan izin/cuti berhasil diajukan, menunggu persetujuan atasan langsung.' });
+  } catch (err) {
+    console.error('[API Error] Leave Request:', err);
+    res.status(500).json({ error: 'Gagal mengajukan permohonan izin/cuti.' });
+  }
+});
+
+app.get('/api/leave', (req, res) => {
+  try {
+    const { staffId, supervisorId, date, status, leaveType } = req.query;
+    const list = listLeaveRequests({ staffId, supervisorId, date, status, leaveType });
+    res.json({ success: true, leaves: list });
+  } catch (err) {
+    console.error('[API Error] List Leaves:', err);
+    res.status(500).json({ error: 'Gagal mengambil data permohonan izin/cuti.' });
+  }
+});
+
+app.patch('/api/leave/:id/approve', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { approved, supervisorNotes, verifiedBy } = req.body;
+    const updated = approveLeaveRequest(id, { approved, supervisorNotes, verifiedBy });
+    res.json({
+      success: true,
+      leave: updated,
+      message: approved ? 'Permohonan izin/cuti berhasil disetujui dan status presensi telah disinkronkan.' : 'Permohonan izin/cuti telah ditolak.'
+    });
+  } catch (err) {
+    console.error('[API Error] Approve Leave:', err);
+    res.status(500).json({ error: err.message || 'Gagal memproses persetujuan izin/cuti.' });
+  }
+});
+
+app.get('/api/leave/quota/:staffId', (req, res) => {
+  try {
+    const { staffId } = req.params;
+    const year = req.query.year ? parseInt(req.query.year) : new Date().getFullYear();
+    const quota = getLeaveQuota(staffId, year);
+    res.json({ success: true, quota });
+  } catch (err) {
+    console.error('[API Error] Leave Quota:', err);
+    res.status(500).json({ error: 'Gagal memuat saldo kuota cuti staf.' });
   }
 });
 

@@ -18,8 +18,16 @@ import {
   Coffee,
   Moon,
   X,
+  HeartPulse,
+  FileText,
+  Paperclip,
+  UploadCloud,
+  CheckCircle,
+  CalendarRange,
+  ExternalLink,
 } from 'lucide-react';
-import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, FieldCheckinRecord, OvertimeRecord } from '../types';
+import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, DayWorkSchedule, FieldCheckinRecord, OvertimeRecord, LeaveRequest, LeaveQuota, LeaveType } from '../types';
+import { PRIMARY_OFFICES } from '../utils/geo';
 import { getDayOfWeekKey, getTodayDateStr, getCurrentWitaTimeStr } from '../utils/date';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { WatermarkCameraModal } from '../components/WatermarkCameraModal';
@@ -71,6 +79,23 @@ interface StaffHomeViewProps {
     workSummary: string;
     durationMinutes: number;
   }) => Promise<void> | void;
+  leaveRecords?: LeaveRequest[];
+  leaveQuota?: LeaveQuota | null;
+  onSubmitLeaveRequest?: (data: {
+    staffId: string;
+    staffName?: string;
+    staffNip?: string;
+    divisionId?: string;
+    divisionName?: string;
+    supervisorId?: string;
+    supervisorName?: string;
+    leaveType: LeaveType;
+    startDate: string;
+    endDate: string;
+    totalDays: number;
+    reason: string;
+    attachmentUrl?: string;
+  }) => Promise<void> | void;
 }
 export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   staff,
@@ -94,6 +119,9 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   onSubmitOvertimeRequest,
   onStartOvertime,
   onFinishOvertime,
+  leaveRecords = [],
+  leaveQuota = null,
+  onSubmitLeaveRequest,
 }) => {
   const safeOffice = staff?.assignedLocation || PRIMARY_OFFICES[0];
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
@@ -192,6 +220,97 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
   const myOvertimeRecords = (overtimeRecords || []).filter((o) => o.staffId === staff.id);
 
+  // Leave Engine State (Smart Leave Pro)
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [leaveCameraOpen, setLeaveCameraOpen] = useState(false);
+  const [leavePreviewDoc, setLeavePreviewDoc] = useState<string | null>(null);
+  const [leaveType, setLeaveType] = useState<LeaveType>('SAKIT');
+  const [leaveStartDate, setLeaveStartDate] = useState(getTodayDateStr());
+  const [leaveEndDate, setLeaveEndDate] = useState(getTodayDateStr());
+  const [leaveReason, setLeaveReason] = useState('');
+  const [leaveAttachmentUrl, setLeaveAttachmentUrl] = useState('');
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
+
+  const myLeaveRecords = (leaveRecords || []).filter((l) => l.staffId === staff.id);
+  const activeAnnualRemaining = leaveQuota?.annualRemaining ?? 12;
+
+  const calculateLeaveWorkDays = (startStr: string, endStr: string): number => {
+    if (!startStr || !endStr) return 1;
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return 1;
+    let count = 0;
+    const cur = new Date(start);
+    while (cur <= end) {
+      if (cur.getDay() !== 0) {
+        count++;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    return Math.max(1, count);
+  };
+
+  const calculatedLeaveDays = calculateLeaveWorkDays(leaveStartDate, leaveEndDate);
+
+  const handleLeaveFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ukuran berkas melebihi 5MB. Silakan pilih berkas yang lebih kecil.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setLeaveAttachmentUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCreateLeaveRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leaveReason.trim()) {
+      alert('Harap isi alasan permohonan izin/cuti.');
+      return;
+    }
+    if (leaveType === 'SAKIT' && !leaveAttachmentUrl) {
+      const proceed = window.confirm('Anda belum melampirkan Surat Keterangan Dokter (SKD). Pengajuan izin sakit tanpa SKD dapat memicu konfirmasi lanjutan dari atasan. Tetap kirim pengajuan?');
+      if (!proceed) return;
+    }
+    if (leaveType === 'CUTI_TAHUNAN' && calculatedLeaveDays > activeAnnualRemaining) {
+      alert(`Permohonan cuti (${calculatedLeaveDays} hari kerja) melebihi sisa kuota cuti tahunan Anda (${activeAnnualRemaining} hari).`);
+      return;
+    }
+
+    setIsSubmittingLeave(true);
+    try {
+      if (onSubmitLeaveRequest) {
+        await onSubmitLeaveRequest({
+          staffId: staff.id,
+          staffName: staff.name,
+          staffNip: staff.nip,
+          divisionId: staff.division,
+          divisionName: staff.division,
+          supervisorId: staff.supervisorId || 'usr-spv-renlap',
+          leaveType,
+          startDate: leaveStartDate,
+          endDate: leaveEndDate,
+          totalDays: calculatedLeaveDays,
+          reason: leaveReason.trim(),
+          attachmentUrl: leaveAttachmentUrl || undefined,
+        });
+      }
+      setLeaveModalOpen(false);
+      setLeaveReason('');
+      setLeaveAttachmentUrl('');
+    } catch (err) {
+      console.error('Submit leave error:', err);
+    } finally {
+       setIsSubmittingLeave(false);
+     }
+   };
+
   const handleCreateOvertimeRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!overtimeReason.trim()) return;
@@ -202,7 +321,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           staffId: staff.id,
           staffName: staff.name,
           staffNip: staff.nip,
-          divisionId: staff.divisionId || staff.division,
+          divisionId: staff.division,
           divisionName: staff.division,
           supervisorId: staff.supervisorId || 'usr-spv-renlap',
           date: overtimeDate,
@@ -733,6 +852,39 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               {hasClockedOut ? `${todayAttendance?.clockOutTime} WITA` : 'Kunci Jam Kerja'}
             </span>
           </button>
+        </div>
+
+        {/* Quick Action: Permohonan Izin / Sakit / Cuti */}
+        <div className="pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-teal-500/10 dark:bg-teal-950/30 border border-teal-200/70 dark:border-teal-800/50">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0 shadow-xs">
+                <HeartPulse className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="font-bold text-xs text-slate-900 dark:text-white block leading-tight">
+                  Berhalangan Hadir Hari Ini?
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Ajukan izin sakit (SKD) atau cuti tahunan resmi (Sisa: <strong className="text-teal-600 dark:text-teal-400 font-mono">{activeAnnualRemaining} Hari</strong>)
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setLeaveStartDate(getTodayDateStr());
+                setLeaveEndDate(getTodayDateStr());
+                setLeaveReason('');
+                setLeaveAttachmentUrl('');
+                setLeaveModalOpen(true);
+              }}
+              className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 text-white shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Ajukan Izin / Cuti</span>
+            </button>
+          </div>
         </div>
       </div>
     )}
@@ -1370,6 +1522,196 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         </div>
       )}
 
+        {/* ============================================================== */}
+        {/* PUSAT PERIZINAN & HAK CUTI STAF (SMART LEAVE PRO)              */}
+        {/* ============================================================== */}
+        <div className="p-5 glass-card space-y-4 border border-teal-200/60 dark:border-teal-900/40">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0 shadow-xs">
+                <HeartPulse className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-tight flex items-center gap-2">
+                  <span>Pusat Perizinan & Hak Cuti Staf</span>
+                  <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-300">
+                    {myLeaveRecords.length} Permohonan
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Izin sakit (SKD dokter), cuti tahunan, dan izin dinas resmi dengan sinkronisasi presensi otomatis
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setLeaveStartDate(getTodayDateStr());
+                setLeaveEndDate(getTodayDateStr());
+                setLeaveReason('');
+                setLeaveAttachmentUrl('');
+                setLeaveModalOpen(true);
+              }}
+              className="px-3.5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white transition-all flex items-center gap-1.5 shadow-md shadow-teal-500/20 cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Ajukan Izin / Cuti</span>
+            </button>
+          </div>
+
+          {/* Kuota Meter Banner */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-teal-500/5 dark:bg-teal-950/20 border border-teal-200/50 dark:border-teal-800/40 text-xs">
+            <div className="space-y-0.5">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-medium">Sisa Cuti Tahunan</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-base font-extrabold text-teal-700 dark:text-teal-300 font-mono">
+                  {activeAnnualRemaining}
+                </span>
+                <span className="text-[10px] text-slate-400">/ 12 Hari</span>
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-medium">Cuti Terpakai</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-base font-bold text-slate-700 dark:text-slate-300 font-mono">
+                  {leaveQuota?.annualUsed ?? 0}
+                </span>
+                <span className="text-[10px] text-slate-400">Hari</span>
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-medium">Izin Sakit (SKD)</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-base font-bold text-rose-600 dark:text-rose-400 font-mono">
+                  {leaveQuota?.sickUsed ?? 0}
+                </span>
+                <span className="text-[10px] text-slate-400">Hari</span>
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-medium">Izin Penting/Lain</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-base font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                  {leaveQuota?.specialUsed ?? 0}
+                </span>
+                <span className="text-[10px] text-slate-400">Hari</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Daftar Tiket Izin / Cuti */}
+          {myLeaveRecords.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-800 text-center space-y-2">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+                <CalendarRange className="w-4 h-4" />
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                Belum Ada Pengajuan Izin / Cuti
+              </p>
+              <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed">
+                Jika Anda berhalangan hadir karena sakit atau perlu mengajukan cuti tahunan, klik tombol <strong>"Ajukan Izin / Cuti"</strong> di atas.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {myLeaveRecords.map((l) => {
+                const isPending = l.status === 'PENDING';
+                const isApproved = l.status === 'APPROVED';
+                const isRejected = l.status === 'REJECTED';
+
+                const leaveTypeLabel: Record<string, string> = {
+                  SAKIT: 'Izin Sakit',
+                  CUTI_TAHUNAN: 'Cuti Tahunan',
+                  CUTI_ALASAN_PENTING: 'Cuti Alasan Penting',
+                  CUTI_BERSALIN: 'Cuti Bersalin / Melahirkan',
+                  IZIN_KEPERLUAN: 'Izin Keperluan Mendesak',
+                };
+
+                const leaveTypeColor: Record<string, string> = {
+                  SAKIT: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-900',
+                  CUTI_TAHUNAN: 'bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-200 dark:border-teal-900',
+                  CUTI_ALASAN_PENTING: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-900',
+                  CUTI_BERSALIN: 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200 dark:border-purple-900',
+                  IZIN_KEPERLUAN: 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-900',
+                };
+
+                return (
+                  <div
+                    key={l.id}
+                    className="p-4 rounded-2xl bg-white dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 space-y-3 shadow-xs"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-700/60">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${leaveTypeColor[l.leaveType] || 'bg-slate-100 text-slate-700'}`}>
+                          {leaveTypeLabel[l.leaveType] || l.leaveType}
+                        </span>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white font-mono">
+                          {l.startDate} {l.startDate !== l.endDate ? `s/d ${l.endDate}` : ''}
+                        </span>
+                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                          ({l.totalDays} Hari Kerja)
+                        </span>
+                      </div>
+
+                      <div>
+                        {isPending && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            <Clock className="w-3 h-3" />
+                            <span>Menunggu Persetujuan Atasan</span>
+                          </span>
+                        )}
+                        {isApproved && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            <CheckCircle className="w-3 h-3" />
+                            <span>Disetujui · Presensi Terisi Otomatis</span>
+                          </span>
+                        )}
+                        {isRejected && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                            <AlertCircle className="w-3 h-3" />
+                            <span>Permohonan Ditolak</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-xs space-y-1">
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Alasan / Uraian Permohonan:</span>
+                      <p className="text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
+                        {l.reason}
+                      </p>
+                    </div>
+
+                    {Boolean(l.attachmentUrl) && (
+                      <div className="pt-2 flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs">
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                          <Paperclip className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                          <span className="text-[11px] font-medium">Lampiran Dokumen / Surat Dokter</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLeavePreviewDoc(l.attachmentUrl || null)}
+                          className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-teal-600 flex items-center gap-1 cursor-pointer"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Lihat Berkas</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {Boolean(l.supervisorNotes) && (
+                      <div className="text-xs p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 text-amber-900 dark:text-amber-200 leading-relaxed">
+                        <span className="font-bold">Arahan Atasan ({l.verifiedBy || l.supervisorName || 'Supervisor'}):</span> {l.supervisorNotes}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
       {/* Modals */}
       <CameraCaptureModal
         isOpen={cameraModalOpen}
@@ -1607,6 +1949,260 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           actionType={activeOvertimeAction?.type === 'start' ? 'overtime-start' : 'overtime-finish'}
         />
       )}
+
+      {/* Modal 4: Formulir Pengajuan Izin & Cuti Terpadu */}
+      {leaveModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold">
+                  <HeartPulse className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Formulir Permohonan Izin & Cuti
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Sisa Cuti Tahunan Anda: <strong className="text-teal-600 dark:text-teal-400">{activeAnnualRemaining} Hari</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLeaveModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateLeaveRequest} className="p-5 overflow-y-auto space-y-4 text-xs">
+              {/* Pilihan Jenis Izin */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                  Jenis Izin / Cuti:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    { id: 'SAKIT', label: 'Izin Sakit', desc: 'Disertai Surat Keterangan Dokter (SKD)' },
+                    { id: 'CUTI_TAHUNAN', label: 'Cuti Tahunan', desc: `Mengurangi kuota tahunan (Sisa: ${activeAnnualRemaining} hr)` },
+                    { id: 'CUTI_ALASAN_PENTING', label: 'Cuti Alasan Penting', desc: 'Keluarga sakit/duka/pernikahan/darurat' },
+                    { id: 'CUTI_BERSALIN', label: 'Cuti Bersalin', desc: 'Melahirkan / Istri Melahirkan' },
+                    { id: 'IZIN_KEPERLUAN', label: 'Izin Keperluan Mendesak', desc: 'Urusan pribadi mendesak' },
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setLeaveType(t.id as LeaveType)}
+                      className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                        leaveType === t.id
+                          ? 'bg-teal-50/80 dark:bg-teal-950/40 border-teal-500 text-teal-950 dark:text-teal-200 ring-2 ring-teal-500/20 shadow-xs'
+                          : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="font-bold text-xs">{t.label}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{t.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Rentang Tanggal */}
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Tanggal Mulai:
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={leaveStartDate}
+                    onChange={(e) => {
+                      setLeaveStartDate(e.target.value);
+                      if (e.target.value > leaveEndDate) {
+                        setLeaveEndDate(e.target.value);
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Tanggal Selesai:
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    min={leaveStartDate}
+                    value={leaveEndDate}
+                    onChange={(e) => setLeaveEndDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div className="col-span-2 pt-1 flex items-center justify-between text-[11px] border-t border-slate-200/60 dark:border-slate-700/60">
+                  <span className="text-slate-500">Estimasi Durasi Sah (Senin–Sabtu):</span>
+                  <span className="font-mono font-bold text-teal-700 dark:text-teal-300">
+                    {calculatedLeaveDays} Hari Kerja
+                  </span>
+                </div>
+              </div>
+
+              {/* Alasan Permohonan */}
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Alasan / Keterangan Permohonan:
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Jelaskan kondisi sakit (gejala/diagnosa faskes), keperluan cuti dinas, atau kepentingan darurat keluarga..."
+                  value={leaveReason}
+                  onChange={(e) => setLeaveReason(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white leading-relaxed placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Hybrid Lampiran: Kamera WebRTC ATAU Upload Berkas */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                    Lampiran Surat Dokter (SKD) / Bukti:
+                  </label>
+                  {leaveType === 'SAKIT' && (
+                    <span className="text-[10px] text-rose-500 font-semibold">*Disarankan untuk izin sakit</span>
+                  )}
+                </div>
+
+                {leaveAttachmentUrl ? (
+                  <div className="relative p-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-teal-300 dark:border-teal-700 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 truncate">
+                      {leaveAttachmentUrl.startsWith('data:image') || leaveAttachmentUrl.startsWith('/uploads/') ? (
+                        <img
+                          src={leaveAttachmentUrl}
+                          alt="Lampiran"
+                          className="w-12 h-12 object-cover rounded-xl border border-slate-200 dark:border-slate-700"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-teal-100 dark:bg-teal-900 text-teal-600 dark:text-teal-300 flex items-center justify-center font-bold">
+                          <FileText className="w-6 h-6" />
+                        </div>
+                      )}
+                      <div className="truncate">
+                        <span className="text-xs font-bold text-teal-900 dark:text-teal-200 block truncate">
+                          Dokumen Telah Terlampir
+                        </span>
+                        <span className="text-[10px] text-slate-400">Siap dikirim ke atasan penilai</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setLeaveAttachmentUrl('')}
+                      className="px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 dark:bg-rose-950/60 rounded-lg border border-rose-200 dark:border-rose-900 cursor-pointer"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Opsi 1: Kamera WebRTC */}
+                    <button
+                      type="button"
+                      onClick={() => setLeaveCameraOpen(true)}
+                      className="p-3 rounded-xl border border-dashed border-teal-300 dark:border-teal-700 bg-teal-50/40 dark:bg-teal-950/20 text-teal-800 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/40 transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer text-center"
+                    >
+                      <Camera className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                      <span className="font-bold text-[11px]">Foto Fisik Surat</span>
+                      <span className="text-[9px] text-slate-400">Kamera WebRTC Live</span>
+                    </button>
+
+                    {/* Opsi 2: Upload File / PDF */}
+                    <label className="p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer text-center">
+                      <UploadCloud className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                      <span className="font-bold text-[11px]">Unggah Berkas</span>
+                      <span className="text-[9px] text-slate-400">Foto / PDF maks 5MB</span>
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        onChange={handleLeaveFileUpload}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setLeaveModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingLeave}
+                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold rounded-xl shadow-md shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{isSubmittingLeave ? 'Mengirim...' : 'Kirim Permohonan Izin'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 5: Preview Dokumen / Surat Izin */}
+      {Boolean(leavePreviewDoc) && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white">
+                  Pratinjau Dokumen / Bukti Surat
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLeavePreviewDoc(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto flex-1 flex items-center justify-center bg-slate-950/10 dark:bg-black/40">
+              {leavePreviewDoc?.startsWith('data:application/pdf') ? (
+                <iframe
+                  src={leavePreviewDoc}
+                  title="Dokumen PDF"
+                  className="w-full h-[65vh] rounded-xl border border-slate-200 dark:border-slate-700"
+                />
+              ) : (
+                <img
+                  src={leavePreviewDoc || ''}
+                  alt="Pratinjau Berkas"
+                  className="max-h-[70vh] w-auto object-contain rounded-xl shadow-md border border-slate-200 dark:border-slate-800"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 6: Kamera Watermark Foto Surat Izin */}
+      <WatermarkCameraModal
+        isOpen={leaveCameraOpen}
+        onClose={() => setLeaveCameraOpen(false)}
+        onCaptured={(photoUrl) => {
+          setLeaveAttachmentUrl(photoUrl);
+          setLeaveCameraOpen(false);
+        }}
+        currentStaff={staff}
+        taskTitle="Lampiran Surat Dokter / Bukti Izin"
+      />
     </div>
   );
 };

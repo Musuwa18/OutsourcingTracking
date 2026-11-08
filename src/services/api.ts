@@ -3,7 +3,7 @@
  * Menghubungkan frontend React ke backend Express REST API di Port 3010
  * Dinas Pendidikan Kabupaten Hulu Sungai Tengah
  */
-import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings, OvertimeRecord } from '../types';
+import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings, OvertimeRecord, LeaveRequest, LeaveQuota } from '../types';
 
 const API_BASE = '/api';
 
@@ -752,4 +752,86 @@ export async function apiFinishOvertime(id: string, payload: {
     throw new Error(json.error || 'Gagal mengunci jam selesai lembur.');
   }
   return json.overtime;
+}
+
+// 13. Modul Manajemen Izin & Cuti Terpadu (Smart Leave Pro)
+export async function apiSubmitLeaveRequest(data: {
+  staffId: string;
+  staffName?: string;
+  staffNip?: string;
+  divisionId?: string;
+  divisionName?: string;
+  supervisorId?: string;
+  supervisorName?: string;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  reason: string;
+  attachmentUrl?: string;
+}): Promise<LeaveRequest> {
+  const res = await fetch(`${API_BASE}/leave/request`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || 'Gagal mengajukan izin/cuti.');
+  }
+  return json.leave;
+}
+
+export async function apiFetchLeaves(filters: {
+  staffId?: string;
+  supervisorId?: string;
+  date?: string;
+  status?: string;
+  leaveType?: string;
+} = {}): Promise<LeaveRequest[]> {
+  try {
+    const params = new URLSearchParams();
+    if (filters.staffId) params.append('staffId', filters.staffId);
+    if (filters.supervisorId) params.append('supervisorId', filters.supervisorId);
+    if (filters.date) params.append('date', filters.date);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.leaveType) params.append('leaveType', filters.leaveType);
+    const res = await fetch(`${API_BASE}/leave?${params.toString()}`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    return json.leaves || [];
+  } catch (err: unknown) {
+    console.warn('apiFetchLeaves warning:', err);
+    return [];
+  }
+}
+
+export async function apiApproveLeave(id: string, payload: {
+  approved: boolean;
+  supervisorNotes?: string;
+  verifiedBy?: string;
+}): Promise<LeaveRequest> {
+  const res = await fetch(`${API_BASE}/leave/${id}/approve`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || 'Gagal memproses persetujuan izin/cuti.');
+  }
+  return json.leave;
+}
+
+export async function apiFetchLeaveQuota(staffId: string, year?: number): Promise<LeaveQuota | null> {
+  try {
+    const url = year ? `${API_BASE}/leave/quota/${staffId}?year=${year}` : `${API_BASE}/leave/quota/${staffId}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.quota || null;
+  } catch (err: unknown) {
+    console.warn('apiFetchLeaveQuota warning:', err);
+    return null;
+  }
 }

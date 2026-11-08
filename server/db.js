@@ -213,6 +213,29 @@ if (isNodeSqlite && dbEngine) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS leave_requests (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL,
+      staff_name TEXT NOT NULL,
+      staff_nip TEXT,
+      division_id TEXT NOT NULL,
+      division_name TEXT,
+      supervisor_id TEXT NOT NULL,
+      supervisor_name TEXT,
+      leave_type TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      total_days INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      attachment_url TEXT,
+      status TEXT DEFAULT 'PENDING',
+      supervisor_notes TEXT,
+      approved_at TEXT,
+      verified_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Migrasi aman untuk kolom baru users jika database sudah ada sebelumnya
@@ -269,6 +292,12 @@ if (isNodeSqlite && dbEngine) {
   try {
     dbEngine.exec(`ALTER TABLE attendance ADD COLUMN clock_out_location_name TEXT;`);
   } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN notes TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN verified_by TEXT;`);
+  } catch (e) {}
 }
 
 // Fallback JSON in-memory store jika sqlite bawaan tidak aktif
@@ -278,7 +307,8 @@ let fallbackStore = {
   users: [],
   attendance: [],
   daily_reports: [],
-  evaluations: []
+  evaluations: [],
+  leave_requests: []
 };
 
 if (!isNodeSqlite && fs.existsSync(FALLBACK_FILE)) {
@@ -313,7 +343,7 @@ export function saveBase64Image(base64OrUrl, subfolder = 'attendance') {
     return base64OrUrl;
   }
 
-  const ext = matches[1].includes('png') ? 'png' : 'jpg';
+  const ext = matches[1].includes('pdf') ? 'pdf' : (matches[1].includes('png') ? 'png' : (matches[1].includes('webp') ? 'webp' : 'jpg'));
   const buffer = Buffer.from(matches[2], 'base64');
   const filename = `${subfolder}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
   const targetDir = path.join(UPLOADS_DIR, subfolder);
@@ -1823,15 +1853,17 @@ export function listAttendance(filters = {}) {
       autoClosed: Boolean(r.auto_closed),
       distanceMeters: r.distance_meters,
       locationCoords: {
-        latitude: r.latitude,
-        longitude: r.longitude,
-        accuracy: r.accuracy,
-        distanceMeters: r.distance_meters,
+        latitude: r.latitude ?? -2.5911226,
+        longitude: r.longitude ?? 115.3789452,
+        accuracy: r.accuracy ?? 10,
+        distanceMeters: r.distance_meters ?? 0,
         withinRadius: Boolean(r.is_geofence_valid),
         locationName: r.location_name || 'Lokasi Terdaftar',
         isFieldDuty: Boolean(r.is_field_duty),
         fieldDutyNotes: r.field_duty_notes || '',
       },
+      notes: r.notes || r.field_duty_notes || '',
+      verifiedBy: r.verified_by || '',
       deviceFingerprint: r.device_fingerprint,
       createdAt: r.created_at
     }));
@@ -2175,6 +2207,291 @@ export function finishOvertime(id, { clockOutTime, selfieUrl, coords, workSummar
     }
   }
   return getOvertimeById(id);
+}
+
+// ======================== MODUL IZIN & CUTI TERPADU ========================
+
+function mapLeaveRow(r) {
+  if (!r) return null;
+  return {
+    id: r.id,
+    staffId: r.staff_id,
+    staffName: r.staff_name,
+    staffNip: r.staff_nip || '',
+    divisionId: r.division_id,
+    divisionName: r.division_name || '',
+    supervisorId: r.supervisor_id,
+    supervisorName: r.supervisor_name || '',
+    leaveType: r.leave_type,
+    startDate: r.start_date,
+    endDate: r.end_date,
+    totalDays: Number(r.total_days) || 1,
+    reason: r.reason,
+    attachmentUrl: r.attachment_url || '',
+    status: r.status,
+    supervisorNotes: r.supervisor_notes || '',
+    approvedAt: r.approved_at || null,
+    verifiedBy: r.verified_by || '',
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
+  };
+}
+
+export function createLeaveRequest(data) {
+  const now = new Date().toISOString();
+  const id = data.id || `lve-${Date.now()}`;
+  const staff = getUserById(data.staffId);
+  const staffName = data.staffName || staff?.name || 'Tenaga Outsourcing';
+  const staffNip = data.staffNip || staff?.nip || '';
+  const divisionId = data.divisionId || staff?.divisionId || 'div-renlap';
+  const divisionName = data.divisionName || staff?.divisionName || '';
+  const supervisorId = data.supervisorId || staff?.supervisorId || 'usr-spv-renlap';
+  const supervisor = getUserById(supervisorId);
+  const supervisorName = data.supervisorName || supervisor?.name || 'Atasan Penilai';
+  const leaveType = data.leaveType || 'IZIN_KEPERLUAN';
+  const startDate = data.startDate || now.slice(0, 10);
+  const endDate = data.endDate || startDate;
+  const totalDays = Number(data.totalDays) || 1;
+  const reason = data.reason || 'Izin dinas/pribadi';
+  const status = 'PENDING';
+  const attachmentUrl = data.attachmentUrl ? saveBase64Image(data.attachmentUrl, 'documents') : '';
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      INSERT INTO leave_requests (
+        id, staff_id, staff_name, staff_nip, division_id, division_name,
+        supervisor_id, supervisor_name, leave_type, start_date, end_date,
+        total_days, reason, attachment_url, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, data.staffId, staffName, staffNip, divisionId, divisionName,
+      supervisorId, supervisorName, leaveType, startDate, endDate,
+      totalDays, reason, attachmentUrl, status, now, now
+    );
+  } else {
+    if (!fallbackStore.leave_requests) fallbackStore.leave_requests = [];
+    fallbackStore.leave_requests.push({
+      id, staffId: data.staffId, staffName, staffNip, divisionId, divisionName,
+      supervisorId, supervisorName, leaveType, startDate, endDate,
+      totalDays, reason, attachmentUrl, status, createdAt: now, updatedAt: now
+    });
+    persistFallback();
+  }
+
+  return getLeaveById(id);
+}
+
+export function getLeaveById(id) {
+  if (isNodeSqlite && dbEngine) {
+    const row = dbEngine.prepare('SELECT * FROM leave_requests WHERE id = ?').get(id);
+    return row ? mapLeaveRow(row) : null;
+  } else {
+    const list = fallbackStore.leave_requests || [];
+    const r = list.find((item) => item.id === id);
+    return r ? { ...r } : null;
+  }
+}
+
+export function listLeaveRequests(filters = {}) {
+  const { staffId, supervisorId, date, status, leaveType } = filters;
+  if (isNodeSqlite && dbEngine) {
+    let query = 'SELECT * FROM leave_requests WHERE 1=1';
+    const params = [];
+    if (staffId) {
+      query += ' AND staff_id = ?';
+      params.push(staffId);
+    }
+    if (supervisorId) {
+      query += ' AND supervisor_id = ?';
+      params.push(supervisorId);
+    }
+    if (date) {
+      query += ' AND ? BETWEEN start_date AND end_date';
+      params.push(date);
+    }
+    if (status) {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+    if (leaveType) {
+      query += ' AND leave_type = ?';
+      params.push(leaveType);
+    }
+    query += ' ORDER BY created_at DESC';
+    const rows = dbEngine.prepare(query).all(...params);
+    return rows.map((r) => mapLeaveRow(r));
+  } else {
+    return (fallbackStore.leave_requests || []).filter((r) => {
+      if (staffId && r.staffId !== staffId) return false;
+      if (supervisorId && r.supervisorId !== supervisorId) return false;
+      if (date && (date < r.startDate || date > r.endDate)) return false;
+      if (status && r.status !== status) return false;
+      if (leaveType && r.leaveType !== leaveType) return false;
+      return true;
+    });
+  }
+}
+
+function autoPopulateLeaveAttendance(leave) {
+  const now = new Date().toISOString();
+  const cur = new Date(leave.startDate);
+  const end = new Date(leave.endDate);
+  const statusStr = leave.leaveType === 'SAKIT' ? 'Sakit' : 'Izin';
+  const labelMap = {
+    'SAKIT': 'Izin Sakit (SKD Terverifikasi)',
+    'CUTI_TAHUNAN': 'Cuti Tahunan Sah',
+    'CUTI_ALASAN_PENTING': 'Cuti Alasan Penting',
+    'CUTI_BERSALIN': 'Cuti Melahirkan/Bersalin',
+    'IZIN_KEPERLUAN': 'Izin Keperluan Mendesak'
+  };
+  const noteText = `[${labelMap[leave.leaveType] || leave.leaveType}] ${leave.reason}`;
+
+  while (cur <= end) {
+    const dayOfWeek = cur.getDay(); // 0 is Sunday
+    const dateStr = cur.toISOString().slice(0, 10);
+    
+    // Lewatkan hari Minggu (hari libur umum)
+    if (dayOfWeek !== 0) {
+      if (isNodeSqlite && dbEngine) {
+        const existing = dbEngine.prepare('SELECT id, selfie_url FROM attendance WHERE staff_id = ? AND date = ?').get(leave.staffId, dateStr);
+        if (existing) {
+          dbEngine.prepare(`
+            UPDATE attendance
+            SET status = ?, notes = ?, verified_by = ?, selfie_url = COALESCE(selfie_url, ?)
+            WHERE id = ?
+          `).run(statusStr, noteText, leave.supervisorName || 'Atasan Langsung', leave.attachmentUrl || '', existing.id);
+        } else {
+          const attId = `att-lve-${leave.staffId}-${dateStr}`;
+          dbEngine.prepare(`
+            INSERT INTO attendance (
+              id, staff_id, staff_name, division_id, date, clock_in_time, clock_out_time,
+              status, selfie_url, latitude, longitude, accuracy, location_name,
+              is_geofence_valid, distance_meters, notes, verified_by, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            attId, leave.staffId, leave.staffName, leave.divisionId, dateStr,
+            '08:00:00', '16:30:00', statusStr, leave.attachmentUrl || '',
+            -2.5911226, 115.3789452, 10, 'Lokasi Tempat Tinggal / Faskes (Izin Kedinasan Sah)',
+            1, 0, noteText, leave.supervisorName || 'Atasan Langsung', now
+          );
+        }
+      } else {
+        if (!fallbackStore.attendance) fallbackStore.attendance = [];
+        const existingIdx = fallbackStore.attendance.findIndex((a) => a.staffId === leave.staffId && a.date === dateStr);
+        if (existingIdx >= 0) {
+          fallbackStore.attendance[existingIdx].status = statusStr;
+          fallbackStore.attendance[existingIdx].notes = noteText;
+          fallbackStore.attendance[existingIdx].verifiedBy = leave.supervisorName || 'Atasan Langsung';
+          if (!fallbackStore.attendance[existingIdx].selfieUrl && leave.attachmentUrl) {
+            fallbackStore.attendance[existingIdx].selfieUrl = leave.attachmentUrl;
+          }
+        } else {
+          fallbackStore.attendance.push({
+            id: `att-lve-${leave.staffId}-${dateStr}`,
+            staffId: leave.staffId,
+            staffName: leave.staffName,
+            divisionId: leave.divisionId,
+            date: dateStr,
+            clockInTime: '08:00:00',
+            clockOutTime: '16:30:00',
+            status: statusStr,
+            selfieUrl: leave.attachmentUrl || '',
+            locationCoords: {
+              latitude: -2.5911226,
+              longitude: 115.3789452,
+              accuracy: 10,
+              distanceMeters: 0,
+              withinRadius: true,
+              locationName: 'Lokasi Tempat Tinggal / Faskes (Izin Kedinasan Sah)',
+            },
+            notes: noteText,
+            verifiedBy: leave.supervisorName || 'Atasan Langsung',
+            createdAt: now
+          });
+        }
+        persistFallback();
+      }
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+}
+
+export function approveLeaveRequest(id, { approved, supervisorNotes, verifiedBy }) {
+  const now = new Date().toISOString();
+  const leave = getLeaveById(id);
+  if (!leave) throw new Error('Data permohonan izin tidak ditemukan.');
+
+  const newStatus = approved ? 'APPROVED' : 'REJECTED';
+  const notes = supervisorNotes || (approved ? 'Permohonan izin/cuti telah disetujui atasan.' : 'Permohonan izin belum dapat disetujui.');
+  const verifier = verifiedBy || leave.supervisorName || 'Supervisor Unit Kerja';
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      UPDATE leave_requests
+      SET status = ?, supervisor_notes = ?, approved_at = ?, verified_by = ?, updated_at = ?
+      WHERE id = ?
+    `).run(newStatus, notes, approved ? now : null, verifier, now, id);
+  } else {
+    const r = (fallbackStore.leave_requests || []).find((item) => item.id === id);
+    if (r) {
+      r.status = newStatus;
+      r.supervisorNotes = notes;
+      r.approvedAt = approved ? now : null;
+      r.verifiedBy = verifier;
+      r.updatedAt = now;
+      persistFallback();
+    }
+  }
+
+  // Auto-populate presensi jika disetujui
+  if (approved) {
+    autoPopulateLeaveAttendance(leave);
+  }
+
+  return getLeaveById(id);
+}
+
+export function getLeaveQuota(staffId, year = new Date().getFullYear()) {
+  const annualTotal = 12; // Standar 12 hari cuti tahunan
+  const yearStr = String(year);
+  let allLeaves = [];
+
+  if (isNodeSqlite && dbEngine) {
+    allLeaves = dbEngine.prepare(`
+      SELECT * FROM leave_requests
+      WHERE staff_id = ? AND status = 'APPROVED' AND (start_date LIKE ? OR end_date LIKE ?)
+    `).all(staffId, `${yearStr}%`, `${yearStr}%`);
+  } else {
+    allLeaves = (fallbackStore.leave_requests || []).filter(
+      (l) => l.staffId === staffId && l.status === 'APPROVED' && (l.startDate.startsWith(yearStr) || l.endDate.startsWith(yearStr))
+    );
+  }
+
+  let annualUsed = 0;
+  let sickUsed = 0;
+  let specialUsed = 0;
+
+  for (const l of allLeaves) {
+    const days = Number(l.total_days || l.totalDays) || 1;
+    const type = l.leave_type || l.leaveType;
+    if (type === 'CUTI_TAHUNAN') {
+      annualUsed += days;
+    } else if (type === 'SAKIT') {
+      sickUsed += days;
+    } else {
+      specialUsed += days;
+    }
+  }
+
+  return {
+    staffId,
+    year,
+    annualTotal,
+    annualUsed,
+    annualRemaining: Math.max(0, annualTotal - annualUsed),
+    sickUsed,
+    specialUsed
+  };
 }
 
 // DAILY REPORTS

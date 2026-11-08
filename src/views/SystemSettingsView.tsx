@@ -416,7 +416,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const [localPermissions, setLocalPermissions] = useState<Record<string, RolePermissions>>(rolePermissions);
 
   // Helper for supervisor name lookup
-  const getSupervisorName = (supId?: string) => {
+  const getSupervisorName = (supId?: string | null) => {
     if (!supId) return 'Belum Ditetapkan';
     const found = users.find((u) => u.id === supId || u.nip === supId);
     return found ? found.name : supId;

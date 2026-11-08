@@ -106,6 +106,8 @@ export interface AttendanceRecord {
     distanceMeters: number;
     withinRadius: boolean;
     locationName: string;
+    isFieldDuty?: boolean;
+    fieldDutyNotes?: string;
   };
   clockOutLocationCoords?: {
     latitude: number;
@@ -113,7 +115,7 @@ export interface AttendanceRecord {
     accuracy: number;
     locationName: string;
   } | null;
-  status: 'Hadir' | 'Terlambat' | 'Izin' | 'Alpha';
+  status: 'Hadir' | 'Terlambat' | 'Izin' | 'Sakit' | 'Alpha';
   isFieldDuty?: boolean;
   fieldDutyNotes?: string;
   autoClosed?: boolean;
@@ -236,7 +238,7 @@ export interface SystemAuditLog {
   action: string;
   detail: string;
   ipAddress: string;
-  category: 'Kehadiran' | 'Evaluasi' | 'Laporan' | 'Autentikasi' | 'Sistem' | 'Pengaturan';
+  category: 'Kehadiran' | 'Evaluasi' | 'Laporan' | 'Autentikasi' | 'Sistem' | 'Pengaturan' | 'Lembur' | 'Izin & Cuti';
 }
 
 export interface NotificationItem {
@@ -593,6 +595,48 @@ export interface OvertimeRecord {
   workSummary?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type LeaveType = 
+  | 'SAKIT'
+  | 'CUTI_TAHUNAN'
+  | 'CUTI_ALASAN_PENTING'
+  | 'CUTI_BERSALIN'
+  | 'IZIN_KEPERLUAN';
+
+export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+export interface LeaveRequest {
+  id: string;
+  staffId: string;
+  staffName: string;
+  staffNip?: string;
+  divisionId: string;
+  divisionName?: string;
+  supervisorId: string;
+  supervisorName?: string;
+  leaveType: LeaveType;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  totalDays: number;
+  reason: string;
+  attachmentUrl?: string;
+  status: LeaveStatus;
+  supervisorNotes?: string;
+  approvedAt?: string;
+  verifiedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeaveQuota {
+  staffId: string;
+  year: number;
+  annualTotal: number;
+  annualUsed: number;
+  annualRemaining: number;
+  sickUsed: number;
+  specialUsed: number;
 }
 
 

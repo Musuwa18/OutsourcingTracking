@@ -20,6 +20,9 @@ import {
   Building2,
   MapPin,
   Activity,
+  HeartPulse,
+  FileText,
+  Paperclip,
 } from 'lucide-react';
 import {
   StaffProfile,
@@ -29,6 +32,7 @@ import {
   AttendanceRecord,
   AuthUser,
   OvertimeRecord,
+  LeaveRequest,
 } from '../types';
 import { getTodayDateStr } from '../utils/date';
 import { StarRating } from '../components/StarRating';
@@ -48,6 +52,8 @@ interface SupervisorEvaluationViewProps {
   onSubmitEvaluation: (evalData: Omit<WeeklyEvaluation, 'id' | 'submittedAt'>) => void;
   overtimeRecords?: OvertimeRecord[];
   onApproveOvertime?: (id: string, payload: { approved: boolean; supervisorNotes?: string }) => void;
+  leaveRecords?: LeaveRequest[];
+  onApproveLeave?: (id: string, payload: { approved: boolean; supervisorNotes?: string; verifiedBy?: string }) => void;
 }
 
 export const DEFAULT_ONE_STAR_RATINGS: CompetencyRatings = {
@@ -79,9 +85,14 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
   onSubmitEvaluation,
   overtimeRecords = [],
   onApproveOvertime,
+  leaveRecords = [],
+  onApproveLeave,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'eval-form' | 'report-feed' | 'overtime-feed'>('eval-form');
+  const [activeSubTab, setActiveSubTab] = useState<'eval-form' | 'report-feed' | 'overtime-feed' | 'leave-feed'>('eval-form');
   const [overtimeNotesInputs, setOvertimeNotesInputs] = useState<Record<string, string>>({});
+  const [leaveNotesInputs, setLeaveNotesInputs] = useState<Record<string, string>>({});
+  const [leaveFilterStatus, setLeaveFilterStatus] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
+  const [inspectingLeaveDoc, setInspectingLeaveDoc] = useState<string | null>(null);
 
   // Inspection modal state for geofence alerts
   const [inspectedRecord, setInspectedRecord] = useState<AttendanceRecord | null>(null);
@@ -246,6 +257,46 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
     }
   };
 
+  // Filter leave requests for supervisor
+  const displayedLeaves = useMemo(() => {
+    return (leaveRecords || []).filter((l) => {
+      if (currentUser?.role === 'supervisor') {
+        const isMyStaff = staffList.some((s) => s.id === l.staffId);
+        const isMySpvId = l.supervisorId === currentUser.id || l.supervisorId === currentUser.nip;
+        if (!isMyStaff && !isMySpvId) return false;
+      }
+      if (leaveFilterStatus !== 'ALL' && l.status !== leaveFilterStatus) {
+        return false;
+      }
+      return true;
+    });
+  }, [leaveRecords, staffList, currentUser, leaveFilterStatus]);
+
+  const pendingLeaveCount = useMemo(() => {
+    return (leaveRecords || []).filter((l) => {
+      if (currentUser?.role === 'supervisor') {
+        const isMyStaff = staffList.some((s) => s.id === l.staffId);
+        const isMySpvId = l.supervisorId === currentUser.id || l.supervisorId === currentUser.nip;
+        if (!isMyStaff && !isMySpvId) return false;
+      }
+      return l.status === 'PENDING';
+    }).length;
+  }, [leaveRecords, staffList, currentUser]);
+
+  const handleApproveLeaveAction = (id: string, approved: boolean) => {
+    const defaultNote = approved
+      ? 'Permohonan izin/cuti telah disetujui atasan.'
+      : 'Permohonan izin belum dapat disetujui.';
+    const notes = leaveNotesInputs[id] || defaultNote;
+    if (onApproveLeave) {
+      onApproveLeave(id, {
+        approved,
+        supervisorNotes: notes,
+        verifiedBy: currentUser?.name || 'Atasan Penilai',
+      });
+    }
+  };
+
   if (staffList.length === 0) {
     return (
       <div className="space-y-6">
@@ -351,6 +402,23 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
             {pendingOvertimeCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500 text-white">
                 {pendingOvertimeCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('leave-feed')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 font-medium ${
+              activeSubTab === 'leave-feed'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <HeartPulse className="w-3.5 h-3.5 text-teal-500" />
+            <span>Verifikasi Izin & Cuti</span>
+            {pendingLeaveCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-rose-500 text-white">
+                {pendingLeaveCount}
               </span>
             )}
           </button>
@@ -1185,6 +1253,200 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
             )}
           </div>
         </div>
+      ) : activeSubTab === 'leave-feed' ? (
+        /* ================= LEAVE REQUESTS VERIFICATION FEED ================= */
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div>
+              <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                Verifikasi Permohonan Izin & Cuti Staf Binaan
+              </h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Persetujuan izin sakit (SKD) dan cuti otomatis mengunci status presensi harian agar staf tidak terkena Alpha
+              </p>
+            </div>
+
+            {/* Status Filter Pills */}
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80">
+              {([
+                { id: 'ALL', label: 'Semua' },
+                { id: 'PENDING', label: `Menunggu (${pendingLeaveCount})` },
+                { id: 'APPROVED', label: 'Disetujui' },
+                { id: 'REJECTED', label: 'Ditolak' },
+              ] as const).map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setLeaveFilterStatus(f.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                    leaveFilterStatus === f.id
+                      ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-teal-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Daftar Tiket Izin */}
+          <div className="space-y-3">
+            {displayedLeaves.length === 0 ? (
+              <div className="p-10 text-center glass-card rounded-2xl space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto">
+                  <HeartPulse className="w-5 h-5" />
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                  Tidak Ada Permohonan Izin / Cuti
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Seluruh pengajuan izin sakit dan cuti tahunan staf telah diproses.
+                </p>
+              </div>
+            ) : (
+              displayedLeaves.map((l) => {
+                const isPending = l.status === 'PENDING';
+                const isApproved = l.status === 'APPROVED';
+                const isRejected = l.status === 'REJECTED';
+
+                const leaveTypeLabel: Record<string, string> = {
+                  SAKIT: 'Izin Sakit',
+                  CUTI_TAHUNAN: 'Cuti Tahunan',
+                  CUTI_ALASAN_PENTING: 'Cuti Alasan Penting',
+                  CUTI_BERSALIN: 'Cuti Bersalin',
+                  IZIN_KEPERLUAN: 'Izin Keperluan Mendesak',
+                };
+
+                const leaveTypeColor: Record<string, string> = {
+                  SAKIT: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-900',
+                  CUTI_TAHUNAN: 'bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-200 dark:border-teal-900',
+                  CUTI_ALASAN_PENTING: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-900',
+                  CUTI_BERSALIN: 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200 dark:border-purple-900',
+                  IZIN_KEPERLUAN: 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-900',
+                };
+
+                return (
+                  <div
+                    key={l.id}
+                    className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-3.5 shadow-xs"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-700/60 text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 flex items-center justify-center font-bold text-xs">
+                          {l.staffName?.slice(0, 2).toUpperCase() || 'ST'}
+                        </div>
+                        <div>
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {l.staffName}
+                          </span>
+                          <span className="text-slate-400 ml-1.5 font-mono text-[11px]">
+                            ({l.staffNip || 'NIP -'} · {l.divisionName || l.divisionId})
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${leaveTypeColor[l.leaveType] || 'bg-slate-100'}`}>
+                          {leaveTypeLabel[l.leaveType] || l.leaveType}
+                        </span>
+                        <span className="text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300">
+                          {l.startDate} {l.startDate !== l.endDate ? `s/d ${l.endDate}` : ''}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-semibold text-slate-600 dark:text-slate-300">
+                          {l.totalDays} Hari Kerja
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-xs space-y-1">
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Alasan / Uraian Permohonan:</span>
+                      <p className="text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
+                        {l.reason}
+                      </p>
+                    </div>
+
+                    {/* Lampiran Dokumen / Surat Dokter */}
+                    {Boolean(l.attachmentUrl) && (
+                      <div className="p-3 rounded-xl bg-teal-50/40 dark:bg-teal-950/20 border border-teal-200/60 dark:border-teal-800/40 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <Paperclip className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                          <span className="font-semibold text-teal-950 dark:text-teal-200 text-[11px]">
+                            Surat Keterangan Dokter (SKD) / Berkas Bukti Resmi
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setInspectingLeaveDoc(l.attachmentUrl || null)}
+                          className="px-3 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-teal-700 dark:text-teal-300 hover:bg-teal-50 flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Buka Berkas</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Aksi Persetujuan Atasan */}
+                    {isPending ? (
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 space-y-2">
+                        <input
+                          type="text"
+                          placeholder="Catatan / arahan atasan langsung (opsional)..."
+                          value={leaveNotesInputs[l.id] || ''}
+                          onChange={(e) =>
+                            setLeaveNotesInputs((prev) => ({ ...prev, [l.id]: e.target.value }))
+                          }
+                          className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400"
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveLeaveAction(l.id, false)}
+                            className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer font-medium"
+                          >
+                            Tolak Permohonan
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApproveLeaveAction(l.id, true)}
+                            className="px-3.5 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg transition-all cursor-pointer flex items-center gap-1.5 font-semibold shadow-xs"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Setujui (Auto-Sinkron Presensi)</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          {isApproved ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Disetujui · Presensi Diperbarui</span>
+                            </span>
+                          ) : isRejected ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300">
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>Ditolak Atasan</span>
+                            </span>
+                          ) : null}
+                          {l.supervisorNotes && (
+                            <span className="text-[11px] text-slate-500 italic">
+                              "{l.supervisorNotes}"
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400">
+                          Diverifikasi oleh: <strong>{l.verifiedBy || l.supervisorName || 'Atasan'}</strong>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
       ) : null}
 
       {/* Geofence Breach Inspection Modal */}
@@ -1242,6 +1504,44 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
               >
                 Tutup
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Preview Berkas / Surat Dokter (Supervisor View) */}
+      {Boolean(inspectingLeaveDoc) && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white">
+                  Verifikasi Surat Keterangan Dokter (SKD) / Bukti Resmi
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectingLeaveDoc(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto flex-1 flex items-center justify-center bg-slate-950/10 dark:bg-black/40">
+              {inspectingLeaveDoc?.startsWith('data:application/pdf') ? (
+                <iframe
+                  src={inspectingLeaveDoc}
+                  title="Dokumen PDF"
+                  className="w-full h-[70vh] rounded-xl border border-slate-200 dark:border-slate-700"
+                />
+              ) : (
+                <img
+                  src={inspectingLeaveDoc || ''}
+                  alt="Surat Dokter / Bukti"
+                  className="max-h-[75vh] w-auto object-contain rounded-xl shadow-md border border-slate-200 dark:border-slate-800"
+                />
+              )}
             </div>
           </div>
         </div>

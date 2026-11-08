@@ -22,6 +22,7 @@ import {
   InstitutionSettings,
   DEFAULT_INSTITUTION_SETTINGS,
   OvertimeRecord,
+  LeaveRequest,
 } from '../types';
 interface PrintReportModalProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ interface PrintReportModalProps {
   currentUser?: AuthUser | null;
   institutionSettings?: InstitutionSettings;
   overtimeRecords?: OvertimeRecord[];
+  leaveRecords?: LeaveRequest[];
 }
 
 export const PrintReportModal: React.FC<PrintReportModalProps> = ({
@@ -51,10 +53,11 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   currentUser,
   institutionSettings,
   overtimeRecords = [],
+  leaveRecords = [],
 }) => {
   if (!isOpen) return null;
 
-  const [printMode, setPrintMode] = useState<'rekap-divisi' | 'rapor-staf' | 'sptl-lembur'>('rekap-divisi');
+  const [printMode, setPrintMode] = useState<'rekap-divisi' | 'rapor-staf' | 'sptl-lembur' | 'surat-izin'>('rekap-divisi');
   const [selectedStaffId, setSelectedStaffId] = useState<string>(staffList[0]?.id || '');
 
   const handlePrint = () => {
@@ -167,15 +170,27 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
               >
                 SPTL Lembur
               </button>
+              <button
+                type="button"
+                onClick={() => setPrintMode('surat-izin')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  printMode === 'surat-izin'
+                    ? 'bg-white dark:bg-slate-900 text-teal-700 dark:text-cyan-400 font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                Surat Izin / Cuti
+              </button>
             </div>
 
-            {/* Selector Staf jika mode Rapor Individu */}
-            {printMode === 'rapor-staf' && (
+            {/* Selector Staf jika mode Rapor Individu atau Surat Izin */}
+            {(printMode === 'rapor-staf' || printMode === 'surat-izin') && (
               <select
                 value={selectedStaffId}
                 onChange={(e) => setSelectedStaffId(e.target.value)}
                 className="px-2.5 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
               >
+                {printMode === 'surat-izin' && <option value="ALL">Semua Personel</option>}
                 {staffList.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.division.split(' ')[0]})
@@ -579,6 +594,116 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                               <td className="py-2 px-2.5 text-center">
                                 <span className="font-semibold text-emerald-800 font-mono text-[10px] px-2 py-0.5 rounded bg-emerald-50">
                                   {ot.status === 'COMPLETED' ? 'Sah Kantor' : 'Disetujui'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ================= MODE 4: SURAT KETERANGAN & REKAPITULASI IZIN / CUTI ================= */}
+          {printMode === 'surat-izin' && (
+            <div className="space-y-6">
+              <div className="text-center space-y-1 pt-2">
+                <h4 className="text-sm font-extrabold uppercase underline text-slate-950">
+                  SURAT KETERANGAN & REKAPITULASI IZIN / CUTI TENAGA ALIH DAYA
+                </h4>
+                <p className="text-xs text-slate-600 font-mono">
+                  Nomor: {inst.nomorSuratPrefix || '800.1 / OTP-DISDIK'} / CUTI-IZIN / {new Date().getFullYear()} · Periode: November {new Date().getFullYear()}
+                </p>
+              </div>
+
+              {/* Dasar Ketentuan */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs leading-relaxed text-slate-700 space-y-1">
+                <strong className="text-slate-900 block">Keterangan Kedinasan:</strong>
+                <p>
+                  Berdasarkan permohonan yang diajukan oleh tenaga alih daya (outsourcing) di lingkungan {inst.namaSkpd} ({inst.namaPemda}), serta verifikasi dokumen medis/kedinasan yang sah, dengan ini diterbitkan rekapitulasi surat izin dan hak cuti resmi sebagai dasar administrasi kepegawaian dan sinkronisasi presensi:
+                </p>
+              </div>
+
+              {/* Tabel Pelaksanaan Izin / Cuti */}
+              <div className="space-y-2">
+                <h5 className="text-xs font-bold text-slate-900 uppercase">
+                  Daftar Realisasi Izin Sakit (SKD) & Cuti Sah Terverifikasi Atasan
+                </h5>
+                <table className="w-full text-left text-xs border border-slate-300 border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+                      <th className="py-2 px-2.5 border-r border-slate-300 w-8 text-center">No</th>
+                      <th className="py-2 px-3 border-r border-slate-300">Nama Personel / NIP</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300 text-center">Jenis Izin</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300 text-center">Rentang Tanggal</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300 text-center">Durasi</th>
+                      <th className="py-2 px-3 border-r border-slate-300">Uraian Alasan / Keterangan</th>
+                      <th className="py-2 px-2.5 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {(leaveRecords || []).filter((l) => {
+                      if (selectedStaffId && selectedStaffId !== 'ALL' && l.staffId !== selectedStaffId) {
+                        return false;
+                      }
+                      return l.status === 'APPROVED' || l.status === 'PENDING';
+                    }).length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-400 italic">
+                          Belum ada permohonan izin/cuti yang tercatat untuk personel atau periode yang dipilih.
+                        </td>
+                      </tr>
+                    ) : (
+                      (leaveRecords || [])
+                        .filter((l) => {
+                          if (selectedStaffId && selectedStaffId !== 'ALL' && l.staffId !== selectedStaffId) {
+                            return false;
+                          }
+                          return l.status === 'APPROVED' || l.status === 'PENDING';
+                        })
+                        .map((l, idx) => {
+                          const typeLabel: Record<string, string> = {
+                            SAKIT: 'Izin Sakit (SKD)',
+                            CUTI_TAHUNAN: 'Cuti Tahunan',
+                            CUTI_ALASAN_PENTING: 'Cuti Alasan Penting',
+                            CUTI_BERSALIN: 'Cuti Bersalin',
+                            IZIN_KEPERLUAN: 'Izin Keperluan Mendesak',
+                          };
+                          return (
+                            <tr key={l.id} className="hover:bg-slate-50/60">
+                              <td className="py-2 px-2.5 border-r border-slate-300 text-center font-mono">
+                                {idx + 1}
+                              </td>
+                              <td className="py-2 px-3 border-r border-slate-300 font-semibold text-slate-900">
+                                <div>{l.staffName}</div>
+                                <div className="text-[10px] text-slate-400 font-mono font-normal">
+                                  {l.staffNip || 'ID Kontrak'} · {l.divisionName || l.divisionId}
+                                </div>
+                              </td>
+                              <td className="py-2 px-2.5 border-r border-slate-300 text-center font-semibold text-slate-800">
+                                {typeLabel[l.leaveType] || l.leaveType}
+                              </td>
+                              <td className="py-2 px-2.5 border-r border-slate-300 text-center font-mono text-[11px]">
+                                {l.startDate} {l.startDate !== l.endDate ? `s/d ${l.endDate}` : ''}
+                              </td>
+                              <td className="py-2 px-2.5 border-r border-slate-300 text-center font-bold text-slate-900 font-mono">
+                                {l.totalDays} Hari
+                              </td>
+                              <td className="py-2 px-3 border-r border-slate-300 text-slate-700 leading-snug">
+                                <div>{l.reason}</div>
+                                {l.supervisorNotes && (
+                                  <div className="text-[10px] text-teal-700 italic mt-0.5">
+                                    Catatan: {l.supervisorNotes}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-2 px-2.5 text-center">
+                                <span className={`font-semibold font-mono text-[10px] px-2 py-0.5 rounded ${
+                                  l.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
+                                }`}>
+                                  {l.status === 'APPROVED' ? 'Disetujui Sah' : 'Menunggu'}
                                 </span>
                               </td>
                             </tr>

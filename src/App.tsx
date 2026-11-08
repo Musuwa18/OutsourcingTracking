@@ -22,6 +22,10 @@ import {
   EnterpriseSecurityConfig,
   AttendanceGlobalSettings,
   DEFAULT_ATTENDANCE_SETTINGS,
+  OvertimeRecord,
+  LeaveRequest,
+  LeaveQuota,
+  LeaveType,
 } from './types';
 import {
   MOCK_STAFF,
@@ -58,7 +62,7 @@ import { NotificationDrawer } from './components/NotificationDrawer';
 import { AiAnalyticsChatModal } from './components/AiAnalyticsChatModal';
 import { CustomLocationModal } from './components/CustomLocationModal';
 import { AuthView } from './views/AuthView';
-import { AuthUser, Division, Vendor, FieldCheckinRecord, HelpDeskConfig, DEFAULT_HELPDESK_CONFIG, InstitutionSettings, DEFAULT_INSTITUTION_SETTINGS, OvertimeRecord } from './types';
+import { AuthUser, Division, Vendor, FieldCheckinRecord, HelpDeskConfig, DEFAULT_HELPDESK_CONFIG, InstitutionSettings, DEFAULT_INSTITUTION_SETTINGS } from './types';
 import {
   apiFetchDivisions,
   apiFetchVendors,
@@ -84,6 +88,10 @@ import {
   apiApproveOvertime,
   apiStartOvertime,
   apiFinishOvertime,
+  apiSubmitLeaveRequest,
+  apiFetchLeaves,
+  apiApproveLeave,
+  apiFetchLeaveQuota,
 } from './services/api';
 import { getTodayDateStr, getCurrentWitaTimeStr, getYesterdayWitaDateStr, getWitaHour } from './utils/date';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
@@ -381,6 +389,14 @@ export default function App() {
         localStorage.setItem('ot_overtime_records', JSON.stringify(list));
       }
     });
+
+    // 8. Sinkronisasi Data Izin & Cuti dari SQLite
+    apiFetchLeaves().then((list) => {
+      if (list && list.length > 0) {
+        setLeaveRecords(list);
+        localStorage.setItem('ot_leave_records', JSON.stringify(list));
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -413,6 +429,13 @@ export default function App() {
         if (list && list.length > 0) {
           setOvertimeRecords(list);
           localStorage.setItem('ot_overtime_records', JSON.stringify(list));
+        }
+      });
+
+      apiFetchLeaves().then((list) => {
+        if (list && list.length > 0) {
+          setLeaveRecords(list);
+          localStorage.setItem('ot_leave_records', JSON.stringify(list));
         }
       });
     }
@@ -528,6 +551,16 @@ export default function App() {
     }
     return [];
   });
+  const [leaveRecords, setLeaveRecords] = useState<LeaveRequest[]>(() => {
+    const saved = localStorage.getItem('ot_leave_records');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [currentStaffLeaveQuota, setCurrentStaffLeaveQuota] = useState<LeaveQuota | null>(null);
   const [institutionSettings, setInstitutionSettings] = useState<InstitutionSettings>(() => {
     const saved = localStorage.getItem('ot_institution_settings');
     if (saved) {
@@ -816,7 +849,7 @@ export default function App() {
         if (u.id === staffId) {
           return {
             ...u,
-            supervisorId: assign ? supervisorId : null,
+            supervisorId: assign ? supervisorId : undefined,
             pendingSupervisorId: null,
             supervisorRequestStatus: assign ? ('APPROVED' as const) : ('NONE' as const),
           };
@@ -831,8 +864,8 @@ export default function App() {
     try {
       await apiUpdateStaffSupervisor(staffId, assign ? supervisorId : '');
       const spvName =
-        targetSupervisor?.name ||
-        ('supervisorName' in (targetSupervisor || {})
+        (targetSupervisor && 'name' in targetSupervisor ? targetSupervisor.name : undefined) ||
+        (targetSupervisor && 'supervisorName' in targetSupervisor
           ? (targetSupervisor as SupervisorMapping).supervisorName
           : supervisorId);
       const actionText = assign
@@ -979,6 +1012,88 @@ export default function App() {
     }
   };
 
+  // Handle Submit Leave Request (Staff)
+  const handleSubmitLeaveRequest = async (data: {
+    staffId: string;
+    staffName?: string;
+    staffNip?: string;
+    divisionId?: string;
+    divisionName?: string;
+    supervisorId?: string;
+    supervisorName?: string;
+    leaveType: LeaveType;
+    startDate: string;
+    endDate: string;
+    totalDays: number;
+    reason: string;
+    attachmentUrl?: string;
+  }) => {
+    try {
+      const created = await apiSubmitLeaveRequest(data);
+      setLeaveRecords((prev) => [created, ...prev.filter((l) => l.id !== created.id)]);
+      localStorage.setItem('ot_leave_records', JSON.stringify([created, ...leaveRecords.filter((l) => l.id !== created.id)]));
+      showToast('Permohonan izin/cuti berhasil diajukan, menunggu persetujuan atasan.', 'success');
+      addAuditLog(
+        'Pengajuan Izin / Cuti',
+        `Staf (${data.staffName || data.staffId}) mengajukan ${data.leaveType} (${data.startDate} s/d ${data.endDate}) selama ${data.totalDays} hari: "${data.reason}".`,
+        'Izin & Cuti',
+        currentUser?.name || data.staffName,
+        currentUser?.roleTitle || 'Tenaga Outsourcing'
+      );
+      addNotification(
+        'Pengajuan Izin / Cuti Baru',
+        `${data.staffName || 'Staf'} mengajukan ${data.leaveType} (${data.startDate} s/d ${data.endDate}): ${data.reason}.`,
+        'attendance',
+        { staffId: data.staffId, userId: data.supervisorId }
+      );
+      apiFetchLeaveQuota(data.staffId).then((q) => {
+        if (q) setCurrentStaffLeaveQuota(q);
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal mengajukan izin/cuti.';
+      showToast(msg, 'warning');
+    }
+  };
+
+  // Handle Approve / Reject Leave Request (Supervisor / Admin)
+  const handleApproveLeave = async (id: string, payload: {
+    approved: boolean;
+    supervisorNotes?: string;
+    verifiedBy?: string;
+  }) => {
+    try {
+      const updated = await apiApproveLeave(id, payload);
+      setLeaveRecords((prev) => prev.map((l) => (l.id === id ? updated : l)));
+      localStorage.setItem('ot_leave_records', JSON.stringify(leaveRecords.map((l) => (l.id === id ? updated : l))));
+      showToast(
+        payload.approved
+          ? 'Permohonan izin/cuti disetujui. Rekaman presensi otomatis disinkronkan.'
+          : 'Permohonan izin/cuti telah ditolak.',
+        payload.approved ? 'success' : 'info'
+      );
+      const l = leaveRecords.find((item) => item.id === id);
+      addAuditLog(
+        payload.approved ? 'Persetujuan Izin / Cuti' : 'Penolakan Izin / Cuti',
+        `Atasan (${currentUser?.name || 'Supervisor'}) ${payload.approved ? 'menyetujui' : 'menolak'} ${l?.leaveType || 'izin'} staf ${l?.staffName}: "${l?.reason}". Catatan: "${payload.supervisorNotes || '-'}"`,
+        'Izin & Cuti'
+      );
+      apiFetchAttendance({ todayDateStr: getTodayDateStr() }).then((attList) => {
+        if (attList && attList.length > 0) {
+          setAttendanceRecords(attList);
+          localStorage.setItem('ot_attendance_records', JSON.stringify(attList));
+        }
+      });
+      if (l?.staffId) {
+        apiFetchLeaveQuota(l.staffId).then((q) => {
+          if (q) setCurrentStaffLeaveQuota(q);
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal memproses permohonan izin/cuti.';
+      showToast(msg, 'warning');
+    }
+  };
+
   // Auto-sync Core Data to LocalStorage
   useEffect(() => {
     localStorage.setItem('ot_active_staff_id', activeStaffId);
@@ -1036,6 +1151,14 @@ export default function App() {
     if (staffList.length > 0 && staffList[0]) return staffList[0];
     return DEFAULT_FALLBACK_STAFF;
   }, [currentUser, staffList, activeStaffId]);
+
+  useEffect(() => {
+    if (currentStaff?.id) {
+      apiFetchLeaveQuota(currentStaff.id).then((q) => {
+        if (q) setCurrentStaffLeaveQuota(q);
+      });
+    }
+  }, [currentStaff?.id]);
 
   // Filtered staff list for Supervisor (strictly shows staff who selected them as supervisor or mapped by admin)
   const filteredStaffList = useMemo<StaffProfile[]>(() => {
@@ -1264,7 +1387,7 @@ export default function App() {
         'Presensi Tugas Lapangan Berhasil',
         `Clock In Tugas Lapangan tercatat pada pukul ${timeStr} WITA (${fieldDutyNotes || 'Dinas Luar'}).`,
         'attendance',
-        { staffId: targetStaffId, userId: currentUser.id }
+        { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
       );
     } else if (!locationData.withinRadius) {
       addAuditLog(
@@ -1290,7 +1413,7 @@ export default function App() {
         'Presensi Masuk Berhasil',
         `Clock In Anda pada pukul ${timeStr} WITA telah diverifikasi dan terkunci otomatis oleh server.`,
         'attendance',
-        { staffId: targetStaffId, userId: currentUser.id }
+        { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
       );
     }
   };
@@ -1330,7 +1453,7 @@ export default function App() {
       'Istirahat Dimulai',
       `Jam istirahat keluar tercatat pada ${timeStr} WITA. Selamat beristirahat.`,
       'attendance',
-      { staffId: targetStaffId, userId: currentUser.id }
+      { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
     );
   };
 
@@ -1369,7 +1492,7 @@ export default function App() {
       'Kembali Bertugas',
       `Jam selesai istirahat tercatat pada ${timeStr} WITA. Selamat melanjutkan tugas!`,
       'attendance',
-      { staffId: targetStaffId, userId: currentUser.id }
+      { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
     );
   };
 
@@ -1427,7 +1550,7 @@ export default function App() {
       'Presensi Pulang Terkunci',
       `Clock Out tercatat pada ${timeStr} WITA. Terima kasih atas dedikasi kerja Anda hari ini!`,
       'attendance',
-      { staffId: targetStaffId, userId: currentUser.id }
+      { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
     );
   };
 
@@ -1535,7 +1658,7 @@ export default function App() {
         'Laporan Kinerja Dikirim',
         `Laporan "${newReport.title}" telah diterima sistem dan menunggu konfirmasi Supervisor.`,
         'approval',
-        { staffId: currentStaff?.id, userId: currentUser.id }
+        { staffId: currentStaff?.id, userId: currentUser?.id || currentStaff?.id }
       );
 
       showToast('Laporan berhasil dikirim (Validasi AI: Foto Unik & Otentik).', 'success');
@@ -1814,6 +1937,9 @@ export default function App() {
                   onSubmitOvertimeRequest={handleSubmitOvertimeRequest}
                   onStartOvertime={handleStartOvertime}
                   onFinishOvertime={handleFinishOvertime}
+                  leaveRecords={leaveRecords}
+                  leaveQuota={currentStaffLeaveQuota}
+                  onSubmitLeaveRequest={handleSubmitLeaveRequest}
                 />
               )}
 
@@ -1838,6 +1964,9 @@ export default function App() {
                   onSubmitOvertimeRequest={handleSubmitOvertimeRequest}
                   onStartOvertime={handleStartOvertime}
                   onFinishOvertime={handleFinishOvertime}
+                  leaveRecords={leaveRecords}
+                  leaveQuota={currentStaffLeaveQuota}
+                  onSubmitLeaveRequest={handleSubmitLeaveRequest}
                 />
               )}
               {mobileTab === 'riwayat' && (
@@ -1927,6 +2056,8 @@ export default function App() {
                   onSubmitEvaluation={handleSubmitEvaluation}
                   overtimeRecords={overtimeRecords}
                   onApproveOvertime={handleApproveOvertime}
+                  leaveRecords={leaveRecords}
+                  onApproveLeave={handleApproveLeave}
                 />
               )}
 
@@ -1942,6 +2073,8 @@ export default function App() {
                   onSubmitEvaluation={handleSubmitEvaluation}
                   overtimeRecords={overtimeRecords}
                   onApproveOvertime={handleApproveOvertime}
+                  leaveRecords={leaveRecords}
+                  onApproveLeave={handleApproveLeave}
                 />
               )}
               {adminTab === 'analitik-bulanan' && (
@@ -2031,6 +2164,7 @@ export default function App() {
         currentUser={currentUser}
         institutionSettings={institutionSettings}
         overtimeRecords={overtimeRecords}
+        leaveRecords={leaveRecords}
       />
 
       {/* Google Drive Cloud Sync Modal */}
