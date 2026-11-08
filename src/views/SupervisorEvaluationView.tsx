@@ -54,6 +54,7 @@ interface SupervisorEvaluationViewProps {
   onApproveOvertime?: (id: string, payload: { approved: boolean; supervisorNotes?: string }) => void;
   leaveRecords?: LeaveRequest[];
   onApproveLeave?: (id: string, payload: { approved: boolean; supervisorNotes?: string; verifiedBy?: string }) => void;
+  initialSubTab?: 'eval-form' | 'report-feed' | 'overtime-feed' | 'leave-feed';
 }
 
 export const DEFAULT_ONE_STAR_RATINGS: CompetencyRatings = {
@@ -87,8 +88,17 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
   onApproveOvertime,
   leaveRecords = [],
   onApproveLeave,
+  initialSubTab,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'eval-form' | 'report-feed' | 'overtime-feed' | 'leave-feed'>('eval-form');
+  const [activeSubTab, setActiveSubTab] = useState<'eval-form' | 'report-feed' | 'overtime-feed' | 'leave-feed'>(
+    initialSubTab || 'eval-form'
+  );
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setActiveSubTab(initialSubTab);
+    }
+  }, [initialSubTab]);
   const [overtimeNotesInputs, setOvertimeNotesInputs] = useState<Record<string, string>>({});
   const [leaveNotesInputs, setLeaveNotesInputs] = useState<Record<string, string>>({});
   const [leaveFilterStatus, setLeaveFilterStatus] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');

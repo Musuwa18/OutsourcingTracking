@@ -454,6 +454,7 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState<string>('beranda');
   const [adminTab, setAdminTab] = useState<string>('monitoring-presensi');
   const [settingsSubTab, setSettingsSubTab] = useState<SettingsTab>('users');
+  const [supervisorSubTab, setSupervisorSubTab] = useState<'eval-form' | 'report-feed' | 'overtime-feed' | 'leave-feed'>('eval-form');
   const handleLoginSuccess = (user: AuthUser, token: string) => {
     setCurrentUser(user);
     setCurrentRole(user.role);
@@ -2041,6 +2042,11 @@ export default function App() {
                   fieldCheckins={fieldCheckins}
                   onOpenPrintModal={() => setPrintModalOpen(true)}
                   onOpenAiChat={() => setAiChatOpen(true)}
+                  leaveRecords={leaveRecords}
+                  onNavigateToLeaves={() => {
+                    setSupervisorSubTab('leave-feed');
+                    setAdminTab('persetujuan-laporan');
+                  }}
                 />
               )}
 
@@ -2058,6 +2064,7 @@ export default function App() {
                   onApproveOvertime={handleApproveOvertime}
                   leaveRecords={leaveRecords}
                   onApproveLeave={handleApproveLeave}
+                  initialSubTab={supervisorSubTab}
                 />
               )}
 

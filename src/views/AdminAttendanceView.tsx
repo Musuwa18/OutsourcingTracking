@@ -13,8 +13,9 @@ import {
   Calendar,
   Sparkles,
   Settings,
+  HeartPulse,
 } from 'lucide-react';
-import { AttendanceRecord, StaffProfile, DailyWorkReport, FieldCheckinRecord } from '../types';
+import { AttendanceRecord, StaffProfile, DailyWorkReport, FieldCheckinRecord, LeaveRequest } from '../types';
 import { exportAttendanceToCSV } from '../utils/export';
 import { getTodayDateStr } from '../utils/date';
 import { DetailRiwayatModal } from '../components/DetailRiwayatModal';
@@ -28,6 +29,8 @@ interface AdminAttendanceViewProps {
   onOpenPrintModal: () => void;
   onConfigureLocation?: (staff: StaffProfile) => void;
   onOpenAiChat?: () => void;
+  leaveRecords?: LeaveRequest[];
+  onNavigateToLeaves?: () => void;
 }
 
 export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
@@ -38,6 +41,8 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   onOpenPrintModal,
   onConfigureLocation,
   onOpenAiChat,
+  leaveRecords = [],
+  onNavigateToLeaves,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDivision, setSelectedDivision] = useState('ALL');
@@ -56,6 +61,13 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
     );
   }, [fieldCheckins, selectedRecord]);
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
+
+  const pendingLeavesForStaff = useMemo(() => {
+    return (leaveRecords || []).filter((l) => {
+      const isMyStaff = staffList.some((s) => s.id === l.staffId);
+      return isMyStaff && l.status === 'PENDING';
+    });
+  }, [leaveRecords, staffList]);
 
   // Divisions list
   const divisions = ['ALL', ...Array.from(new Set(staffList.map((s) => s.division)))];
@@ -156,6 +168,35 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
         staffMap={staffMap}
         onInspectRecord={handleRowClick}
       />
+
+      {/* Pending Leave Requests Alert Banner for Supervisor/Admin */}
+      {pendingLeavesForStaff.length > 0 && (
+        <div className="p-4 rounded-2xl bg-teal-500/10 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0">
+              <HeartPulse className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="font-bold text-slate-900 dark:text-white block text-xs">
+                Permohonan Izin / Cuti Menunggu Persetujuan ({pendingLeavesForStaff.length} Staf)
+              </span>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                {pendingLeavesForStaff.map((l) => `${l.staffName} (${l.leaveType === 'SAKIT' ? 'Izin Sakit' : 'Izin/Cuti'}: ${l.startDate} s/d ${l.endDate})`).join(', ')}
+              </p>
+            </div>
+          </div>
+          {onNavigateToLeaves && (
+            <button
+              type="button"
+              onClick={onNavigateToLeaves}
+              className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 flex items-center gap-1.5"
+            >
+              <span>Verifikasi Izin & Cuti</span>
+              <span>→</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Metric Counters Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
