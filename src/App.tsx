@@ -92,7 +92,12 @@ import {
   apiFetchLeaves,
   apiApproveLeave,
   apiFetchLeaveQuota,
+  apiFetchNotifications,
+  apiCreateNotification,
+  apiMarkNotificationRead,
+  apiMarkAllNotificationsRead,
 } from './services/api';
+import { playNotificationSound } from './utils/audioNotification';
 import { getTodayDateStr, getCurrentWitaTimeStr, getYesterdayWitaDateStr, getWitaHour } from './utils/date';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { SessionTimeoutModal } from './components/SessionTimeoutModal';
@@ -397,48 +402,100 @@ export default function App() {
         localStorage.setItem('ot_leave_records', JSON.stringify(list));
       }
     });
+
+    // 9. Sinkronisasi Notifikasi dari SQLite Server
+    apiFetchNotifications().then((notifs) => {
+      if (notifs && notifs.length > 0) {
+        setNotifications((prev) => {
+          const ids = new Set(notifs.map((n) => n.id));
+          return [...notifs, ...prev.filter((n) => !ids.has(n.id))];
+        });
+      }
+    });
   }, []);
 
   useEffect(() => {
-    if (currentUser) {
-      if (currentUser.role !== 'outsourcing') {
-        apiFetchAllUsers().then((usrs) => {
-          if (usrs && usrs.length > 0) {
-            setUsers(usrs);
-            localStorage.setItem('ot_users', JSON.stringify(usrs));
-          }
-        });
-      }
+    if (!currentUser) return;
 
-      // Re-fetch presensi & laporan setiap kali user login atau sesi diperbarui
-      apiFetchAttendance({ todayDateStr: getTodayDateStr() }).then((attList) => {
-        if (attList && attList.length > 0) {
-          setAttendanceRecords(attList);
-          localStorage.setItem('ot_attendance_records', JSON.stringify(attList));
-        }
-      });
-
-      apiFetchReports().then((repList) => {
-        if (repList && repList.length > 0) {
-          setDailyReports(repList);
-          localStorage.setItem('ot_daily_reports', JSON.stringify(repList));
-        }
-      });
-
-      apiFetchOvertime().then((list) => {
-        if (list && list.length > 0) {
-          setOvertimeRecords(list);
-          localStorage.setItem('ot_overtime_records', JSON.stringify(list));
-        }
-      });
-
-      apiFetchLeaves().then((list) => {
-        if (list && list.length > 0) {
-          setLeaveRecords(list);
-          localStorage.setItem('ot_leave_records', JSON.stringify(list));
+    if (currentUser.role !== 'outsourcing') {
+      apiFetchAllUsers().then((usrs) => {
+        if (usrs && usrs.length > 0) {
+          setUsers(usrs);
+          localStorage.setItem('ot_users', JSON.stringify(usrs));
         }
       });
     }
+
+    // Re-fetch presensi & laporan setiap kali user login atau sesi diperbarui
+    apiFetchAttendance({ todayDateStr: getTodayDateStr() }).then((attList) => {
+      if (attList && attList.length > 0) {
+        setAttendanceRecords(attList);
+        localStorage.setItem('ot_attendance_records', JSON.stringify(attList));
+      }
+    });
+
+    apiFetchReports().then((repList) => {
+      if (repList && repList.length > 0) {
+        setDailyReports(repList);
+        localStorage.setItem('ot_daily_reports', JSON.stringify(repList));
+      }
+    });
+
+    apiFetchOvertime().then((list) => {
+      if (list && list.length > 0) {
+        setOvertimeRecords(list);
+        localStorage.setItem('ot_overtime_records', JSON.stringify(list));
+      }
+    });
+
+    apiFetchLeaves().then((list) => {
+      if (list && list.length > 0) {
+        setLeaveRecords(list);
+        localStorage.setItem('ot_leave_records', JSON.stringify(list));
+      }
+    });
+
+    // Poller Notifikasi Real-Time dari Server setiap 12 detik
+    const activeUserId = currentUser.id;
+    const activeUserRole = currentUser.role;
+    const activeStaffId = currentUser.role === 'outsourcing' ? currentUser.id : undefined;
+
+    apiFetchNotifications({
+      userId: activeUserId,
+      role: activeUserRole,
+      staffId: activeStaffId,
+    }).then((notifs) => {
+      if (notifs && notifs.length > 0) {
+        setNotifications((prev) => {
+          const ids = new Set(notifs.map((n) => n.id));
+          return [...notifs, ...prev.filter((n) => !ids.has(n.id))];
+        });
+      }
+    });
+
+    const notifInterval = setInterval(() => {
+      apiFetchNotifications({
+        userId: activeUserId,
+        role: activeUserRole,
+        staffId: activeStaffId,
+      }).then((serverNotifs) => {
+        if (!serverNotifs || serverNotifs.length === 0) return;
+        setNotifications((prev) => {
+          const existingIds = new Set(prev.map((n) => n.id));
+          const newItems = serverNotifs.filter((n) => !existingIds.has(n.id));
+          if (newItems.length > 0) {
+            const first = newItems[0];
+            // Bunyikan Audio Chime HP & Getaran
+            playNotificationSound(first.type === 'geofence_alert' ? 'alert' : first.type === 'approval' ? 'success' : 'info');
+            showToast(`${first.title}: ${first.message}`, 'info');
+            return [...newItems, ...prev];
+          }
+          return prev;
+        });
+      });
+    }, 12000);
+
+    return () => clearInterval(notifInterval);
   }, [currentUser]);
 
   // Active Role & Navigation (Derived from Authenticated User)
@@ -1043,8 +1100,8 @@ export default function App() {
       );
       addNotification(
         'Pengajuan Izin / Cuti Baru',
-        `${data.staffName || 'Staf'} mengajukan ${data.leaveType} (${data.startDate} s/d ${data.endDate}): ${data.reason}.`,
-        'attendance',
+        `${data.staffName || 'Staf'} mengajukan ${data.leaveType === 'SAKIT' ? 'Izin Sakit' : 'Izin/Cuti'} (${data.startDate} s/d ${data.endDate}): "${data.reason}".`,
+        'approval',
         { staffId: data.staffId, userId: data.supervisorId }
       );
       apiFetchLeaveQuota(data.staffId).then((q) => {
@@ -1077,6 +1134,12 @@ export default function App() {
         payload.approved ? 'Persetujuan Izin / Cuti' : 'Penolakan Izin / Cuti',
         `Atasan (${currentUser?.name || 'Supervisor'}) ${payload.approved ? 'menyetujui' : 'menolak'} ${l?.leaveType || 'izin'} staf ${l?.staffName}: "${l?.reason}". Catatan: "${payload.supervisorNotes || '-'}"`,
         'Izin & Cuti'
+      );
+      addNotification(
+        payload.approved ? 'Permohonan Izin / Cuti Disetujui' : 'Permohonan Izin / Cuti Ditolak',
+        `Permohonan ${l?.leaveType === 'SAKIT' ? 'Izin Sakit' : 'Izin/Cuti'} Anda (${l?.startDate} s/d ${l?.endDate}) telah ${payload.approved ? 'disetujui' : 'ditolak'} oleh atasan.`,
+        'approval',
+        { staffId: l?.staffId, userId: l?.staffId }
       );
       apiFetchAttendance({ todayDateStr: getTodayDateStr() }).then((attList) => {
         if (attList && attList.length > 0) {
@@ -1316,6 +1379,7 @@ export default function App() {
   };
 
   // Add notification helper
+  // Add notification helper with Web Audio chime and SQLite sync
   const addNotification = (
     title: string,
     message: string,
@@ -1333,7 +1397,13 @@ export default function App() {
       read: false,
       ...meta,
     };
-    setNotifications((prev) => [newNotif, ...prev]);
+    setNotifications((prev) => [newNotif, ...prev.filter((n) => n.id !== newNotif.id)]);
+
+    // Bunyikan suara & getar HP
+    playNotificationSound(type === 'geofence_alert' ? 'alert' : type === 'approval' ? 'success' : 'info');
+
+    // Simpan ke SQLite database server
+    apiCreateNotification(newNotif).catch(() => {});
   };
 
   // Handle Clock In (Staff)
@@ -2203,9 +2273,11 @@ export default function App() {
           setNotifications((prev) =>
             prev.map((n) => (n.id === id ? { ...n, read: true } : n))
           );
+          apiMarkNotificationRead(id);
         }}
         onMarkAllAsRead={() => {
           setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+          apiMarkAllNotificationsRead(currentUser?.id);
         }}
         onSimulatePushNotification={handleSimulatePushNotification}
       />

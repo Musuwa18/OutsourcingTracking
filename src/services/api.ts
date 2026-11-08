@@ -3,7 +3,7 @@
  * Menghubungkan frontend React ke backend Express REST API di Port 3010
  * Dinas Pendidikan Kabupaten Hulu Sungai Tengah
  */
-import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings, OvertimeRecord, LeaveRequest, LeaveQuota } from '../types';
+import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings, OvertimeRecord, LeaveRequest, LeaveQuota, NotificationItem } from '../types';
 
 const API_BASE = '/api';
 
@@ -833,5 +833,65 @@ export async function apiFetchLeaveQuota(staffId: string, year?: number): Promis
   } catch (err: unknown) {
     console.warn('apiFetchLeaveQuota warning:', err);
     return null;
+  }
+}
+
+// 14. REAL-TIME NOTIFICATIONS API
+export async function apiFetchNotifications(filters: {
+  userId?: string;
+  role?: string;
+  staffId?: string;
+} = {}): Promise<NotificationItem[]> {
+  try {
+    const params = new URLSearchParams();
+    if (filters.userId) params.append('userId', filters.userId);
+    if (filters.role) params.append('role', filters.role);
+    if (filters.staffId) params.append('staffId', filters.staffId);
+    const res = await fetch(`${API_BASE}/notifications?${params.toString()}`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    return json.notifications || [];
+  } catch (err: unknown) {
+    console.warn('apiFetchNotifications warning:', err);
+    return [];
+  }
+}
+
+export async function apiCreateNotification(data: Partial<NotificationItem>): Promise<NotificationItem | null> {
+  try {
+    const res = await fetch(`${API_BASE}/notifications`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.notification || null;
+  } catch (err: unknown) {
+    console.warn('apiCreateNotification warning:', err);
+    return null;
+  }
+}
+
+export async function apiMarkNotificationRead(id: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/notifications/${encodeURIComponent(id)}/read`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+    });
+  } catch (err: unknown) {
+    console.warn('apiMarkNotificationRead warning:', err);
+  }
+}
+
+export async function apiMarkAllNotificationsRead(userId?: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/notifications/read-all`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ userId }),
+    });
+  } catch (err: unknown) {
+    console.warn('apiMarkAllNotificationsRead warning:', err);
   }
 }

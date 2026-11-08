@@ -65,6 +65,10 @@ import {
   approveLeaveRequest,
   getLeaveById,
   getLeaveQuota,
+  createNotification,
+  listNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
 } from './server/db.js';
 dotenv.config();
 
@@ -867,6 +871,46 @@ app.get('/api/leave/quota/:staffId', (req, res) => {
   } catch (err) {
     console.error('[API Error] Leave Quota:', err);
     res.status(500).json({ error: 'Gagal memuat saldo kuota cuti staf.' });
+  }
+});
+
+// 11g. REAL-TIME NOTIFICATIONS API
+app.get('/api/notifications', (req, res) => {
+  try {
+    const { userId, role, staffId } = req.query;
+    const notifs = listNotifications({ userId, role, staffId });
+    res.json({ success: true, notifications: notifs });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal memuat notifikasi.' });
+  }
+});
+
+app.post('/api/notifications', (req, res) => {
+  try {
+    const created = createNotification(req.body);
+    res.status(201).json({ success: true, notification: created });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal membuat notifikasi.' });
+  }
+});
+
+app.patch('/api/notifications/:id/read', (req, res) => {
+  try {
+    const { id } = req.params;
+    markNotificationRead(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menandai notifikasi dibaca.' });
+  }
+});
+
+app.patch('/api/notifications/read-all', (req, res) => {
+  try {
+    const { userId } = req.body;
+    markAllNotificationsRead(userId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menandai semua notifikasi dibaca.' });
   }
 });
 

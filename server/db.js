@@ -236,6 +236,18 @@ if (isNodeSqlite && dbEngine) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      staff_id TEXT,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT NOT NULL,
+      is_read INTEGER DEFAULT 0,
+      timestamp TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
 
   // Migrasi aman untuk kolom baru users jika database sudah ada sebelumnya
@@ -308,7 +320,8 @@ let fallbackStore = {
   attendance: [],
   daily_reports: [],
   evaluations: [],
-  leave_requests: []
+  leave_requests: [],
+  notifications: []
 };
 
 if (!isNodeSqlite && fs.existsSync(FALLBACK_FILE)) {
@@ -2492,6 +2505,116 @@ export function getLeaveQuota(staffId, year = new Date().getFullYear()) {
     sickUsed,
     specialUsed
   };
+}
+
+// ==========================================================
+// NOTIFIKASI REAL-TIME & HISTORI PERSISTEN DI SQLITE
+// ==========================================================
+export function createNotification(data) {
+  const now = new Date();
+  const id = data.id || `notif-${Date.now()}`;
+  const timestamp = data.timestamp || (now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB');
+  const createdAt = data.createdAt || now.toISOString();
+  const isRead = data.read ? 1 : 0;
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      INSERT INTO notifications (
+        id, user_id, staff_id, title, message, type, is_read, timestamp, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, data.userId || null, data.staffId || null,
+      data.title, data.message, data.type || 'system',
+      isRead, timestamp, createdAt
+    );
+  } else {
+    if (!fallbackStore.notifications) fallbackStore.notifications = [];
+    fallbackStore.notifications.unshift({
+      id, userId: data.userId || null, staffId: data.staffId || null,
+      title: data.title, message: data.message, type: data.type || 'system',
+      read: Boolean(data.read), timestamp, createdAt
+    });
+    persistFallback();
+  }
+
+  return {
+    id,
+    userId: data.userId || null,
+    staffId: data.staffId || null,
+    title: data.title,
+    message: data.message,
+    type: data.type || 'system',
+    read: Boolean(isRead),
+    timestamp,
+    createdAt
+  };
+}
+
+export function listNotifications(filters = {}) {
+  const { userId, role, staffId } = filters;
+
+  if (isNodeSqlite && dbEngine) {
+    let query = 'SELECT * FROM notifications WHERE 1=1';
+    const params = [];
+
+    if (role === 'admin') {
+      // Admin dapat melihat seluruh notifikasi sistem
+    } else if (role === 'supervisor') {
+      // Supervisor: melihat notifikasi yang ditujukan kepadanya (userId) atau alert persetujuan/geofence
+      query += ' AND (user_id = ? OR user_id IS NULL OR type IN (\'geofence_alert\', \'approval\', \'attendance\'))';
+      params.push(userId);
+    } else if (role === 'outsourcing') {
+      // Staf: melihat notifikasi pribadi miliknya (userId atau staffId)
+      query += ' AND (user_id = ? OR staff_id = ? OR user_id IS NULL)';
+      params.push(userId, staffId || userId);
+    } else if (userId) {
+      query += ' AND (user_id = ? OR user_id IS NULL)';
+      params.push(userId);
+    }
+
+    query += ' ORDER BY created_at DESC LIMIT 60';
+    const rows = dbEngine.prepare(query).all(...params);
+    return rows.map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      staffId: r.staff_id,
+      title: r.title,
+      message: r.message,
+      type: r.type,
+      read: Boolean(r.is_read),
+      timestamp: r.timestamp,
+      createdAt: r.created_at,
+    }));
+  } else {
+    return (fallbackStore.notifications || []).slice(0, 60);
+  }
+}
+
+export function markNotificationRead(id) {
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare('UPDATE notifications SET is_read = 1 WHERE id = ?').run(id);
+  } else {
+    const n = (fallbackStore.notifications || []).find((x) => x.id === id);
+    if (n) {
+      n.read = true;
+      persistFallback();
+    }
+  }
+  return true;
+}
+
+export function markAllNotificationsRead(userId) {
+  if (isNodeSqlite && dbEngine) {
+    if (userId) {
+      dbEngine.prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ? OR user_id IS NULL').run(userId);
+    } else {
+      dbEngine.prepare('UPDATE notifications SET is_read = 1').run();
+    }
+  } else {
+    (fallbackStore.notifications || []).forEach((n) => { n.read = true; });
+    persistFallback();
+  }
+  return true;
 }
 
 // DAILY REPORTS
