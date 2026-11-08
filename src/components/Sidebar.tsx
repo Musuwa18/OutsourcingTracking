@@ -102,7 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
-  const isSupervisor = currentRole === 'supervisor';
+  const isSupervisor = currentRole === 'supervisor' || currentRole === 'coordinator';
   const displayedNavItems = isSupervisor
     ? adminNavItems.filter((item) =>
         ['monitoring-presensi', 'persetujuan-laporan', 'evaluasi-mingguan', 'analitik-bulanan'].includes(
@@ -124,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Navigation Group */}
         <div>
           <div className="px-3 mb-2 text-[11px] font-semibold tracking-wider uppercase text-slate-400 dark:text-slate-500">
-            {currentRole === 'admin' ? 'Konsol Administrasi' : 'Menu Supervisi'}
+            {currentRole === 'admin' ? 'Konsol Administrasi' : currentRole === 'coordinator' ? 'Supervisi Pengawas Lapangan' : 'Menu Supervisi'}
           </div>
           <nav className="space-y-1.5">
             {displayedNavItems.map((item) => {

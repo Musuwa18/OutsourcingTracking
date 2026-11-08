@@ -76,6 +76,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('query parser', 'simple');
 const PORT = process.env.PORT || 3010;
 const DIST_DIR = path.join(__dirname, 'dist');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -150,7 +151,8 @@ app.get('/health', (req, res) => {
 // 2. Auth: Login
 app.post('/api/auth/login', (req, res) => {
   try {
-    const usernameOrEmail = req.body.usernameOrEmail || req.body.identifier || req.body.email || req.body.nip;
+    const rawIdentifier = req.body.usernameOrEmail || req.body.identifier || req.body.email || req.body.nip;
+    const usernameOrEmail = rawIdentifier ? String(rawIdentifier).trim() : '';
     const { password, deviceId, biometricKey } = req.body;
     if (!usernameOrEmail) {
       return res.status(400).json({ error: 'Username, Email, atau NIP wajib diisi.' });
@@ -248,19 +250,21 @@ app.post('/api/auth/register', (req, res) => {
       roleTitle,
       phone,
       vendorName,
+      supervisedGroups,
+      supervisedVendor,
       deviceId,
       customLocation,
       supervisorId,
       workspaceNote
     } = req.body;
 
-    if (role && role !== 'outsourcing') {
+    if (role && role !== 'outsourcing' && role !== 'coordinator') {
       return res.status(403).json({
-        error: 'Registrasi mandiri hanya diperbolehkan untuk Staf Outsourcing. Akun Atasan dan Administrator didaftarkan langsung oleh Super Admin.'
+        error: 'Registrasi mandiri hanya diperbolehkan untuk Staf Lapangan atau Pengawas Lapangan. Akun Atasan dan Administrator didaftarkan langsung oleh Super Admin.'
       });
     }
 
-    if (!nip || !name || !email || !password || !divisionId) {
+    if (!nip || !name || !email || !password) {
       return res.status(400).json({ error: 'Seluruh kolom bertanda wajib harus dilengkapi.' });
     }
 
@@ -269,17 +273,21 @@ app.post('/api/auth/register', (req, res) => {
       return res.status(409).json({ error: 'Email atau NIP sudah terdaftar dalam sistem.' });
     }
 
+    const finalRole = role === 'coordinator' ? 'coordinator' : 'outsourcing';
+    const finalGroups = supervisedGroups || (vendorName ? [vendorName] : []);
     const newUser = createUser({
       nip,
       name,
       email,
       password,
-      role: 'outsourcing',
-      divisionId,
-      divisionName: divisionName || 'Sub Bagian Dinas',
-      roleTitle: roleTitle || 'Tenaga Outsourcing',
+      role: finalRole,
+      divisionId: divisionId || 'div-umpeg',
+      divisionName: divisionName || 'Sub Bagian Umum & Kepegawaian',
+      roleTitle: roleTitle || (finalRole === 'coordinator' ? 'Pengawas Lapangan Mitra' : 'Tenaga Outsourcing'),
       phone,
-      vendorName: vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)',
+      vendorName: vendorName || (finalGroups[0] || 'PT Handil Bakti Utama (Mitra Disdik HST)'),
+      supervisedGroups: finalGroups,
+      supervisedVendor: supervisedVendor || finalGroups[0] || vendorName,
       deviceId,
       customLocation,
       supervisorId,
@@ -387,9 +395,9 @@ app.get('/api/vendors', (req, res) => {
 
 app.post('/api/vendors', (req, res) => {
   try {
-    const { name, code, contractNumber, contractStart, contractEnd, picName, picPhone, address, status } = req.body;
+    const { name, code, category, contractNumber, contractStart, contractEnd, picName, picPhone, address, status } = req.body;
     if (!name) return res.status(400).json({ error: 'Nama perusahaan penyedia wajib diisi.' });
-    const created = createVendor({ name, code, contractNumber, contractStart, contractEnd, picName, picPhone, address, status });
+    const created = createVendor({ name, code, category, contractNumber, contractStart, contractEnd, picName, picPhone, address, status });
     res.status(201).json({ success: true, vendor: created, message: 'Perusahaan vendor berhasil ditambahkan.' });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Gagal menambahkan vendor.' });
@@ -437,6 +445,8 @@ app.post('/api/users', (req, res) => {
       roleTitle,
       phone,
       vendorName,
+      supervisedGroups,
+      supervisedVendor,
       deviceId,
       customLocation,
       supervisorId,
@@ -452,17 +462,22 @@ app.post('/api/users', (req, res) => {
       return res.status(409).json({ error: 'Email atau NIP sudah terdaftar dalam sistem.' });
     }
 
+    const finalRole = role || 'outsourcing';
+    const finalGroups = supervisedGroups || (supervisedVendor ? [supervisedVendor] : (finalRole === 'coordinator' && vendorName ? [vendorName] : []));
+
     const newUser = createUser({
       nip: String(nip).trim(),
       name: String(name).trim(),
       email: String(email).trim().toLowerCase(),
       password: password || 'Password123!',
-      role: role || 'outsourcing',
+      role: finalRole,
       divisionId: divisionId || 'div-umpeg',
       divisionName: divisionName || 'Sub Bagian Dinas',
-      roleTitle: roleTitle || (role === 'supervisor' ? 'Pejabat Penilai' : role === 'admin' ? 'Administrator' : 'Tenaga Outsourcing'),
+      roleTitle: roleTitle || (finalRole === 'supervisor' ? 'Pejabat Penilai' : finalRole === 'admin' ? 'Administrator' : finalRole === 'coordinator' ? 'Pengawas Lapangan Mitra' : 'Tenaga Outsourcing'),
       phone: phone || '',
-      vendorName: vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)',
+      vendorName: vendorName || (finalGroups[0] || 'PT Handil Bakti Utama (Mitra Disdik HST)'),
+      supervisedGroups: finalGroups,
+      supervisedVendor: supervisedVendor || finalGroups[0] || vendorName,
       deviceId: deviceId || null,
       customLocation: customLocation || null,
       supervisorId: supervisorId || null,
@@ -626,9 +641,10 @@ app.put('/api/staff/:id/location', (req, res) => {
   try {
     const staffId = req.params.id;
     const { customLocation, workspaceNote } = req.body;
-    updateUserLocation(staffId, customLocation, workspaceNote);
+    const updatedUser = updateUserLocation(staffId, customLocation, workspaceNote);
     res.json({
       success: true,
+      user: updatedUser,
       message: 'Lokasi dan ruang kerja penugasan staf berhasil diperbarui.'
     });
   } catch (err) {
@@ -1147,11 +1163,12 @@ Pedoman Menjawab:
 
 // Sajikan berkas statis dari direktori dist/
 app.use(express.static(DIST_DIR, {
-  maxAge: '1y',
   etag: true,
-  setHeaders: (res, path) => {
-    if (path.endsWith('index.html')) {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('index.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
     }
   }
 }));

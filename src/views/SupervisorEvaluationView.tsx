@@ -23,6 +23,8 @@ import {
   HeartPulse,
   FileText,
   Paperclip,
+  Lock,
+  Briefcase,
 } from 'lucide-react';
 import {
   StaffProfile,
@@ -123,11 +125,13 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
   const [selectedStaffId, setSelectedStaffId] = useState(staffList[0]?.id || '');
   const [selectedWeek, setSelectedWeek] = useState<number>(2);
   const [evaluationDate, setEvaluationDate] = useState(getTodayDateStr());
+  const isCoordinator = currentUser?.role === 'coordinator';
 
   // Searchable Staff Picker State (Scalable for hundreds of staff)
   const [isStaffPickerOpen, setIsStaffPickerOpen] = useState(false);
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [selectedStaffDivisionFilter, setSelectedStaffDivisionFilter] = useState('ALL');
+  const [selectedStaffVendorFilter, setSelectedStaffVendorFilter] = useState('ALL');
   const staffPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -148,11 +152,20 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
     return ['ALL', ...Array.from(new Set(staffList.map((s) => s.division).filter(Boolean)))];
   }, [staffList]);
 
+  const staffVendors = useMemo(() => {
+    return ['ALL', ...Array.from(new Set(staffList.map((s) => s.vendorName).filter(Boolean)))];
+  }, [staffList]);
+
   const filteredStaffForPicker = useMemo(() => {
     return staffList.filter((st) => {
       const matchDivision =
         selectedStaffDivisionFilter === 'ALL' || st.division === selectedStaffDivisionFilter;
       if (!matchDivision) return false;
+
+      const matchVendor =
+        selectedStaffVendorFilter === 'ALL' || st.vendorName === selectedStaffVendorFilter;
+      if (!matchVendor) return false;
+
       if (!staffSearchQuery.trim()) return true;
       const q = staffSearchQuery.toLowerCase();
       return (
@@ -163,7 +176,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
         (st.vendorName && st.vendorName.toLowerCase().includes(q))
       );
     });
-  }, [staffList, selectedStaffDivisionFilter, staffSearchQuery]);
+  }, [staffList, selectedStaffDivisionFilter, selectedStaffVendorFilter, staffSearchQuery]);
 
   const staffMap = new Map(staffList.map((s) => [s.id, s]));
 
@@ -214,7 +227,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
   // Filter daily reports to subordinate staff when logged in as supervisor
   const displayedDailyReports = useMemo(() => {
-    if (currentUser?.role === 'supervisor') {
+    if (currentUser?.role === 'supervisor' || currentUser?.role === 'coordinator') {
       return dailyReports.filter((rep) => staffList.some((s) => s.id === rep.staffId));
     }
     return dailyReports;
@@ -249,7 +262,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
   // Filter overtime requests for supervisor
   const displayedOvertime = useMemo(() => {
     return (overtimeRecords || []).filter((ot) => {
-      if (currentUser?.role === 'supervisor') {
+      if (currentUser?.role === 'supervisor' || currentUser?.role === 'coordinator') {
         const isMyStaff = staffList.some((s) => s.id === ot.staffId);
         const isMySpvId = ot.supervisorId === currentUser.id || ot.supervisorId === currentUser.nip;
         return isMyStaff || isMySpvId;
@@ -270,7 +283,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
   // Filter leave requests for supervisor
   const displayedLeaves = useMemo(() => {
     return (leaveRecords || []).filter((l) => {
-      if (currentUser?.role === 'supervisor') {
+      if (currentUser?.role === 'supervisor' || currentUser?.role === 'coordinator') {
         const isMyStaff = staffList.some((s) => s.id === l.staffId);
         const isMySpvId = l.supervisorId === currentUser.id || l.supervisorId === currentUser.nip;
         if (!isMyStaff && !isMySpvId) return false;
@@ -284,7 +297,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
   const pendingLeaveCount = useMemo(() => {
     return (leaveRecords || []).filter((l) => {
-      if (currentUser?.role === 'supervisor') {
+      if (currentUser?.role === 'supervisor' || currentUser?.role === 'coordinator') {
         const isMyStaff = staffList.some((s) => s.id === l.staffId);
         const isMySpvId = l.supervisorId === currentUser.id || l.supervisorId === currentUser.nip;
         if (!isMyStaff && !isMySpvId) return false;
@@ -318,7 +331,9 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
             Belum Ada Staf Outsourcing untuk Dievaluasi
           </h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-            {currentUser?.role === 'supervisor' ? (
+            {currentUser?.role === 'coordinator' ? (
+              <>Belum ada pegawai alih daya atau peserta magang pada kelompok binaan yang diawasi. Pastikan staf sudah didaftarkan pada kelompok vendor/instansi Anda.</>
+            ) : currentUser?.role === 'supervisor' ? (
               <>Belum ada staf yang memilih Anda sebagai atasan penilai. Staf dapat memilih atasan langsung melalui profil mereka atau melalui pemetaan administrator.</>
             ) : (
               <>Silakan daftarkan tenaga alih daya resmi di unit kerja Anda melalui menu <strong>Pusat Pengaturan Sistem</strong> untuk memulai siklus penilaian kinerja mingguan.</>
@@ -331,12 +346,12 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
   const handleSubmitEvaluation = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStaffId) return;
+    if (!selectedStaffId || isCoordinator) return;
 
     onSubmitEvaluation({
       staffId: selectedStaffId,
       supervisorId: currentUser?.id || selectedStaff?.supervisorId || 'sup-disdik',
-      supervisorName: currentUser?.name || 'Atasan Langsung Disdik HST',
+      supervisorName: currentUser?.name || (currentUser?.role === 'coordinator' ? 'Pengawas Lapangan Mitra' : 'Atasan Langsung Disdik HST'),
       weekNumber: selectedWeek,
       month: '2026-10',
       date: evaluationDate,
@@ -384,7 +399,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            Form Evaluasi 4 Pilar
+            {isCoordinator ? 'Pantau Evaluasi 4 Pilar' : 'Form Evaluasi 4 Pilar'}
           </button>
           <button
             type="button"
@@ -408,7 +423,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
             }`}
           >
             <Clock className="w-3.5 h-3.5 text-indigo-500" />
-            <span>Verifikasi Lembur</span>
+            <span>{isCoordinator ? 'Riwayat Lembur (Beban Vendor)' : 'Verifikasi Lembur'}</span>
             {pendingOvertimeCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500 text-white">
                 {pendingOvertimeCount}
@@ -425,7 +440,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
             }`}
           >
             <HeartPulse className="w-3.5 h-3.5 text-teal-500" />
-            <span>Verifikasi Izin & Cuti</span>
+            <span>{isCoordinator ? 'Riwayat Izin & Cuti' : 'Verifikasi Izin & Cuti'}</span>
             {pendingLeaveCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-rose-500 text-white">
                 {pendingLeaveCount}
@@ -449,7 +464,19 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
           {/* Left Column: Form Controls */}
           <div className="lg:col-span-2 space-y-6">
             <form onSubmit={handleSubmitEvaluation} className="space-y-6">
-              
+              {/* Banner Lock untuk Pengawas Lapangan */}
+              {isCoordinator && (
+                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs">
+                  <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold text-sm">Mode Pantau Evaluasi KPI 4 Pilar (Read-Only)</div>
+                    <p className="leading-relaxed text-[11px] text-amber-800 dark:text-amber-300">
+                      Pemberian skor nilai 11 kompetensi dan rekomendasi perpanjangan kontrak merupakan kewenangan sah <strong>Pejabat Penilai / Atasan Langsung Disdik HST</strong>. Akun Pengawas Lapangan berstatus pantau untuk melihat capaian skor dan Spider Radar Chart staf binaan.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Staff & Week Selection */}
               <div className="p-5 glass-card space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
@@ -508,15 +535,15 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                           )}
                         </div>
 
-                        {/* Division Filter */}
-                        {staffDivisions.length > 2 && (
-                          <div className="mb-2">
+                        {/* Division & Vendor Filters */}
+                        <div className="grid grid-cols-2 gap-1.5 mb-2">
+                          <div>
                             <select
                               value={selectedStaffDivisionFilter}
                               onChange={(e) => setSelectedStaffDivisionFilter(e.target.value)}
                               className="w-full px-2 py-1 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium cursor-pointer"
                             >
-                              <option value="ALL">Semua Bidang ({staffList.length})</option>
+                              <option value="ALL">Semua Bidang</option>
                               {staffDivisions
                                 .filter((d) => d !== 'ALL')
                                 .map((div) => (
@@ -526,8 +553,23 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                                 ))}
                             </select>
                           </div>
-                        )}
-
+                          <div>
+                            <select
+                              value={selectedStaffVendorFilter}
+                              onChange={(e) => setSelectedStaffVendorFilter(e.target.value)}
+                              className="w-full px-2 py-1 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium cursor-pointer"
+                            >
+                              <option value="ALL">Semua Kelompok</option>
+                              {staffVendors
+                                .filter((v) => v !== 'ALL')
+                                .map((v) => (
+                                  <option key={v} value={v}>
+                                    {v}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
                         {/* Staff Options List */}
                         <div className="max-h-60 overflow-y-auto space-y-1 pr-1">
                           {filteredStaffForPicker.length === 0 ? (
@@ -658,18 +700,21 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                     value={ratings.qualityOfWork}
                     onChange={(v) => handleRatingChange('qualityOfWork', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                   <StarRating
                     label="2. Kuantitas Kerja (Quantity of Work) - Volume hasil kerja dan pemenuhan target harian"
                     value={ratings.quantityOfWork}
                     onChange={(v) => handleRatingChange('quantityOfWork', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                   <StarRating
                     label="3. Manajemen Waktu (Time Management) - Ketepatan jadwal pengerjaan dan efisiensi durasi"
                     value={ratings.timeManagement}
                     onChange={(v) => handleRatingChange('timeManagement', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                 </div>
               </div>
@@ -696,18 +741,21 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                     value={ratings.initiative}
                     onChange={(v) => handleRatingChange('initiative', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                   <StarRating
                     label="5. Tanggung Jawab (Accountability) - Menuntaskan tugas tuntas dan berani bertanggung jawab"
                     value={ratings.accountability}
                     onChange={(v) => handleRatingChange('accountability', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                   <StarRating
                     label="6. Kehadiran & Ketepatan Waktu (Punctuality) - Kedisiplinan jam masuk dan presensi geofence"
                     value={ratings.punctuality}
                     onChange={(v) => handleRatingChange('punctuality', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                 </div>
               </div>
@@ -734,18 +782,21 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                     value={ratings.teamwork}
                     onChange={(v) => handleRatingChange('teamwork', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                   <StarRating
                     label="8. Komunikasi (Communication) - Kejelasan dalam menyampaikan laporan atau kendala teknis"
                     value={ratings.communication}
                     onChange={(v) => handleRatingChange('communication', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                   <StarRating
                     label="9. Pelayanan Pelanggan (Customer Orientation) - Keramahan dan kesigapan melayani staf internal/eksternal"
                     value={ratings.customerOrientation}
                     onChange={(v) => handleRatingChange('customerOrientation', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                 </div>
               </div>
@@ -772,12 +823,14 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                     value={ratings.adaptability}
                     onChange={(v) => handleRatingChange('adaptability', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                   <StarRating
                     label="11. Pemecahan Masalah (Problem Solving) - Menemukan solusi efektif saat menghadapi kendala pekerjaan"
                     value={ratings.problemSolving}
                     onChange={(v) => handleRatingChange('problemSolving', v)}
                     showDescriptor
+                    readOnly={isCoordinator}
                   />
                 </div>
               </div>
@@ -789,11 +842,18 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                 </label>
                 <textarea
                   rows={3}
-                  required
-                  placeholder="Berikan apresiasi pencapaian dan rekomendasi hal yang perlu ditingkatkan minggu berikutnya..."
+                  required={!isCoordinator}
+                  disabled={isCoordinator}
+                  placeholder={
+                    isCoordinator
+                      ? 'Catatan evaluasi kualitatif resmi dari Pejabat Penilai Disdik HST...'
+                      : 'Berikan apresiasi pencapaian dan rekomendasi hal yang perlu ditingkatkan minggu berikutnya...'
+                  }
                   value={qualitativeNotes}
                   onChange={(e) => setQualitativeNotes(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                  className={`w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition ${
+                    isCoordinator ? 'bg-slate-50 dark:bg-slate-800/60 cursor-not-allowed opacity-90' : ''
+                  }`}
                 />
               </div>
 
@@ -805,13 +865,20 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
                     <span>Evaluasi mingguan berhasil disimpan dan diagregasi!</span>
                   </span>
                 )}
-                <button
-                  type="submit"
-                  className="ml-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-colors"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Simpan & Kunci Evaluasi Mingguan</span>
-                </button>
+                {isCoordinator ? (
+                  <div className="ml-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-semibold">
+                    <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Mode Pantau: Nilai KPI resmi diinput oleh Pejabat Penilai Disdik HST.</span>
+                  </div>
+                ) : (
+                  <button
+                    type="submit"
+                    className="ml-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>Simpan & Kunci Evaluasi Mingguan</span>
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -1106,6 +1173,21 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
             </span>
           </div>
 
+          {/* Informational Banner for Coordinator */}
+          {isCoordinator && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/80 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+              <Briefcase className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block text-amber-950 dark:text-amber-100 mb-0.5">
+                  Pemantauan Riwayat Lembur Tenaga Alih Daya (Kompensasi Dibayarkan Vendor)
+                </strong>
+                <span>
+                  Kompensasi lembur dibayarkan langsung oleh pihak vendor mitra. Panel ini menyajikan rincian tanggal, jam pelaksanaan, durasi riil, bukti foto kerja, dan persetujuan resmi Atasan Langsung Disdik HST sebagai dasar rekapitulasi pembayaran lembur staf binaan Anda.
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displayedOvertime.length === 0 ? (
               <div className="col-span-full p-12 text-center glass-card rounded-2xl text-xs text-slate-500 space-y-2">
@@ -1227,34 +1309,43 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
                     {/* Action Bar for Pending Overtime */}
                     {isPending && (
-                      <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2 text-xs">
-                        <input
-                          type="text"
-                          placeholder="Catatan arahan / instruksi lembur..."
-                          value={noteInput}
-                          onChange={(e) =>
-                            setOvertimeNotesInputs((prev) => ({ ...prev, [ot.id]: e.target.value }))
-                          }
-                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                      <div className="pt-3 border-t border-slate-200 dark:border-slate-800 text-xs">
+                        {isCoordinator ? (
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                            <span>Menunggu persetujuan instruksi lembur dari Pejabat Penilai Disdik HST</span>
+                            <span className="font-semibold text-amber-600 dark:text-amber-400">MENUNGGU ACC DINAS</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              placeholder="Catatan arahan / instruksi lembur..."
+                              value={noteInput}
+                              onChange={(e) =>
+                                setOvertimeNotesInputs((prev) => ({ ...prev, [ot.id]: e.target.value }))
+                              }
+                              className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
 
-                        <div className="flex items-center gap-2 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => handleApproveOvertimeAction(ot.id, false)}
-                            className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer font-medium"
-                          >
-                            Tolak Lembur
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleApproveOvertimeAction(ot.id, true)}
-                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-semibold shadow-xs"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Setujui Lembur (ACC)</span>
-                          </button>
-                        </div>
+                            <div className="flex items-center gap-2 justify-end">
+                              <button
+                                type="button"
+                                 onClick={() => handleApproveOvertimeAction(ot.id, false)}
+                                className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer font-medium"
+                              >
+                                Tolak Lembur
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleApproveOvertimeAction(ot.id, true)}
+                                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-semibold shadow-xs"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Setujui Lembur (ACC)</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1398,33 +1489,42 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
                     {/* Aksi Persetujuan Atasan */}
                     {isPending ? (
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 space-y-2">
-                        <input
-                          type="text"
-                          placeholder="Catatan / arahan atasan langsung (opsional)..."
-                          value={leaveNotesInputs[l.id] || ''}
-                          onChange={(e) =>
-                            setLeaveNotesInputs((prev) => ({ ...prev, [l.id]: e.target.value }))
-                          }
-                          className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400"
-                        />
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleApproveLeaveAction(l.id, false)}
-                            className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer font-medium"
-                          >
-                            Tolak Permohonan
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleApproveLeaveAction(l.id, true)}
-                            className="px-3.5 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg transition-all cursor-pointer flex items-center gap-1.5 font-semibold shadow-xs"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Setujui (Auto-Sinkron Presensi)</span>
-                          </button>
-                        </div>
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs">
+                        {isCoordinator ? (
+                          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                            <span>Menunggu keputusan persetujuan dari Pejabat Penilai Disdik HST</span>
+                            <span className="font-semibold text-amber-600 dark:text-amber-400">MENUNGGU ACC DINAS</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              placeholder="Catatan / arahan atasan langsung (opsional)..."
+                              value={leaveNotesInputs[l.id] || ''}
+                              onChange={(e) =>
+                                setLeaveNotesInputs((prev) => ({ ...prev, [l.id]: e.target.value }))
+                              }
+                              className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400"
+                            />
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleApproveLeaveAction(l.id, false)}
+                                className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer font-medium"
+                              >
+                                Tolak Permohonan
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleApproveLeaveAction(l.id, true)}
+                                className="px-3.5 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg transition-all cursor-pointer flex items-center gap-1.5 font-semibold shadow-xs"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Setujui (Auto-Sinkron Presensi)</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">

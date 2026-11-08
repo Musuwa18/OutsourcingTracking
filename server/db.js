@@ -72,6 +72,7 @@ if (isNodeSqlite && dbEngine) {
       supervisor_change_count INTEGER DEFAULT 0,
       supervisor_request_status TEXT DEFAULT 'NONE',
       workspace_note TEXT,
+      supervised_groups TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -143,6 +144,7 @@ if (isNodeSqlite && dbEngine) {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       code TEXT NOT NULL,
+      category TEXT DEFAULT 'vendor',
       contract_number TEXT,
       contract_start TEXT,
       contract_end TEXT,
@@ -271,6 +273,15 @@ if (isNodeSqlite && dbEngine) {
   } catch (e) {}
   try {
     dbEngine.exec(`ALTER TABLE users ADD COLUMN supervisor_request_status TEXT DEFAULT 'NONE';`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN supervised_groups TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE vendors ADD COLUMN category TEXT DEFAULT 'vendor';`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`UPDATE vendors SET category = 'vendor' WHERE category IS NULL OR category = '';`);
   } catch (e) {}
 
   // Migrasi aman untuk kolom baru tabel attendance (Sesi istirahat & tugas lapangan)
@@ -456,7 +467,7 @@ export const INITIAL_USERS = [
   // 1. Pucuk Pimpinan & Super Admin
   {
     id: 'usr-pimp-001',
-    nip: '19820916 2000121 002',
+    nip: '19820916 200012 1 002',
     name: 'H. Muhammad Anhar, S.STP, ME',
     email: 'kadin@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -476,7 +487,7 @@ export const INITIAL_USERS = [
   },
   {
     id: 'usr-pimp-002',
-    nip: '19780502200604 1 017',
+    nip: '19780502 200604 1 017',
     name: 'Salihin, S.Pd.SD',
     email: 'sekretaris@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -498,7 +509,7 @@ export const INITIAL_USERS = [
   // 2. Kasubag & Unit Kerja Sekretariat (Atasan Langsung)
   {
     id: 'usr-spv-renlap',
-    nip: '19821218 2006041 008',
+    nip: '19821218 200604 1 008',
     name: 'Muhammad Sugeng Wahyudi, A.Md',
     email: 'renlap@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -518,7 +529,7 @@ export const INITIAL_USERS = [
   },
   {
     id: 'usr-spv-keu',
-    nip: '19730609199503 2 002',
+    nip: '19730609 199503 2 002',
     name: 'Hj. Rabiatul Adawiyah, SE',
     email: 'keuangan@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -538,7 +549,7 @@ export const INITIAL_USERS = [
   },
   {
     id: 'usr-spv-umpeg',
-    nip: '19860620 2010011 008',
+    nip: '19860620 201001 1 008',
     name: 'Ahmad Humaidi, S.Pd.',
     email: 'umpeg@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -580,7 +591,7 @@ export const INITIAL_USERS = [
   },
   {
     id: 'usr-spv-kasi-sd-gtk',
-    nip: '19850902 2014061 002',
+    nip: '19850902 201406 1 002',
     name: 'Miseransyah, S.Pd.I',
     email: 'miseransyah@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -600,7 +611,7 @@ export const INITIAL_USERS = [
   },
   {
     id: 'usr-spv-kasi-sd-kur',
-    nip: '197504241998031 006',
+    nip: '19750424 199803 1 006',
     name: 'Ruswan, S.Pd.',
     email: 'ruswan@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -684,7 +695,7 @@ export const INITIAL_USERS = [
   // 5. Bidang Sarana Prasarana dan Kelembagaan (Kabid, Kasi, Penelaah)
   {
     id: 'usr-spv-kabid-sarpras',
-    nip: '19831110 2005011 007',
+    nip: '19831110 200501 1 007',
     name: 'Bayhaki Novie, S.Pd',
     email: 'kabid.sarpras@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -704,7 +715,7 @@ export const INITIAL_USERS = [
   },
   {
     id: 'usr-spv-kasi-sarpras-sd',
-    nip: '19851207 2005011 002',
+    nip: '19851207 200501 1 002',
     name: 'Muhammad Fahdi Royansyah',
     email: 'fahdi.royansyah@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -724,7 +735,7 @@ export const INITIAL_USERS = [
   },
   {
     id: 'usr-spv-kasi-sarpras-smp',
-    nip: '19860206 2005011 002',
+    nip: '19860206 200501 1 002',
     name: 'Muhammad Kharies Setiawan, SE',
     email: 'kharies@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -744,7 +755,7 @@ export const INITIAL_USERS = [
   },
   {
     id: 'usr-spv-penelaah-sarpras',
-    nip: '19870606 2011011 008',
+    nip: '19870606 201101 1 008',
     name: 'M. Abdillah, S.Pd.',
     email: 'abdillah@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -766,7 +777,7 @@ export const INITIAL_USERS = [
   // 6. Bidang PAUD dan Pendidikan Masyarakat (Kabid & Kasi)
   {
     id: 'usr-spv-kabid-paud',
-    nip: '19851208 2010011 007',
+    nip: '19851208 201001 1 007',
     name: 'Andry Rachmat Hidayat, S.Kom',
     email: 'kabid.paud@disdikhst.go.id',
     passwordHash: DEFAULT_PASSWORD_HASH,
@@ -833,6 +844,7 @@ export const INITIAL_VENDORS = [
     id: 'ven-001',
     name: 'PT Handil Bakti Utama (Mitra Disdik HST)',
     code: 'HBU-HST',
+    category: 'vendor',
     contractNumber: 'SPK/027/DISDIK-HST/2026',
     contractStart: '2026-01-02',
     contractEnd: '2026-12-31',
@@ -845,12 +857,52 @@ export const INITIAL_VENDORS = [
     id: 'ven-002',
     name: 'CV Murakata Sarana Mandiri',
     code: 'MSM-HST',
+    category: 'vendor',
     contractNumber: 'SPK/028/DISDIK-HST/2026',
     contractStart: '2026-01-02',
     contractEnd: '2026-12-31',
     picName: 'M. Noor Irfan, S.T.',
     picPhone: '0852-4800-1122',
     address: 'Jl. Perintis Kemerdekaan No. 12, Barabai',
+    status: 'Aktif'
+  },
+  {
+    id: 'ven-003',
+    name: 'PT. YASMINE BUIH PERSADA',
+    code: 'YBP-HST',
+    category: 'vendor',
+    contractNumber: 'SPK/029/DISDIK-HST/2026',
+    contractStart: '2026-01-02',
+    contractEnd: '2026-12-31',
+    picName: 'Hj. Yasmine Agustina, S.Kom.',
+    picPhone: '0813-4900-5566',
+    address: 'Jl. H. Damanhuri No. 88, Barabai Timur, HST',
+    status: 'Aktif'
+  },
+  {
+    id: 'ven-004',
+    name: 'PPPK Paruh Waktu Disdik HST',
+    code: 'PPPK-PW',
+    category: 'pppk_paruh_waktu',
+    contractNumber: 'KEP-BUP/800/DISDIK-HST/2026',
+    contractStart: '2026-01-02',
+    contractEnd: '2026-12-31',
+    picName: 'Koordinator PPPK Paruh Waktu Disdik',
+    picPhone: '0811-5000-2233',
+    address: 'Kantor Dinas Pendidikan Kab. HST, Barabai',
+    status: 'Aktif'
+  },
+  {
+    id: 'ven-005',
+    name: 'Siswa / Mahasiswa Magang Disdik HST',
+    code: 'MAGANG-HST',
+    category: 'magang',
+    contractNumber: 'MOU/MAGANG/DISDIK-HST/2026',
+    contractStart: '2026-01-02',
+    contractEnd: '2026-12-31',
+    picName: 'Koordinator Pembina Magang & PKL',
+    picPhone: '0821-5300-7788',
+    address: 'Kantor Dinas Pendidikan & Sekolah Binaan Kab. HST',
     status: 'Aktif'
   }
 ];
@@ -864,14 +916,12 @@ export function seedDatabaseIfEmpty() {
   if (isNodeSqlite && dbEngine) {
     // Sinkronisasi Tabel Vendors
     try {
-      const hasVen = dbEngine.prepare("SELECT id FROM vendors LIMIT 1").get();
-      if (!hasVen) {
-        const insertVen = dbEngine.prepare(
-          'INSERT OR REPLACE INTO vendors (id, name, code, contract_number, contract_start, contract_end, pic_name, pic_phone, address, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        );
-        for (const v of INITIAL_VENDORS) {
-          insertVen.run(v.id, v.name, v.code, v.contractNumber, v.contractStart, v.contractEnd, v.picName, v.picPhone, v.address, v.status, now);
-        }
+      const insertVen = dbEngine.prepare(
+        'INSERT OR IGNORE INTO vendors (id, name, code, category, contract_number, contract_start, contract_end, pic_name, pic_phone, address, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      );
+      for (const v of INITIAL_VENDORS) {
+        insertVen.run(v.id, v.name, v.code, v.category || 'vendor', v.contractNumber, v.contractStart, v.contractEnd, v.picName, v.picPhone, v.address, v.status, now);
+        dbEngine.prepare('UPDATE vendors SET category = ? WHERE id = ? OR name = ?').run(v.category || 'vendor', v.id, v.name);
       }
     } catch (e) {
       console.warn('[Database] Gagal seeding vendors:', e.message);
@@ -886,7 +936,7 @@ export function seedDatabaseIfEmpty() {
     }
 
     // Periksa apakah pengguna resmi Disdik HST sudah masuk
-    const hasKadis = dbEngine.prepare("SELECT id FROM users WHERE nip = '19820916 2000121 002'").get();
+    const hasKadis = dbEngine.prepare("SELECT id FROM users WHERE id = 'usr-pimp-001' OR email = 'kadin@disdikhst.go.id'").get();
     if (!hasKadis) {
       console.log('[Database] Melakukan migrasi dan seeding pengguna resmi Disdik HST...');
       const insertUser = dbEngine.prepare(
@@ -933,16 +983,32 @@ export function seedDatabaseIfEmpty() {
 // ======================== API REPOSITORY METHODS ========================
 
 export function getUserByEmailOrNip(emailOrNip) {
+  if (!emailOrNip) return null;
+  const raw = String(emailOrNip).trim();
+  const clean = raw.replace(/[\s.-]/g, '');
+
   if (isNodeSqlite && dbEngine) {
     const row = dbEngine.prepare(
-      'SELECT * FROM users WHERE email = ? OR nip = ? COLLATE NOCASE'
-    ).get(emailOrNip, emailOrNip);
+      `SELECT * FROM users 
+       WHERE email = ? COLLATE NOCASE 
+          OR nip = ? COLLATE NOCASE 
+          OR (LENGTH(?) >= 3 AND REPLACE(REPLACE(REPLACE(nip, ' ', ''), '.', ''), '-', '') = ? COLLATE NOCASE)`
+    ).get(raw, raw, clean, clean);
     if (!row) return null;
     return mapUserRow(row);
   } else {
-    const u = fallbackStore.users.find(
-      (user) => user.email.toLowerCase() === emailOrNip.toLowerCase() || user.nip.toLowerCase() === emailOrNip.toLowerCase()
-    );
+    const rawLower = raw.toLowerCase();
+    const cleanLower = clean.toLowerCase();
+    const u = fallbackStore.users.find((user) => {
+      const uEmail = (user.email || '').trim().toLowerCase();
+      const uNip = (user.nip || '').trim().toLowerCase();
+      const uCleanNip = uNip.replace(/[\s.-]/g, '');
+      return (
+        uEmail === rawLower ||
+        uNip === rawLower ||
+        (cleanLower.length >= 3 && uCleanNip === cleanLower)
+      );
+    });
     return u || null;
   }
 }
@@ -964,6 +1030,21 @@ function mapUserRow(row) {
       customLocation = JSON.parse(row.custom_location_json);
     } catch (e) {}
   }
+  let supervisedGroups = [];
+  if (row.supervised_groups) {
+    try {
+      const parsed = JSON.parse(row.supervised_groups);
+      if (Array.isArray(parsed)) {
+        supervisedGroups = parsed;
+      } else if (typeof parsed === 'string') {
+        supervisedGroups = [parsed];
+      }
+    } catch (e) {
+      supervisedGroups = row.supervised_groups.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+  }
+  const supervisedVendor = supervisedGroups.length > 0 ? supervisedGroups[0] : (row.vendor_name || undefined);
+
   const hasDevice = Boolean(row.device_id);
   const deviceBinding = hasDevice
     ? {
@@ -998,16 +1079,27 @@ function mapUserRow(row) {
     pendingSupervisorId: row.pending_supervisor_id || null,
     supervisorChangeCount: Number(row.supervisor_change_count) || 0,
     supervisorRequestStatus: row.supervisor_request_status || 'NONE',
-    workspaceNote: row.workspace_note
+    workspaceNote: row.workspace_note,
+    supervisedGroups,
+    supervisedVendor
   };
 }
 
 export function createUser(userData) {
-  const id = `usr-${userData.role === 'outsourcing' ? 'os' : 'spv'}-${Date.now()}`;
+  const idPrefix = userData.role === 'outsourcing' ? 'os' : userData.role === 'coordinator' ? 'coord' : 'spv';
+  const id = `usr-${idPrefix}-${Date.now()}`;
   const now = new Date().toISOString();
   const initials = userData.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
   const avatarColors = ['#4f46e5', '#059669', '#d97706', '#dc2626', '#db2777', '#3b82f6'];
   const avatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+
+  let supervisedGroups = [];
+  if (userData.supervisedGroups) {
+    supervisedGroups = Array.isArray(userData.supervisedGroups) ? userData.supervisedGroups : [userData.supervisedGroups];
+  } else if (userData.supervisedVendor) {
+    supervisedGroups = [userData.supervisedVendor];
+  }
+  const supervisedGroupsJson = supervisedGroups.length > 0 ? JSON.stringify(supervisedGroups) : null;
 
   const userObj = {
     id,
@@ -1015,12 +1107,12 @@ export function createUser(userData) {
     name: userData.name,
     email: userData.email,
     passwordHash: hashPassword(userData.password),
-    role: userData.role,
-    divisionId: userData.divisionId,
-    divisionName: userData.divisionName,
-    roleTitle: userData.roleTitle,
+    role: userData.role || 'outsourcing',
+    divisionId: userData.divisionId || (userData.role === 'coordinator' ? 'div-vendor' : 'div-umpeg'),
+    divisionName: userData.divisionName || (userData.role === 'coordinator' ? 'Pengawas Mitra Lapangan' : 'Sub Bagian Umum & Kepegawaian'),
+    roleTitle: userData.roleTitle || (userData.role === 'coordinator' ? 'Pengawas Lapangan Mitra' : userData.role === 'supervisor' ? 'Pejabat Penilai' : userData.role === 'admin' ? 'Administrator' : 'Tenaga Outsourcing'),
     phone: userData.phone || '',
-    vendorName: userData.vendorName || 'Dinas Pendidikan Kab. HST',
+    vendorName: userData.vendorName || (supervisedGroups[0] || 'Dinas Pendidikan Kab. HST'),
     avatarColor,
     initials,
     deviceId: userData.deviceId || null,
@@ -1028,6 +1120,8 @@ export function createUser(userData) {
     customLocation: userData.customLocation || null,
     supervisorId: userData.supervisorId || null,
     workspaceNote: userData.workspaceNote || null,
+    supervisedGroups,
+    supervisedVendor: supervisedGroups[0] || userData.vendorName || undefined,
     status: userData.status || 'Aktif',
     createdAt: now
   };
@@ -1039,8 +1133,8 @@ export function createUser(userData) {
       `INSERT INTO users (
         id, nip, name, email, password_hash, role, division_id, division_name,
         role_title, phone, vendor_name, avatar_color, initials, device_id, biometric_key,
-        custom_location_json, supervisor_id, workspace_note, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        custom_location_json, supervisor_id, workspace_note, supervised_groups, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       userObj.id,
       userObj.nip,
@@ -1048,19 +1142,20 @@ export function createUser(userData) {
       userObj.email,
       userObj.passwordHash,
       userObj.role,
-      userObj.divisionId,
-      userObj.divisionName,
-      userObj.roleTitle,
-      userObj.phone,
-      userObj.vendorName,
-      userObj.avatarColor,
-      userObj.initials,
-      userObj.deviceId,
-      userObj.biometricKey,
-      customLocationJson,
-      userObj.supervisorId,
-      userObj.workspaceNote,
-      userObj.status,
+      userObj.divisionId ?? null,
+      userObj.divisionName ?? null,
+      userObj.roleTitle ?? null,
+      userObj.phone ?? null,
+      userObj.vendorName ?? null,
+      userObj.avatarColor ?? null,
+      userObj.initials ?? null,
+      userObj.deviceId ?? null,
+      userObj.biometricKey ?? null,
+      customLocationJson ?? null,
+      userObj.supervisorId ?? null,
+      userObj.workspaceNote ?? null,
+      supervisedGroupsJson ?? null,
+      userObj.status || 'Aktif',
       now
     );
   } else {
@@ -1088,18 +1183,21 @@ export function updateUserDevice(userId, deviceId, biometricKey = null) {
 
 export function updateUserLocation(userId, customLocation, workspaceNote) {
   const customLocationJson = customLocation ? JSON.stringify(customLocation) : null;
+  const note = workspaceNote !== undefined ? workspaceNote : null;
   if (isNodeSqlite && dbEngine) {
     dbEngine.prepare(
-      'UPDATE users SET custom_location_json = ?, workspace_note = COALESCE(?, workspace_note) WHERE id = ?'
-    ).run(customLocationJson, workspaceNote || null, userId);
+      'UPDATE users SET custom_location_json = ?, workspace_note = COALESCE(?, workspace_note) WHERE id = ? OR nip = ?'
+    ).run(customLocationJson, note, userId, userId);
   } else {
-    const user = fallbackStore.users.find((u) => u.id === userId);
+    const user = fallbackStore.users.find((u) => u.id === userId || u.nip === userId);
     if (user) {
       user.customLocation = customLocation;
-      if (workspaceNote) user.workspaceNote = workspaceNote;
+      user.assignedLocation = customLocation;
+      if (note !== null) user.workspaceNote = note;
       persistFallback();
     }
   }
+  return getUserById(userId) || getUserByEmailOrNip(userId);
 }
 
 export function updateUserSupervisor(userId, supervisorId) {
@@ -1362,6 +1460,7 @@ export function listVendors() {
       id: r.id,
       name: r.name,
       code: r.code,
+      category: r.category || 'vendor',
       contractNumber: r.contract_number,
       contractStart: r.contract_start,
       contractEnd: r.contract_end,
@@ -1373,7 +1472,7 @@ export function listVendors() {
       createdAt: r.created_at
     }));
   } else {
-    return (fallbackStore.vendors || []).map((v) => ({ ...v, staffCount: 0 }));
+    return (fallbackStore.vendors || []).map((v) => ({ ...v, category: v.category || 'vendor', staffCount: 0 }));
   }
 }
 
@@ -1382,14 +1481,16 @@ export function createVendor(data) {
   const now = new Date().toISOString();
   const cStart = data.contractStart || data.contractStartDate || '';
   const cEnd = data.contractEnd || data.contractEndDate || '';
+  const category = data.category || 'vendor';
   if (isNodeSqlite && dbEngine) {
     dbEngine.prepare(
-      `INSERT INTO vendors (id, name, code, contract_number, contract_start, contract_end, pic_name, pic_phone, address, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO vendors (id, name, code, category, contract_number, contract_start, contract_end, pic_name, pic_phone, address, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       data.name,
       data.code || 'VEN',
+      category,
       data.contractNumber || '',
       cStart,
       cEnd,
@@ -1401,23 +1502,25 @@ export function createVendor(data) {
     );
   } else {
     if (!fallbackStore.vendors) fallbackStore.vendors = [];
-    fallbackStore.vendors.push({ id, ...data, contractStart: cStart, contractEnd: cEnd, createdAt: now });
+    fallbackStore.vendors.push({ id, ...data, category, contractStart: cStart, contractEnd: cEnd, createdAt: now });
     persistFallback();
   }
-  return { id, ...data, contractStart: cStart, contractEnd: cEnd, createdAt: now, staffCount: 0 };
+  return { id, ...data, category, contractStart: cStart, contractEnd: cEnd, createdAt: now, staffCount: 0 };
 }
 
 export function updateVendor(id, data) {
   const cStart = data.contractStart || data.contractStartDate || '';
   const cEnd = data.contractEnd || data.contractEndDate || '';
+  const category = data.category || 'vendor';
   if (isNodeSqlite && dbEngine) {
     // Ambil nama lama untuk sinkronisasi nama vendor jika berubah
     const oldVen = dbEngine.prepare('SELECT name FROM vendors WHERE id = ?').get(id);
     dbEngine.prepare(
-      `UPDATE vendors SET name = ?, code = ?, contract_number = ?, contract_start = ?, contract_end = ?, pic_name = ?, pic_phone = ?, address = ?, status = ? WHERE id = ?`
+      `UPDATE vendors SET name = ?, code = ?, category = ?, contract_number = ?, contract_start = ?, contract_end = ?, pic_name = ?, pic_phone = ?, address = ?, status = ? WHERE id = ?`
     ).run(
       data.name,
       data.code,
+      category,
       data.contractNumber || '',
       cStart,
       cEnd,
@@ -1435,13 +1538,12 @@ export function updateVendor(id, data) {
     if (!fallbackStore.vendors) fallbackStore.vendors = [];
     const v = fallbackStore.vendors.find((item) => item.id === id);
     if (v) {
-      Object.assign(v, data, { contractStart: cStart, contractEnd: cEnd });
+      Object.assign(v, data, { category, contractStart: cStart, contractEnd: cEnd });
       persistFallback();
     }
   }
-  return { id, ...data, contractStart: cStart, contractEnd: cEnd };
+  return { id, ...data, category, contractStart: cStart, contractEnd: cEnd };
 }
-
 export function deleteVendor(id) {
   if (isNodeSqlite && dbEngine) {
     const ven = dbEngine.prepare('SELECT name FROM vendors WHERE id = ?').get(id);
@@ -1574,7 +1676,17 @@ export function updateUserProfile(userId, profileData) {
       updates.push('nip = ?');
       values.push(profileData.nip);
     }
-
+    if (profileData.supervisedGroups !== undefined) {
+      updates.push('supervised_groups = ?');
+      const val = profileData.supervisedGroups
+        ? (Array.isArray(profileData.supervisedGroups) ? JSON.stringify(profileData.supervisedGroups) : JSON.stringify([profileData.supervisedGroups]))
+        : null;
+      values.push(val);
+    }
+    if (profileData.supervisedVendor !== undefined && profileData.supervisedGroups === undefined) {
+      updates.push('supervised_groups = ?');
+      values.push(profileData.supervisedVendor ? JSON.stringify([profileData.supervisedVendor]) : null);
+    }
     if (updates.length > 0) {
       values.push(userId);
       dbEngine.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);

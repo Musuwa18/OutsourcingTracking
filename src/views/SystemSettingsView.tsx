@@ -40,6 +40,8 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import {
+  UserRole,
+  VendorCategory,
   Division,
   Vendor,
   OfficeLocation,
@@ -353,10 +355,12 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
   // ================= TAB: VENDORS (PERUSAHAAN PENYEDIA) =================
   const [vendorSearch, setVendorSearch] = useState('');
+  const [vendorCategoryFilter, setVendorCategoryFilter] = useState<'ALL' | VendorCategory>('ALL');
   const [vendorModalOpen, setVendorModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
   const [venName, setVenName] = useState('');
   const [venCode, setVenCode] = useState('');
+  const [venCategory, setVenCategory] = useState<VendorCategory>('vendor');
   const [venContract, setVenContract] = useState('');
   const [venStart, setVenStart] = useState('2026-01-02');
   const [venEnd, setVenEnd] = useState('2026-12-31');
@@ -409,9 +413,10 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const [newUserName, setNewUserName] = useState('');
   const [newUserNip, setNewUserNip] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'outsourcing' | 'coordinator' | 'supervisor' | 'admin'>('outsourcing');
+  const [newUserRole, setNewUserRole] = useState<UserRole>('outsourcing');
   const [newUserRoleTitle, setNewUserRoleTitle] = useState('');
-
+  const [newUserVendorName, setNewUserVendorName] = useState('');
+  const [newUserSupervisedGroup, setNewUserSupervisedGroup] = useState('ALL');
   // ================= TAB: RBAC LOCAL STATE =================
   const [localPermissions, setLocalPermissions] = useState<Record<string, RolePermissions>>(rolePermissions);
 
@@ -426,6 +431,29 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     (u) => u.role === 'supervisor' || u.role === 'admin' || u.role === 'coordinator'
   );
 
+
+  const allVendors = useMemo(() => {
+    const list = [...(vendors || [])];
+    if (!list.some((v) => v.category === 'pppk_paruh_waktu' || v.name.toLowerCase().includes('pppk'))) {
+      list.push({
+        id: 'ven-004',
+        name: 'PPPK Paruh Waktu Disdik HST',
+        code: 'PPPK-PW',
+        category: 'pppk_paruh_waktu',
+        status: 'Aktif',
+      });
+    }
+    if (!list.some((v) => v.category === 'magang' || v.name.toLowerCase().includes('magang'))) {
+      list.push({
+        id: 'ven-005',
+        name: 'Siswa / Mahasiswa Magang Disdik HST',
+        code: 'MAGANG-HST',
+        category: 'magang',
+        status: 'Aktif',
+      });
+    }
+    return list;
+  }, [vendors]);
   // ================= ACTION HANDLERS: DIVISIONS =================
   const handleOpenAddDivision = () => {
     setEditingDivision(null);
@@ -508,6 +536,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     setEditingVendor(null);
     setVenName('');
     setVenCode('');
+    setVenCategory('vendor');
     setVenContract('');
     setVenStart('2026-01-02');
     setVenEnd('2026-12-31');
@@ -522,6 +551,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     setEditingVendor(v);
     setVenName(v.name);
     setVenCode(v.code || '');
+    setVenCategory(v.category || 'vendor');
     setVenContract(v.contractNumber || '');
     setVenStart(v.contractStartDate || '2026-01-02');
     setVenEnd(v.contractEndDate || '2026-12-31');
@@ -544,6 +574,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         const res = await apiUpdateVendor(editingVendor.id, {
           name: venName.trim(),
           code: venCode.trim().toUpperCase(),
+          category: venCategory,
           contractNumber: venContract.trim(),
           contractStartDate: venStart,
           contractEndDate: venEnd,
@@ -554,9 +585,9 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         });
         const savedVendor = res?.vendor || (res?.id ? res : null);
         if (savedVendor) {
-          const updated = vendors.map((v) => (v.id === editingVendor.id ? { ...v, ...savedVendor } : v));
+          const updated = vendors.map((v) => (v.id === editingVendor.id ? { ...v, ...savedVendor, category: venCategory } : v));
           onUpdateVendors(updated);
-          onShowToast(`Data vendor "${savedVendor.name}" berhasil diperbarui.`, 'success');
+          onShowToast(`Data mitra "${savedVendor.name}" berhasil diperbarui.`, 'success');
           setVendorModalOpen(false);
         } else {
           onShowToast(res?.message || 'Gagal memperbarui vendor', 'warning');
@@ -565,6 +596,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         const res = await apiCreateVendor({
           name: venName.trim(),
           code: venCode.trim().toUpperCase(),
+          category: venCategory,
           contractNumber: venContract.trim(),
           contractStartDate: venStart,
           contractEndDate: venEnd,
@@ -575,15 +607,16 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         });
         const newVendor = res?.vendor || (res?.id ? res : null);
         if (newVendor) {
-          onUpdateVendors([...vendors, newVendor]);
-          onShowToast(`Perusahaan vendor "${newVendor.name}" berhasil ditambahkan.`, 'success');
+          onUpdateVendors([...vendors, { ...newVendor, category: venCategory }]);
+          onShowToast(`Mitra / kelompok "${newVendor.name}" berhasil ditambahkan.`, 'success');
           setVendorModalOpen(false);
         } else {
           onShowToast(res?.message || 'Gagal menambah vendor', 'warning');
         }
       }
-    } catch (err: any) {
-      onShowToast(err.message || 'Terjadi kesalahan sistem', 'warning');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Terjadi kesalahan sistem';
+      onShowToast(message, 'warning');
     } finally {
       setIsSavingVendor(false);
     }
@@ -803,34 +836,28 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   };
 
   const handleConfigureStaffLocation = (u: UserAccount) => {
-    let targetStaff = staffList.find((s) => s.id === u.id || s.nip === u.nip || s.email === u.email);
-    if (!targetStaff) {
-      const defaultLoc = locations[0] || {
-        id: 'loc-disdik-hst',
-        name: 'Kantor Dinas Pendidikan Kab. Hulu Sungai Tengah',
-        address: 'Jalan Sibli Imansyah No. 01',
-        latitude: -2.591165,
-        longitude: 115.373661,
-        radiusMeters: 100,
-      };
-      targetStaff = {
-        id: u.id,
-        nip: u.nip,
-        name: u.name,
-        email: u.email,
-        phone: u.phone || '',
-        division: u.divisionName || 'Dinas Pendidikan Kab. HST',
-        vendorName: u.vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)',
-        roleTitle: u.roleTitle,
-        assignedLocation: defaultLoc,
-        customLocation: null,
-        workspaceNote: '',
-        avatarColor: u.avatarColor || '#4f46e5',
-        initials: u.initials || u.name.slice(0, 2).toUpperCase(),
-        joinDate: '2026-01-01',
-        status: 'Aktif',
-      };
-    }
+    const existingStaff = staffList.find((s) => s.id === u.id || s.nip === u.nip || s.email === u.email);
+    const activeLoc = u.customLocation || u.assignedLocation || existingStaff?.assignedLocation || locations[0] || PRIMARY_OFFICES[0];
+    const activeNote = u.workspaceNote || existingStaff?.workspaceNote || '';
+
+    const targetStaff: StaffProfile = {
+      id: u.id,
+      nip: u.nip,
+      name: u.name,
+      email: u.email,
+      phone: u.phone || existingStaff?.phone || '',
+      division: u.divisionName || existingStaff?.division || 'Dinas Pendidikan Kab. HST',
+      vendorName: u.vendorName || existingStaff?.vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)',
+      roleTitle: u.roleTitle || existingStaff?.roleTitle || 'Tenaga Outsourcing',
+      assignedLocation: activeLoc,
+      customLocation: activeLoc,
+      workspaceNote: activeNote,
+      avatarColor: u.avatarColor || existingStaff?.avatarColor || '#4f46e5',
+      initials: u.initials || existingStaff?.initials || u.name.slice(0, 2).toUpperCase(),
+      joinDate: existingStaff?.joinDate || '2026-01-01',
+      status: (u.status === 'Nonaktif' ? 'Nonaktif' : 'Aktif') as 'Aktif' | 'Nonaktif',
+    };
+
     if (onConfigureLocation) {
       onConfigureLocation(targetStaff);
     }
@@ -903,15 +930,30 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     setIsCreatingUser(true);
     try {
       const selectedDiv = divisions[0];
+      const defaultVendor = vendors[0]?.name || 'PT Handil Bakti Utama (Mitra Disdik HST)';
+      const targetVendor = newUserRole === 'coordinator'
+        ? (newUserVendorName.trim() || defaultVendor)
+        : (newUserVendorName.trim() || defaultVendor);
+
+      const targetSupervisedGroups = newUserRole === 'coordinator'
+        ? (newUserSupervisedGroup === 'ALL' ? ['ALL'] : [newUserSupervisedGroup])
+        : [targetVendor];
+
       const created = await apiCreateUser({
         name: newUserName.trim(),
         nip: newUserNip.trim(),
         email: newUserEmail.trim(),
         role: newUserRole,
-        roleTitle: newUserRoleTitle.trim() || (newUserRole === 'outsourcing' ? 'Staf Lapangan Alih Daya' : 'Pejabat Operasional'),
-        divisionId: selectedDiv?.id || 'div-umpeg',
-        divisionName: selectedDiv?.name || 'Sub Bagian Dinas',
-        vendorName: vendors[0]?.name || 'PT Handil Bakti Utama (Mitra Disdik HST)',
+        roleTitle: newUserRoleTitle.trim() || (
+          newUserRole === 'outsourcing' ? 'Staf Lapangan Alih Daya' :
+          newUserRole === 'coordinator' ? 'Pengawas Lapangan Mitra' :
+          newUserRole === 'supervisor' ? 'Pejabat Penilai' : 'Administrator Sistem'
+        ),
+        divisionId: selectedDiv?.id || (newUserRole === 'coordinator' ? 'div-vendor' : 'div-umpeg'),
+        divisionName: selectedDiv?.name || (newUserRole === 'coordinator' ? 'Pengawas Mitra Lapangan' : 'Sub Bagian Dinas'),
+        vendorName: targetVendor,
+        supervisedGroups: targetSupervisedGroups,
+        supervisedVendor: targetSupervisedGroups[0],
         password: 'Password123!',
         customLocation: locations.find((l) => l.id === newUserLocationId) || locations[0],
       });
@@ -926,6 +968,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         divisionName: created.divisionName,
         supervisorId: created.supervisorId,
         vendorName: created.vendorName,
+        supervisedGroups: created.supervisedGroups || targetSupervisedGroups,
+        supervisedVendor: created.supervisedVendor || targetSupervisedGroups[0],
         status: 'Aktif',
         deviceBinding: null,
         lastLogin: 'Belum pernah login',
@@ -942,8 +986,11 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       setNewUserNip('');
       setNewUserEmail('');
       setNewUserRoleTitle('');
-    } catch (err: any) {
-      onShowToast(err.message || 'Gagal menambahkan akun pegawai baru.', 'warning');
+      setNewUserVendorName('');
+      setNewUserSupervisedGroup('ALL');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal menambahkan akun pegawai baru.';
+      onShowToast(message, 'warning');
     } finally {
       setIsCreatingUser(false);
     }
@@ -1031,6 +1078,10 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   });
 
   const filteredVendors = vendors.filter((v) => {
+    if (vendorCategoryFilter !== 'ALL') {
+      const vCat = v.category || 'vendor';
+      if (vCat !== vendorCategoryFilter) return false;
+    }
     if (!vendorSearch.trim()) return true;
     const q = vendorSearch.toLowerCase();
     return (
@@ -1666,13 +1717,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Master Perusahaan Penyedia Jasa (Vendor Alih Daya)</span>
+                <span>Master Vendor & Kelompok Pegawai / Mitra</span>
                 <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
-                  {vendors.length} Vendor Rekanan
+                  {vendors.length} Kelompok Terdaftar
                 </span>
               </h2>
               <p className="text-xs text-slate-500">
-                Pengelolaan badan usaha (PT / CV penyedia tenaga kerja), nomor SPK/kontrak, masa berlaku, PIC, dan rekapitulasi penempatan
+                Pengelolaan perusahaan alih daya (vendor swasta), PPPK Paruh Waktu, dan Siswa/Mahasiswa Magang
               </p>
             </div>
 
@@ -1682,7 +1733,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs self-start sm:self-auto"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Tambah Perusahaan Vendor</span>
+              <span>Tambah Mitra / Kelompok</span>
             </button>
           </div>
 
@@ -1696,6 +1747,53 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               onChange={(e) => setVendorSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
+          </div>
+          {/* Category Filter Chips */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setVendorCategoryFilter('ALL')}
+              className={`px-3 py-1.5 rounded-xl font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                vendorCategoryFilter === 'ALL'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              Semua ({vendors.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setVendorCategoryFilter('vendor')}
+              className={`px-3 py-1.5 rounded-xl font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                vendorCategoryFilter === 'vendor'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 hover:bg-blue-100 border border-blue-200/60 dark:border-blue-800/60'
+              }`}
+            >
+              🏢 Perusahaan Vendor ({vendors.filter((v) => !v.category || v.category === 'vendor').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setVendorCategoryFilter('pppk_paruh_waktu')}
+              className={`px-3 py-1.5 rounded-xl font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                vendorCategoryFilter === 'pppk_paruh_waktu'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200/60 dark:border-emerald-800/60'
+              }`}
+            >
+              🏛️ PPPK Paruh Waktu ({vendors.filter((v) => v.category === 'pppk_paruh_waktu').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setVendorCategoryFilter('magang')}
+              className={`px-3 py-1.5 rounded-xl font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                vendorCategoryFilter === 'magang'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 hover:bg-purple-100 border border-purple-200/60 dark:border-purple-800/60'
+              }`}
+            >
+              🎓 Siswa Magang ({vendors.filter((v) => v.category === 'magang').length})
+            </button>
           </div>
 
           {/* Vendors Grid */}
@@ -1719,7 +1817,22 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                           <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
                             {ven.name}
                           </h3>
-                          <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                                (ven.category || 'vendor') === 'pppk_paruh_waktu'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                                  : (ven.category || 'vendor') === 'magang'
+                                  ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
+                              }`}
+                            >
+                              {(ven.category || 'vendor') === 'pppk_paruh_waktu'
+                                ? 'PPPK Paruh Waktu'
+                                : (ven.category || 'vendor') === 'magang'
+                                ? 'Siswa / Mahasiswa Magang'
+                                : 'Perusahaan Vendor'}
+                            </span>
                             <span className="text-[10px] font-mono font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.2 rounded">
                               {ven.code || 'VND'}
                             </span>
@@ -1823,7 +1936,16 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
             <button
               type="button"
-              onClick={() => setNewUserModalOpen(true)}
+              onClick={() => {
+                setNewUserName('');
+                setNewUserNip('');
+                setNewUserEmail('');
+                setNewUserRole('outsourcing');
+                setNewUserRoleTitle('');
+                setNewUserVendorName(vendors[0]?.name || '');
+                setNewUserSupervisedGroup(vendors[0]?.name || 'ALL');
+                setNewUserModalOpen(true);
+              }}
               className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs self-start sm:self-auto"
             >
               <UserPlus className="w-3.5 h-3.5" />
@@ -1929,6 +2051,17 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                               {getSupervisorName(u.supervisorId)}
                             </span>
                           </div>
+                          <div className="text-[10px] text-teal-700 dark:text-teal-400 flex items-center gap-1 pt-0.5">
+                            <MapPin className="w-3 h-3 text-teal-600 dark:text-teal-400 shrink-0" />
+                            <span className="font-semibold truncate max-w-[160px]" title={u.customLocation?.name || u.assignedLocation?.name || 'Kantor Disdik HST'}>
+                              {u.customLocation?.name || u.assignedLocation?.name || 'Kantor Disdik HST'}
+                            </span>
+                          </div>
+                          {u.workspaceNote && (
+                            <div className="text-[9px] text-slate-400 dark:text-slate-500 italic truncate max-w-[160px]" title={u.workspaceNote}>
+                              "{u.workspaceNote}"
+                            </div>
+                          )}
                           {u.supervisorRequestStatus === 'PENDING' && (
                             <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[10px] text-amber-700 dark:text-amber-300 space-y-1">
                               <div className="flex items-center gap-1 font-bold">
@@ -3274,7 +3407,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               <div className="flex items-center gap-2">
                 <Briefcase className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  {editingVendor ? `Ubah Vendor: ${editingVendor.name}` : 'Tambah Perusahaan Vendor Baru'}
+                  {editingVendor ? `Ubah Data Mitra: ${editingVendor.name}` : 'Tambah Mitra / Kelompok Pegawai Baru'}
                 </h3>
               </div>
               <button
@@ -3289,12 +3422,12 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             <form onSubmit={handleSaveVendor} className="p-6 space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Nama Resmi Badan Usaha / Vendor
+                  Nama Resmi Badan Usaha / Kelompok Pegawai *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: PT Handil Bakti Utama"
+                  placeholder="Contoh: PT Handil Bakti Utama / PPPK Paruh Waktu Disdik"
                   value={venName}
                   onChange={(e) => setVenName(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
@@ -3304,15 +3437,45 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Kode Vendor
+                    Kategori Kelompok Pegawai *
+                  </label>
+                  <select
+                    value={venCategory}
+                    onChange={(e) => setVenCategory(e.target.value as VendorCategory)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-medium"
+                  >
+                    <option value="vendor">Perusahaan Vendor Alih Daya (PT/CV Swasta)</option>
+                    <option value="pppk_paruh_waktu">PPPK Paruh Waktu (Pemerintah Kab. HST)</option>
+                    <option value="magang">Siswa / Mahasiswa Magang (SMK / Perguruan Tinggi)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Kode Singkat / Inisial *
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="VND-HBU"
+                    placeholder="VND-HBU / PPPK-PW"
                     value={venCode}
                     onChange={(e) => setVenCode(e.target.value.toUpperCase())}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Nomor Kontrak / SK / MoU
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="027/05/SPK-OUT/DISDIK-HST/2026"
+                    value={venContract}
+                    onChange={(e) => setVenContract(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-[11px]"
                   />
                 </div>
 
@@ -3322,26 +3485,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   </label>
                   <select
                     value={venStatus}
-                    onChange={(e) => setVenStatus(e.target.value as any)}
+                    onChange={(e) => setVenStatus(e.target.value as 'Aktif' | 'Nonaktif')}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
                   >
                     <option value="Aktif">Aktif (Berjalan)</option>
                     <option value="Nonaktif">Nonaktif / Berakhir</option>
                   </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Nomor Kontrak / SPK Pengadaan
-                </label>
-                <input
-                  type="text"
-                  placeholder="027/05/SPK-OUT/DISDIK-HST/2026"
-                  value={venContract}
-                  onChange={(e) => setVenContract(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
-                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -3904,16 +4054,151 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   </label>
                   <select
                     value={newUserRole}
-                    onChange={(e) => setNewUserRole(e.target.value as any)}
+                    onChange={(e) => {
+                      const nextRole = e.target.value as UserRole;
+                      setNewUserRole(nextRole);
+                      if (nextRole === 'coordinator' && !newUserVendorName) {
+                        setNewUserVendorName(vendors[0]?.name || '');
+                      }
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
-                    <option value="outsourcing">Tenaga Outsourcing</option>
-                    <option value="coordinator">Pengawas Lapangan</option>
-                    <option value="supervisor">Supervisor KPI</option>
-                    <option value="admin">Super Admin</option>
+                    <option value="outsourcing">Tenaga Kerja Lapangan</option>
+                    <option value="coordinator">Pengawas Lapangan Mitra</option>
+                    <option value="supervisor">Pejabat Penilai Disdik</option>
+                    <option value="admin">Administrator Sistem</option>
                   </select>
                 </div>
               </div>
+
+              {/* Group / Vendor Selector berdasarkan Peran */}
+              {newUserRole === 'outsourcing' && (
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Perusahaan Vendor / Kelompok Pegawai *
+                  </label>
+                  <select
+                    required
+                    value={newUserVendorName || vendors[0]?.name || ''}
+                    onChange={(e) => setNewUserVendorName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    {allVendors.filter((v) => !v.category || v.category === 'vendor').length > 0 && (
+                      <optgroup label="🏢 Perusahaan Vendor Rekanan">
+                        {allVendors
+                          .filter((v) => !v.category || v.category === 'vendor')
+                          .map((v) => (
+                            <option key={v.id} value={v.name}>
+                              {v.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                    {allVendors.filter((v) => v.category === 'pppk_paruh_waktu').length > 0 && (
+                      <optgroup label="🏛️ Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)">
+                        {allVendors
+                          .filter((v) => v.category === 'pppk_paruh_waktu')
+                          .map((v) => (
+                            <option key={v.id} value={v.name}>
+                              {v.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                    {allVendors.filter((v) => v.category === 'magang').length > 0 && (
+                      <optgroup label="🎓 Siswa / Mahasiswa Magang">
+                        {allVendors
+                          .filter((v) => v.category === 'magang')
+                          .map((v) => (
+                            <option key={v.id} value={v.name}>
+                              {v.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+              )}
+
+              {newUserRole === 'coordinator' && (
+                <div className="space-y-3 p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60">
+                  <div>
+                    <label className="block font-semibold text-amber-900 dark:text-amber-200 mb-1">
+                      Kelompok Pegawai yang Diawasi *
+                    </label>
+                    <select
+                      required
+                      value={newUserSupervisedGroup}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewUserSupervisedGroup(val);
+                        if (val !== 'ALL' && (!newUserVendorName || newUserVendorName === 'ALL')) {
+                          setNewUserVendorName(val);
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                    >
+                      <option value="ALL">-- Semua Kelompok Pegawai (Lintas Vendor) --</option>
+                      {allVendors.filter((v) => !v.category || v.category === 'vendor').length > 0 && (
+                        <optgroup label="🏢 Perusahaan Vendor Rekanan">
+                          {allVendors
+                            .filter((v) => !v.category || v.category === 'vendor')
+                            .map((v) => (
+                              <option key={v.id} value={v.name}>
+                                {v.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      {allVendors.filter((v) => v.category === 'pppk_paruh_waktu').length > 0 && (
+                        <optgroup label="🏛️ Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)">
+                          {allVendors
+                            .filter((v) => v.category === 'pppk_paruh_waktu')
+                            .map((v) => (
+                              <option key={v.id} value={v.name}>
+                                {v.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      {allVendors.filter((v) => v.category === 'magang').length > 0 && (
+                        <optgroup label="🎓 Siswa / Mahasiswa Magang">
+                          {allVendors
+                            .filter((v) => v.category === 'magang')
+                            .map((v) => (
+                              <option key={v.id} value={v.name}>
+                                {v.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                    </select>
+                    <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1">
+                      Pengawas hanya dapat melihat presensi & menilai laporan pegawai dalam kelompok ini.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-amber-900 dark:text-amber-200 mb-1">
+                      Badan Usaha / Asal Instansi Pengawas *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Contoh: PT. YASMINE BUIH PERSADA"
+                      value={newUserVendorName}
+                      onChange={(e) => setNewUserVendorName(e.target.value)}
+                      list="vendor-suggestions"
+                      className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    />
+                    <datalist id="vendor-suggestions">
+                      {vendors.map((v) => (
+                        <option key={v.id} value={v.name} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">

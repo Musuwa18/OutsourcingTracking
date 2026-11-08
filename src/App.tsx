@@ -245,13 +245,18 @@ export default function App() {
       if (usrs && usrs.length > 0) {
         setUsers(usrs);
         localStorage.setItem('ot_users', JSON.stringify(usrs));
-        const osUsers = usrs.filter((u: any) => u.role === 'outsourcing');
-        const mappedStaff = osUsers.map((u: any) => {
-          let customLoc = undefined;
-          if (u.customLocationJson) {
-            try {
-              customLoc = typeof u.customLocationJson === 'string' ? JSON.parse(u.customLocationJson) : u.customLocationJson;
-            } catch (e) {}
+        const osUsers = usrs.filter((u: UserAccount) => u.role === 'outsourcing');
+        const mappedStaff = osUsers.map((u: UserAccount) => {
+          let customLoc = u.customLocation || u.assignedLocation;
+          if (!customLoc && typeof u === 'object' && u !== null && 'customLocationJson' in u) {
+            const candidate = u.customLocationJson;
+            if (typeof candidate === 'string') {
+              try {
+                customLoc = JSON.parse(candidate);
+              } catch (e) {}
+            } else if (candidate && typeof candidate === 'object') {
+              customLoc = candidate as OfficeLocation;
+            }
           }
           return {
             id: u.id,
@@ -545,9 +550,9 @@ export default function App() {
 
   // Route guard: Redirect supervisor if accessing admin-only tabs
   useEffect(() => {
-    if (currentRole === 'supervisor') {
+    if (currentRole === 'supervisor' || currentRole === 'coordinator') {
       if (adminTab === 'pengaturan-keamanan' || adminTab === 'audit-log') {
-        setAdminTab('persetujuan-laporan');
+        setAdminTab('monitoring-presensi');
       }
     }
   }, [currentRole, adminTab]);
@@ -765,19 +770,77 @@ export default function App() {
   const [customLocationStaff, setCustomLocationStaff] = useState<StaffProfile | null>(null);
 
   const handleStaffLocationUpdated = (staffId: string, newLocation: OfficeLocation, note?: string) => {
-    setStaffList((prev) =>
-      prev.map((s) => {
-        if (s.id === staffId || s.nip === staffId) {
+    // 1. Update staffList state & localStorage
+    setStaffList((prev) => {
+      const exists = prev.some((s) => s.id === staffId || s.nip === staffId);
+      let updated: StaffProfile[];
+      if (exists) {
+        updated = prev.map((s) => {
+          if (s.id === staffId || s.nip === staffId) {
+            return {
+              ...s,
+              assignedLocation: newLocation,
+              customLocation: newLocation,
+              workspaceNote: note !== undefined ? note : s.workspaceNote,
+            };
+          }
+          return s;
+        });
+      } else {
+        const u = users.find((user) => user.id === staffId || user.nip === staffId);
+        const newStaff: StaffProfile = {
+          id: u?.id || staffId,
+          nip: u?.nip || staffId,
+          name: u?.name || 'Staf',
+          email: u?.email || '',
+          phone: u?.phone || '',
+          division: u?.divisionName || '',
+          vendorName: u?.vendorName || '',
+          roleTitle: u?.roleTitle || 'Tenaga Outsourcing',
+          assignedLocation: newLocation,
+          customLocation: newLocation,
+          workspaceNote: note || '',
+          supervisorId: u?.supervisorId,
+          avatarColor: u?.avatarColor || '#4f46e5',
+          initials: u?.initials || 'OS',
+          joinDate: '2026-01-01',
+          status: 'Aktif',
+        };
+        updated = [newStaff, ...prev];
+      }
+      localStorage.setItem('ot_staff_list', JSON.stringify(updated));
+      return updated;
+    });
+
+    // 2. Update users state & localStorage
+    setUsers((prev) => {
+      const updated = prev.map((u) => {
+        if (u.id === staffId || u.nip === staffId) {
           return {
-            ...s,
-            assignedLocation: newLocation,
+            ...u,
             customLocation: newLocation,
-            workspaceNote: note || s.workspaceNote,
+            assignedLocation: newLocation,
+            workspaceNote: note !== undefined ? note : u.workspaceNote,
           };
         }
-        return s;
-      })
-    );
+        return u;
+      });
+      localStorage.setItem('ot_users', JSON.stringify(updated));
+      return updated;
+    });
+
+    // 3. Update currentUser if applicable
+    if (currentUser && (currentUser.id === staffId || currentUser.nip === staffId)) {
+      const updatedUser = {
+        ...currentUser,
+        customLocation: newLocation,
+        assignedLocation: newLocation,
+        workspaceNote: note !== undefined ? note : currentUser.workspaceNote,
+      };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('ot_session_user', JSON.stringify(updatedUser));
+    }
+
     addAuditLog(
       'Pembaruan Lokasi Kerja Staf',
       `Titik tugas dan ruang kerja untuk staf ${staffId} disetel ke ${newLocation.name} (Radius: ${newLocation.radiusMeters}m).`,
@@ -824,12 +887,14 @@ export default function App() {
         division: u.divisionName || '',
         vendorName: u.vendorName || '',
         roleTitle: u.roleTitle || 'Tenaga Outsourcing',
-        assignedLocation: locations[0],
+        assignedLocation: u.customLocation || u.assignedLocation || locations[0] || PRIMARY_OFFICES[0],
+        customLocation: u.customLocation || u.assignedLocation || null,
+        workspaceNote: u.workspaceNote || '',
         supervisorId: u.supervisorId,
         avatarColor: u.avatarColor || '#4f46e5',
         initials: u.initials || 'OS',
         joinDate: '2026-01-01',
-        status: (u.status === 'Nonaktif' ? 'Nonaktif' : 'Aktif') as any,
+        status: (u.status === 'Nonaktif' ? 'Nonaktif' : 'Aktif') as 'Aktif' | 'Nonaktif',
       }));
     setStaffList(activeStaff);
 
@@ -1226,6 +1291,16 @@ export default function App() {
 
   // Filtered staff list for Supervisor (strictly shows staff who selected them as supervisor or mapped by admin)
   const filteredStaffList = useMemo<StaffProfile[]>(() => {
+    if (currentUser?.role === 'coordinator') {
+      const groups = currentUser.supervisedGroups || (currentUser.vendorName ? [currentUser.vendorName] : []);
+      if (groups.includes('ALL') || groups.includes('Semua') || groups.length === 0) {
+        return staffList;
+      }
+      return staffList.filter((s) => {
+        return groups.some((g) => g.trim().toLowerCase() === s.vendorName?.trim().toLowerCase());
+      });
+    }
+
     if (currentUser?.role === 'supervisor') {
       const currentSpvId = currentUser.id;
       const currentSpvNip = currentUser.nip;
@@ -1316,6 +1391,18 @@ export default function App() {
         (n) => n.type === 'geofence_alert' || n.type === 'approval' || n.type === 'evaluation' || !n.staffId || n.userId === currentUser.id
       );
     }
+    // Pengawas Lapangan: menerima notifikasi untuk seluruh staf kelompok binaannya (cuti, lembur, geofence, laporan)
+    if (currentUser.role === 'coordinator') {
+      const groups = currentUser.supervisedGroups || (currentUser.vendorName ? [currentUser.vendorName] : []);
+      const isAll = groups.includes('ALL') || groups.includes('Semua') || groups.length === 0;
+      return notifications.filter((n) => {
+        if (!n.staffId) return true;
+        const staffObj = staffList.find((s) => s.id === n.staffId);
+        if (!staffObj) return isAll;
+        if (isAll) return true;
+        return groups.some((g) => g.trim().toLowerCase() === staffObj.vendorName?.trim().toLowerCase());
+      });
+    }
     // Staf outsourcing: hanya notifikasi pribadi miliknya
     return notifications.filter((n) => {
       if (n.staffId && n.staffId !== currentUser.id && n.staffId !== currentStaff?.id) return false;
@@ -1324,7 +1411,7 @@ export default function App() {
       if (n.title.toLowerCase().includes('laporan baru masuk') || n.title.toLowerCase().includes('menunggu konfirmasi')) return false;
       return true;
     });
-  }, [notifications, currentUser, currentStaff]);
+  }, [notifications, currentUser, currentStaff, staffList]);
 
   // Dark mode effect
   useEffect(() => {
@@ -1352,6 +1439,8 @@ export default function App() {
       currentUser?.name ||
       (currentRole === 'outsourcing'
         ? `${currentStaff?.name || 'Staf Alih Daya'} (${currentStaff?.nip || '-'})`
+        : currentRole === 'coordinator'
+        ? `Pengawas Lapangan · ${currentUser?.vendorName || 'Vendor Disdik'}`
         : currentRole === 'supervisor'
         ? 'Pejabat Penilai Disdik HST'
         : 'Admin Sistem Disdik HST');
@@ -1361,6 +1450,8 @@ export default function App() {
       currentUser?.roleTitle ||
       (currentRole === 'outsourcing'
         ? 'Tenaga Outsourcing'
+        : currentRole === 'coordinator'
+        ? 'Pengawas Lapangan Mitra'
         : currentRole === 'supervisor'
         ? 'Supervisor Operasional'
         : 'Administrator Utama');
@@ -1963,7 +2054,7 @@ export default function App() {
           <Sidebar
             currentTab={adminTab}
             onTabChange={(tab) => {
-              if (currentRole === 'supervisor' && (tab === 'pengaturan-keamanan' || tab === 'audit-log')) {
+              if ((currentRole === 'supervisor' || currentRole === 'coordinator') && (tab === 'pengaturan-keamanan' || tab === 'audit-log')) {
                 return;
               }
               setAdminTab(tab);
@@ -2106,6 +2197,8 @@ export default function App() {
             <div>
               {adminTab === 'monitoring-presensi' && (
                 <AdminAttendanceView
+                  currentUser={currentUser}
+                  vendors={vendors}
                   staffList={filteredStaffList}
                   attendanceRecords={attendanceRecords}
                   dailyReports={dailyReports}
@@ -2216,7 +2309,7 @@ export default function App() {
           if (currentRole === 'outsourcing') {
             setMobileTab(tab);
           } else {
-            if (currentRole === 'supervisor' && (tab === 'pengaturan-keamanan' || tab === 'audit-log')) {
+            if ((currentRole === 'supervisor' || currentRole === 'coordinator') && (tab === 'pengaturan-keamanan' || tab === 'audit-log')) {
               return;
             }
             setAdminTab(tab);
@@ -2300,6 +2393,7 @@ export default function App() {
       <CustomLocationModal
         isOpen={Boolean(customLocationStaff)}
         staff={customLocationStaff}
+        locations={locations}
         onClose={() => setCustomLocationStaff(null)}
         onLocationUpdated={handleStaffLocationUpdated}
         onShowToast={showToast}

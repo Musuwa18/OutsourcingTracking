@@ -61,7 +61,7 @@ export const MOCK_STAFF: StaffProfile[] = [];
 
 export const MOCK_SUPERVISOR = {
   id: 'usr-spv-umpeg',
-  nip: '19860620 2010011 008',
+  nip: '19860620 201001 1 008',
   name: 'Ahmad Humaidi, S.Pd.',
   email: 'umpeg@disdikhst.go.id',
   roleTitle: 'Kepala Sub Bagian Umum dan Kepegawaian',
@@ -70,7 +70,7 @@ export const MOCK_SUPERVISOR = {
 
 export const MOCK_ADMIN = {
   id: 'usr-pimp-001',
-  nip: '19820916 2000121 002',
+  nip: '19820916 200012 1 002',
   name: 'H. Muhammad Anhar, S.STP, ME',
   email: 'kadin@disdikhst.go.id',
   roleTitle: 'Kepala Dinas Pendidikan',
@@ -792,7 +792,7 @@ export const INITIAL_USER_ACCOUNTS: import('../types').UserAccount[] = [
   {
     id: 'usr-pimp-001',
     name: 'H. Muhammad Anhar, S.STP, ME',
-    nip: '19820916 2000121 002',
+    nip: '19820916 200012 1 002',
     email: 'kadin@disdikhst.go.id',
     role: 'admin',
     roleTitle: 'Kepala Dinas Pendidikan',
@@ -811,7 +811,7 @@ export const INITIAL_USER_ACCOUNTS: import('../types').UserAccount[] = [
   {
     id: 'usr-pimp-002',
     name: 'Salihin, S.Pd.SD',
-    nip: '19780502200604 1 017',
+    nip: '19780502 200604 1 017',
     email: 'sekretaris@disdikhst.go.id',
     role: 'supervisor',
     roleTitle: 'Sekretaris Dinas (Eselon III.a)',
@@ -830,7 +830,7 @@ export const INITIAL_USER_ACCOUNTS: import('../types').UserAccount[] = [
   {
     id: 'usr-spv-umpeg',
     name: 'Ahmad Humaidi, S.Pd.',
-    nip: '19860620 2010011 008',
+    nip: '19860620 201001 1 008',
     email: 'umpeg@disdikhst.go.id',
     role: 'supervisor',
     roleTitle: 'Kepala Sub Bagian Umum dan Kepegawaian',
@@ -849,7 +849,7 @@ export const INITIAL_USER_ACCOUNTS: import('../types').UserAccount[] = [
   {
     id: 'usr-spv-renlap',
     name: 'Muhammad Sugeng Wahyudi, A.Md',
-    nip: '19821218 2006041 008',
+    nip: '19821218 200604 1 008',
     email: 'renlap@disdikhst.go.id',
     role: 'supervisor',
     roleTitle: 'Kepala Sub Bagian Perencanaan dan Pelaporan',

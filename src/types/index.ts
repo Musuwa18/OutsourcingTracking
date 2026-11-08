@@ -1,4 +1,4 @@
-export type UserRole = 'outsourcing' | 'supervisor' | 'admin';
+export type UserRole = 'outsourcing' | 'coordinator' | 'supervisor' | 'admin';
 
 export interface Division {
   id: string;
@@ -8,10 +8,13 @@ export interface Division {
   supervisorName?: string;
 }
 
+export type VendorCategory = 'vendor' | 'pppk_paruh_waktu' | 'magang';
+
 export interface Vendor {
   id: string;
   name: string;
   code: string;
+  category?: VendorCategory;
   contractNumber?: string;
   contractStart?: string;
   contractEnd?: string;
@@ -48,6 +51,8 @@ export interface AuthUser {
   pendingSupervisorId?: string | null;
   supervisorChangeCount?: number;
   supervisorRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  supervisedGroups?: string[];
+  supervisedVendor?: string;
 }
 
 export interface OfficeLocation {
@@ -79,6 +84,8 @@ export interface StaffProfile {
   initials: string;
   joinDate: string;
   status: 'Aktif' | 'Cuti' | 'Nonaktif';
+  supervisedGroups?: string[];
+  supervisedVendor?: string;
 }
 
 export interface AiChatMessage {
@@ -292,6 +299,8 @@ export interface UserAccount {
   lastLogin?: string;
   avatarColor: string;
   initials: string;
+  supervisedGroups?: string[];
+  supervisedVendor?: string;
 }
 
 export interface ActiveSession {

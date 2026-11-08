@@ -16,6 +16,15 @@ Semua perubahan penting pada proyek **OutsourceTrack & KPI Pro** didokumentasika
   - Format Cetak Naskah Dinas (Surat Keterangan Izin/Cuti Resmi): Opsi cetak baru `surat-izin` pada modal cetak laporan dengan KOP Pemkab HST & Disdik dinamis serta tanda tangan definitif Sekretaris Dinas.
   - Skema Database SQLite `leave_requests` dan REST API endpoints: `POST /api/leave/request`, `GET /api/leave`, `PATCH /api/leave/:id/approve`, dan `GET /api/leave/quota/:staffId`.
 
+- **Perombakan Peran Koordinator / Pengawas Lapangan Mitra (`coordinator`)**:
+  - Penambahan peran baru `coordinator` pada sistem RBAC 4 level (`outsourcing`, `coordinator`, `supervisor`, `admin`).
+  - Form registrasi mandiri Pengawas Lapangan di `AuthView` dengan pemilihan kelompok binaan vendor/peserta magang (`supervisedGroups`).
+  - Hak akses supervisi khusus di `Sidebar` dan `Header`: badge status amber, akses ke Monitoring Presensi, Persetujuan Laporan, Riwayat Lembur, dan Rekapitulasi KPI.
+  - Scoping otomatis data kehadiran di `AdminAttendanceView`: Pengawas hanya melihat staf dan absensi di kelompok vendor binaannya.
+  - Mode Pantau Evaluasi 4 Pilar (*Read-Only*) di `SupervisorEvaluationView`: Menampilkan banner lock informasi; nilai bintang dikunci untuk menjamin objektivitas (penilaian definitif tetap menjadi wewenang Pejabat Penilai Disdik HST).
+  - Integrasi master pengguna di `SystemSettingsView`: Formulir pendaftaran akun koordinator dengan penugasan kelompok vendor yang diawasi.
+  - Penyimpanan persisten kolom `supervised_groups` dan prefix ID `usr-coord-...` di database SQLite.
+
 ---
 
 ## [2.4.0] - 2026-11-08

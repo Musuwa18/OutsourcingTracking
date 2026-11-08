@@ -40,7 +40,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({
       ];
     }
 
-    if (currentRole === 'supervisor') {
+    if (currentRole === 'supervisor' || currentRole === 'coordinator') {
       return [
         {
           id: 'monitoring-presensi',

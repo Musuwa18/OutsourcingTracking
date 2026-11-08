@@ -17,6 +17,7 @@ interface CustomLocationModalProps {
   isOpen: boolean;
   onClose: () => void;
   staff: StaffProfile | null;
+  locations?: OfficeLocation[];
   onLocationUpdated: (staffId: string, newLocation: OfficeLocation, note?: string) => void;
   onShowToast: (message: string, type: 'success' | 'warning' | 'info') => void;
 }
@@ -25,9 +26,11 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
   isOpen,
   onClose,
   staff,
+  locations = [],
   onLocationUpdated,
   onShowToast,
 }) => {
+  const availableOffices = locations && locations.length > 0 ? locations : PRIMARY_OFFICES;
   const [selectedPresetId, setSelectedPresetId] = useState<string>('loc-disdik-hst');
   const [isCustomMode, setIsCustomMode] = useState<boolean>(false);
   const [customName, setCustomName] = useState<string>('');
@@ -41,8 +44,10 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
   useEffect(() => {
     if (staff) {
       setWorkspaceNote(staff.workspaceNote || '');
-      const assigned = staff.assignedLocation || PRIMARY_OFFICES[0];
-      const match = PRIMARY_OFFICES.find((o) => o.id === assigned.id);
+      const assigned = staff.assignedLocation || staff.customLocation || availableOffices[0];
+      const match = availableOffices.find(
+        (o) => o.id === assigned.id || o.name.trim().toLowerCase() === (assigned.name || '').trim().toLowerCase()
+      );
       if (match) {
         setSelectedPresetId(match.id);
         setIsCustomMode(false);
@@ -50,12 +55,12 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
         setIsCustomMode(true);
         setCustomName(assigned.name || 'Lokasi Khusus');
         setCustomAddress(assigned.address || '');
-        setCustomLat(typeof assigned.latitude === 'number' ? assigned.latitude : PRIMARY_OFFICES[0].latitude);
-        setCustomLng(typeof assigned.longitude === 'number' ? assigned.longitude : PRIMARY_OFFICES[0].longitude);
+        setCustomLat(typeof assigned.latitude === 'number' ? assigned.latitude : availableOffices[0].latitude);
+        setCustomLng(typeof assigned.longitude === 'number' ? assigned.longitude : availableOffices[0].longitude);
         setCustomRadius(assigned.radiusMeters || 100);
       }
     }
-  }, [staff]);
+  }, [staff, availableOffices]);
 
   if (!isOpen || !staff) return null;
 
@@ -79,7 +84,7 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
         radiusMeters: Number(customRadius) || 100,
       };
     } else {
-      const selected = PRIMARY_OFFICES.find((o) => o.id === selectedPresetId) || PRIMARY_OFFICES[0];
+      const selected = availableOffices.find((o) => o.id === selectedPresetId) || availableOffices[0];
       locationToSave = selected;
     }
 
@@ -88,8 +93,9 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
       onLocationUpdated(staff.id, locationToSave, workspaceNote.trim());
       onShowToast(`Lokasi penugasan untuk ${staff.name} berhasil diperbarui.`, 'success');
       onClose();
-    } catch (err: any) {
-      onShowToast(err?.message || 'Gagal menyimpan perubahan lokasi.', 'warning');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal menyimpan perubahan lokasi.';
+      onShowToast(msg, 'warning');
     } finally {
       setIsSubmitting(false);
     }
@@ -160,7 +166,7 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
                 Pilih Titik Penugasan Resmi Disdik HST:
               </label>
               <div className="space-y-2">
-                {PRIMARY_OFFICES.map((office) => {
+                {availableOffices.map((office) => {
                   const isSelected = selectedPresetId === office.id;
                   return (
                     <div

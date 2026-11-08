@@ -3,7 +3,7 @@
  * Menghubungkan frontend React ke backend Express REST API di Port 3010
  * Dinas Pendidikan Kabupaten Hulu Sungai Tengah
  */
-import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings, OvertimeRecord, LeaveRequest, LeaveQuota, NotificationItem } from '../types';
+import { AuthUser, UserRole, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings, OvertimeRecord, LeaveRequest, LeaveQuota, NotificationItem } from '../types';
 
 const API_BASE = '/api';
 
@@ -44,12 +44,14 @@ export async function apiRegister(userData: {
   name: string;
   email: string;
   password: string;
-  role: 'outsourcing' | 'supervisor';
+  role: UserRole;
   divisionId: string;
   divisionName?: string;
   roleTitle?: string;
   phone?: string;
   vendorName?: string;
+  supervisedGroups?: string[];
+  supervisedVendor?: string;
   deviceId?: string;
   customLocation?: OfficeLocation | null;
   supervisorId?: string;
@@ -294,7 +296,7 @@ export async function apiUpdateStaffLocation(
   staffId: string,
   customLocation: OfficeLocation | null,
   workspaceNote?: string
-): Promise<void> {
+): Promise<{ success: boolean; user?: UserAccount; message?: string }> {
   const res = await fetch(`${API_BASE}/staff/${encodeURIComponent(staffId)}/location`, {
     method: 'PUT',
     headers: getAuthHeaders(),
@@ -305,6 +307,7 @@ export async function apiUpdateStaffLocation(
   if (!res.ok) {
     throw new Error(data.error || 'Gagal menyimpan pengaturan lokasi staf.');
   }
+  return data;
 }
 
 // 8. Update Staff Direct Supervisor

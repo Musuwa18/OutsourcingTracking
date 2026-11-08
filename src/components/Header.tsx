@@ -75,24 +75,32 @@ export const Header: React.FC<HeaderProps> = ({
     };
   }, [profileMenuOpen]);
 
-  const roleLabels: Record<UserRole, { title: string; subtitle: string; badge: string }> = {
+  const roleLabels: Record<UserRole, { title: string; subtitle: string; badge: string; badgeColor: string }> = {
     outsourcing: {
       title: currentUser?.name || 'Tenaga Alih Daya',
       subtitle: currentUser?.roleTitle || 'Tenaga Outsourcing Disdik HST',
       badge: 'Staf Lapangan',
+      badgeColor: 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-800/50',
+    },
+    coordinator: {
+      title: currentUser?.name || 'Pengawas Lapangan',
+      subtitle: `Pengawas Lapangan · ${currentUser?.vendorName || 'Vendor Disdik'}`,
+      badge: 'Pengawas Lapangan',
+      badgeColor: 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800/60',
     },
     supervisor: {
       title: currentUser?.name || 'Pejabat Penilai',
       subtitle: currentUser?.roleTitle || 'Atasan / Supervisor Operasional',
       badge: 'Supervisor',
+      badgeColor: 'bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/50',
     },
     admin: {
       title: currentUser?.name || 'Admin Sistem Disdik HST',
       subtitle: currentUser?.roleTitle || 'Super Administrator TI',
       badge: 'Administrator',
+      badgeColor: 'bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200/50 dark:border-purple-800/50',
     },
   };
-
   const currentRoleInfo = roleLabels[currentRole];
 
   return (
@@ -214,7 +222,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <span className="text-slate-500 dark:text-slate-400 truncate">
                       {currentUser?.divisionName || 'Dinas Pendidikan Kab. HST'}
                     </span>
-                    <span className="px-1.5 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold shrink-0">
+                    <span className={`px-1.5 py-0.5 rounded-md font-semibold shrink-0 ${currentRoleInfo.badgeColor}`}>
                       {currentRoleInfo.badge}
                     </span>
                   </div>

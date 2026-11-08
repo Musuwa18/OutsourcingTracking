@@ -14,14 +14,17 @@ import {
   Sparkles,
   Settings,
   HeartPulse,
+  Briefcase,
 } from 'lucide-react';
-import { AttendanceRecord, StaffProfile, DailyWorkReport, FieldCheckinRecord, LeaveRequest } from '../types';
+import { AttendanceRecord, StaffProfile, DailyWorkReport, FieldCheckinRecord, LeaveRequest, AuthUser, Vendor } from '../types';
 import { exportAttendanceToCSV } from '../utils/export';
 import { getTodayDateStr } from '../utils/date';
 import { DetailRiwayatModal } from '../components/DetailRiwayatModal';
 import { GeofenceBreachAlertBanner } from '../components/GeofenceBreachAlertBanner';
 
 interface AdminAttendanceViewProps {
+  currentUser?: AuthUser | null;
+  vendors?: Vendor[];
   staffList: StaffProfile[];
   attendanceRecords: AttendanceRecord[];
   dailyReports: DailyWorkReport[];
@@ -32,8 +35,9 @@ interface AdminAttendanceViewProps {
   leaveRecords?: LeaveRequest[];
   onNavigateToLeaves?: () => void;
 }
-
 export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
+  currentUser,
+  vendors,
   staffList,
   attendanceRecords,
   dailyReports,
@@ -46,8 +50,34 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDivision, setSelectedDivision] = useState('ALL');
+  const [selectedVendorGroup, setSelectedVendorGroup] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [selectedDate, setSelectedDate] = useState(getTodayDateStr());
+
+  const isCoordinator = currentUser?.role === 'coordinator';
+  const supervisedGroups = useMemo(() => {
+    if (!currentUser || currentUser.role !== 'coordinator') return [];
+    if (currentUser.supervisedGroups && currentUser.supervisedGroups.length > 0) {
+      return currentUser.supervisedGroups;
+    }
+    return currentUser.vendorName ? [currentUser.vendorName] : [];
+  }, [currentUser]);
+
+  const availableVendorNames = useMemo(() => {
+    if (isCoordinator && !supervisedGroups.includes('ALL') && supervisedGroups.length > 0) {
+      return supervisedGroups;
+    }
+    const set = new Set<string>();
+    staffList.forEach((s) => {
+      if (s.vendorName) set.add(s.vendorName);
+    });
+    if (vendors) {
+      vendors.forEach((v) => {
+        if (v.status === 'Aktif' || !v.status) set.add(v.name);
+      });
+    }
+    return Array.from(set);
+  }, [staffList, vendors, isCoordinator, supervisedGroups]);
 
   // Inspection modal state
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
@@ -77,9 +107,8 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
     if (selectedDate && rec.date !== selectedDate) return false;
     const staff = staffMap.get(rec.staffId);
     if (!staff) return false;
-
     if (selectedDivision !== 'ALL' && staff.division !== selectedDivision) return false;
-
+    if (selectedVendorGroup !== 'ALL' && staff.vendorName !== selectedVendorGroup) return false;
     if (selectedStatus === 'BREACH') {
       if (rec.locationCoords.withinRadius || rec.isFieldDuty) return false;
     } else if (selectedStatus !== 'ALL' && rec.status !== selectedStatus) {
@@ -197,6 +226,27 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
           )}
         </div>
       )}
+      {/* Coordinator Supervisory Scope Banner */}
+      {isCoordinator && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-300 dark:border-amber-800/80 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+              <Briefcase className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-bold text-amber-950 dark:text-amber-200">
+                Area Supervisi Pengawas: {supervisedGroups.includes('ALL') || supervisedGroups.length === 0 ? 'Semua Kelompok Pegawai' : supervisedGroups.join(', ')}
+              </div>
+              <div className="text-[11px] text-amber-800/90 dark:text-amber-300 font-semibold truncate">
+                Monitoring presensi dibatasi hanya pada staf dalam kelompok penugasan binaan Anda.
+              </div>
+            </div>
+          </div>
+          <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold shrink-0 border border-amber-300/60 dark:border-amber-800/60">
+            {filteredRecords.length} Personel Terpantau
+          </span>
+        </div>
+      )}
 
       {/* Metric Counters Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
@@ -250,9 +300,9 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
 
       {/* Filter & Search Bar */}
       <div className="p-4 glass-card space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           {/* Search Input */}
-          <div className="sm:col-span-2 relative">
+          <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
@@ -273,6 +323,26 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
               {divisions.map((div) => (
                 <option key={div} value={div}>
                   {div === 'ALL' ? 'Semua Divisi' : div}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Vendor / Kelompok Filter */}
+          <div>
+            <select
+              value={selectedVendorGroup}
+              onChange={(e) => setSelectedVendorGroup(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            >
+              <option value="ALL">
+                {isCoordinator && !supervisedGroups.includes('ALL') && supervisedGroups.length > 0
+                  ? 'Semua Kelompok Binaan'
+                  : 'Semua Kelompok / Vendor'}
+              </option>
+              {availableVendorNames.map((vName) => (
+                <option key={vName} value={vName}>
+                  {vName}
                 </option>
               ))}
             </select>

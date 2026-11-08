@@ -20,7 +20,7 @@ import {
   Layers,
   MapPin,
 } from 'lucide-react';
-import { AuthUser, Division, Vendor, OfficeLocation, OUTSOURCING_JOB_ROLES } from '../types';
+import { AuthUser, UserRole, Division, Vendor, OfficeLocation, OUTSOURCING_JOB_ROLES } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
 import { apiLogin, apiRegister, apiBindDevice, apiFetchOffices } from '../services/api';
 import { getDeviceFingerprint } from '../utils/fingerprint';
@@ -112,14 +112,41 @@ export const AuthView: React.FC<AuthViewProps> = ({
     ? locations
     : (serverLocations.length > 0 ? serverLocations : PRIMARY_OFFICES);
   
-  const availableVendors = (vendors && vendors.length > 0)
-    ? vendors.map((v) => v.name)
-    : [
-        'PT Handil Bakti Utama (Mitra Disdik HST)',
-        'CV Murakata Sarana Mandiri',
-        'Dinas Pendidikan Kab. HST'
-      ];
+  const fallbackVendors: Vendor[] = [
+    { id: 'ven-001', name: 'PT Handil Bakti Utama (Mitra Disdik HST)', code: 'HBU-HST', category: 'vendor', status: 'Aktif' },
+    { id: 'ven-002', name: 'CV Murakata Sarana Mandiri', code: 'MSM-HST', category: 'vendor', status: 'Aktif' },
+    { id: 'ven-003', name: 'PT. YASMINE BUIH PERSADA', code: 'YBP-HST', category: 'vendor', status: 'Aktif' },
+    { id: 'ven-004', name: 'PPPK Paruh Waktu Disdik HST', code: 'PPPK-PW', category: 'pppk_paruh_waktu', status: 'Aktif' },
+    { id: 'ven-005', name: 'Siswa / Mahasiswa Magang Disdik HST', code: 'MAGANG-HST', category: 'magang', status: 'Aktif' },
+  ];
+  const activeVendors = React.useMemo(() => {
+    const list = [...(vendors && vendors.length > 0 ? vendors : fallbackVendors)];
+    if (!list.some((v) => v.category === 'pppk_paruh_waktu' || v.name.toLowerCase().includes('pppk'))) {
+      list.push({
+        id: 'ven-004',
+        name: 'PPPK Paruh Waktu Disdik HST',
+        code: 'PPPK-PW',
+        category: 'pppk_paruh_waktu',
+        status: 'Aktif',
+      });
+    }
+    if (!list.some((v) => v.category === 'magang' || v.name.toLowerCase().includes('magang'))) {
+      list.push({
+        id: 'ven-005',
+        name: 'Siswa / Mahasiswa Magang Disdik HST',
+        code: 'MAGANG-HST',
+        category: 'magang',
+        status: 'Aktif',
+      });
+    }
+    return list;
+  }, [vendors]);
+  const vendorRekanan = activeVendors.filter((v) => !v.category || v.category === 'vendor');
+  const pppkParuhWaktu = activeVendors.filter((v) => v.category === 'pppk_paruh_waktu');
+  const magangGroup = activeVendors.filter((v) => v.category === 'magang');
+  const availableVendors = activeVendors.map((v) => v.name);
 
+  const [regRole, setRegRole] = useState<'outsourcing' | 'coordinator'>('outsourcing');
   const [activeTab, setActiveTab] = useState<'login' | 'register-os'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -250,22 +277,25 @@ export const AuthView: React.FC<AuthViewProps> = ({
         nip: osNip.trim(),
         email: osEmail.trim().toLowerCase(),
         password: osPassword,
-        role: 'outsourcing',
+        role: regRole,
         divisionId: osDivisionId,
-        divisionName: selectedDiv?.name || 'Sub Bagian Dinas',
-        roleTitle: osRoleTitle.trim() || 'Administrasi Perkantoran',
+        divisionName: selectedDiv?.name || (regRole === 'coordinator' ? 'Pengawas Mitra Lapangan' : 'Sub Bagian Dinas'),
+        roleTitle: regRole === 'coordinator' ? 'Pengawas Lapangan Mitra' : (osRoleTitle.trim() || 'Administrasi Perkantoran'),
         phone: osPhone.trim(),
         vendorName: osVendor.trim(),
+        supervisedGroups: [osVendor.trim()],
+        supervisedVendor: osVendor.trim(),
         deviceId,
         customLocation: selectedLoc,
         workspaceNote: `Penugasan Resmi: ${selectedLoc.name}`,
       });
 
       localStorage.setItem('ot_last_email', result.user.email);
-      onShowToast(`Pendaftaran berhasil! Terikat pada lokasi: ${selectedLoc.name}`, 'success');
+      onShowToast(`Pendaftaran ${regRole === 'coordinator' ? 'Pengawas Lapangan' : 'Staf'} berhasil! Terikat pada lokasi: ${selectedLoc.name}`, 'success');
       onLoginSuccess(result.user, result.token);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Pendaftaran gagal.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Pendaftaran gagal.';
+      setErrorMessage(message);
     } finally {
       setLoading(false);
     }
@@ -326,7 +356,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              Daftar Staf
+              Pendaftaran
             </button>
           </div>
 
@@ -352,7 +382,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                       type="text"
                       value={loginIdentifier}
                       onChange={(e) => setLoginIdentifier(e.target.value)}
-                      placeholder="Contoh: OS-IT-001 atau budi.it@outsource.id"
+                      placeholder="NIP (18 digit), Email, atau ID Staf"
                       className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium placeholder:text-slate-400"
                       required
                     />
@@ -420,10 +450,54 @@ export const AuthView: React.FC<AuthViewProps> = ({
           {/* ===================== TAB 2: REGISTER OUTSOURCING ===================== */}
           {activeTab === 'register-os' && (
             <form onSubmit={handleRegisterOsSubmit} className="space-y-4">
-              <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/40 text-xs text-indigo-900 dark:text-indigo-200">
-                <strong>Registrasi Tenaga Outsourcing:</strong> Akun ini akan terkunci pada antarmuka PWA mobile dan terikat pada Sub Bagian, Atasan Langsung, serta Geofence lokasi kerja yang dipilih.
+              {/* Selector Tipe Pendaftaran */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Tipe Akun Pendaftaran *
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setRegRole('outsourcing')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      regRole === 'outsourcing'
+                        ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow-xs border border-indigo-200/50 dark:border-indigo-800/50'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    <span>Tenaga Kerja / Staf Lapangan</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRegRole('coordinator')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      regRole === 'coordinator'
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Pengawas Lapangan Mitra</span>
+                  </button>
+                </div>
               </div>
 
+              <div className={`p-3 rounded-xl border text-xs leading-relaxed ${
+                regRole === 'coordinator'
+                  ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-900 dark:text-amber-200'
+                  : 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-900/40 text-indigo-900 dark:text-indigo-200'
+              }`}>
+                {regRole === 'coordinator' ? (
+                  <>
+                    <strong>Registrasi Pengawas Lapangan Mitra:</strong> Akun ini bertugas memantau presensi, memverifikasi laporan kerja, dan mengevaluasi capaian kinerja KPI staf pada kelompok binaan yang dipilih.
+                  </>
+                ) : (
+                  <>
+                    <strong>Registrasi Tenaga Kerja Lapangan:</strong> Akun ini akan terkunci pada antarmuka PWA mobile dan terikat pada Sub Bagian, Atasan Langsung, serta Geofence lokasi kerja yang dipilih.
+                  </>
+                )}
+              </div>
               <div>
                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
                   Pilih Sub Bagian / Divisi Penempatan *
@@ -442,23 +516,32 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  Pilih Jenis Pekerjaan / Formasi Tugas *
-                </label>
-                <select
-                  value={osRoleTitle}
-                  onChange={(e) => setOsRoleTitle(e.target.value)}
-                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
-                  required
-                >
-                  {OUTSOURCING_JOB_ROLES.map((job) => (
-                    <option key={job} value={job} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                      {job}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {regRole === 'outsourcing' ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    Pilih Jenis Pekerjaan / Formasi Tugas *
+                  </label>
+                  <select
+                    value={osRoleTitle}
+                    onChange={(e) => setOsRoleTitle(e.target.value)}
+                    className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                    required
+                  >
+                    {OUTSOURCING_JOB_ROLES.map((job) => (
+                      <option key={job} value={job} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                        {job}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between">
+                  <span className="font-semibold">Jabatan Peran:</span>
+                  <span className="font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300">
+                    Pengawas Lapangan Mitra
+                  </span>
+                </div>
+              )}
 
               {/* Pilihan Lokasi Tempat Bekerja (Geofence Target) */}
               <div>
@@ -557,22 +640,50 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  Perusahaan Vendor Mitra *
+                  {regRole === 'coordinator'
+                    ? 'Pilih Kelompok Pegawai / Vendor yang Diawasi *'
+                    : 'Mitra Vendor / Kelompok Penugasan *'}
                 </label>
                 <select
                   value={osVendor}
                   onChange={(e) => setOsVendor(e.target.value)}
-                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium cursor-pointer"
                   required
                 >
-                  {availableVendors.map((vName) => (
-                    <option key={vName} value={vName} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                      {vName}
-                    </option>
-                  ))}
+                  {vendorRekanan.length > 0 && (
+                    <optgroup label="🏢 Perusahaan Vendor Rekanan">
+                      {vendorRekanan.map((v) => (
+                        <option key={v.id} value={v.name} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                          {v.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {pppkParuhWaktu.length > 0 && (
+                    <optgroup label="🏛️ Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)">
+                      {pppkParuhWaktu.map((v) => (
+                        <option key={v.id} value={v.name} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                          {v.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {magangGroup.length > 0 && (
+                    <optgroup label="🎓 Siswa / Mahasiswa Magang">
+                      {magangGroup.map((v) => (
+                        <option key={v.id} value={v.name} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                          {v.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
+                {regRole === 'coordinator' && (
+                  <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1">
+                    Anda akan memiliki akses supervisi ke seluruh staf yang terdaftar di kelompok ini.
+                  </p>
+                )}
               </div>
-
               {/* Kata Sandi & Konfirmasi Kata Sandi dengan Ikon Mata */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>

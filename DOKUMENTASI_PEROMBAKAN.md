@@ -198,6 +198,23 @@ Staf alih daya (outsourcing) memiliki hak atas izin sakit (berdasarkan surat dok
 #### 3. Database & REST Endpoints
 - Tabel SQLite: `leave_requests` (kolom: `id`, `staff_id`, `leave_type`, `start_date`, `end_date`, `total_days`, `reason`, `attachment_url`, `status`, `supervisor_notes`, dll).
 - REST API: `POST /api/leave/request`, `GET /api/leave`, `PATCH /api/leave/:id/approve`, dan `GET /api/leave/quota/:staffId`.
+
+---
+
+### Modul G: Peran Pengawas Lapangan Mitra / Koordinator (`coordinator`)
+
+#### 1. Latar Belakang & Pembagian Kewenangan
+Dalam ekosistem outsourcing Disdik HST, terdapat pihak ketiga (mitra vendor atau koordinator penempatan magang) yang memerlukan akses pemantauan lapangan untuk staf binaannya tanpa memiliki wewenang administratif internal SKPD atau hak memberikan skor resmi kedinasan.
+
+#### 2. Rincian Fitur & Hak Akses
+1. **Registrasi Mandiri Pengawas Lapangan**: Di `AuthView`, calon pengawas dapat mendaftar dengan memilih kelompok binaan (`supervisedGroups`, misal: PT YASMINE BUIH PERSADA, PT HANDIL BAKTI UTAMA, atau Program Magang).
+2. **Scoping Presensi Lapangan (`AdminAttendanceView`)**: Pengawas hanya dapat memantau presensi staf yang berada di bawah kelompok binaannya, dilengkapi banner informasi supervisi mitra.
+3. **Mode Pantau Evaluasi KPI 4 Pilar (Read-Only di `SupervisorEvaluationView`)**:
+   - Form evaluasi dikunci (bintang tidak dapat diedit) untuk menjaga objektivitas.
+   - Nilai kualitatif resmi hanya diisi oleh Pejabat Penilai Disdik HST.
+   - Tab lembur dan izin menampilkan riwayat pembebanan vendor (*riwayat beban vendor*).
+4. **UI & Navigasi Khusus**: Badge amber "Pengawas Lapangan" di header, dan sidebar berlabel *"Supervisi Pengawas Lapangan"*.
+5. **Penyimpanan Database**: Kolom `supervised_groups` dan `supervised_vendor` di tabel `users` SQLite dengan ID prefix `usr-coord-...`.
 ---
 
 ## 3. Log Riwayat Commit Git (Fase November 2026)
