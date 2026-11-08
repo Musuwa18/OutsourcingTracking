@@ -185,6 +185,34 @@ if (isNodeSqlite && dbEngine) {
       verified_by TEXT DEFAULT 'Sistem GPS WebRTC',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS overtime_requests (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL,
+      staff_name TEXT NOT NULL,
+      staff_nip TEXT,
+      division_id TEXT NOT NULL,
+      division_name TEXT,
+      supervisor_id TEXT NOT NULL,
+      supervisor_name TEXT,
+      date TEXT NOT NULL,
+      start_time_plan TEXT,
+      estimated_hours REAL,
+      reason TEXT NOT NULL,
+      status TEXT DEFAULT 'PENDING',
+      supervisor_notes TEXT,
+      approved_at TEXT,
+      clock_in_time TEXT,
+      clock_in_selfie_url TEXT,
+      clock_in_coords TEXT,
+      clock_out_time TEXT,
+      clock_out_selfie_url TEXT,
+      clock_out_coords TEXT,
+      actual_duration_minutes INTEGER DEFAULT 0,
+      work_summary TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Migrasi aman untuk kolom baru users jika database sudah ada sebelumnya
@@ -1928,6 +1956,225 @@ export function listFieldCheckins(filters = {}) {
       return true;
     });
   }
+}
+
+// ==========================================================
+// TUGAS LEMBUR RESMI / OVERTIME ENGINE PRO
+// ==========================================================
+function mapOvertimeRow(r) {
+  let clockInCoords = undefined;
+  if (r.clock_in_coords) {
+    try {
+      clockInCoords = typeof r.clock_in_coords === 'string' ? JSON.parse(r.clock_in_coords) : r.clock_in_coords;
+    } catch (e) {}
+  }
+  let clockOutCoords = undefined;
+  if (r.clock_out_coords) {
+    try {
+      clockOutCoords = typeof r.clock_out_coords === 'string' ? JSON.parse(r.clock_out_coords) : r.clock_out_coords;
+    } catch (e) {}
+  }
+
+  return {
+    id: r.id,
+    staffId: r.staff_id,
+    staffName: r.staff_name,
+    staffNip: r.staff_nip || '',
+    divisionId: r.division_id,
+    divisionName: r.division_name || '',
+    supervisorId: r.supervisor_id,
+    supervisorName: r.supervisor_name || '',
+    date: r.date,
+    startTimePlan: r.start_time_plan || '',
+    estimatedHours: Number(r.estimated_hours) || 1,
+    reason: r.reason,
+    status: r.status || 'PENDING',
+    supervisorNotes: r.supervisor_notes || '',
+    approvedAt: r.approved_at || null,
+    clockInTime: r.clock_in_time || null,
+    clockInSelfieUrl: r.clock_in_selfie_url || null,
+    clockInCoords,
+    clockOutTime: r.clock_out_time || null,
+    clockOutSelfieUrl: r.clock_out_selfie_url || null,
+    clockOutCoords,
+    actualDurationMinutes: Number(r.actual_duration_minutes) || 0,
+    workSummary: r.work_summary || '',
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export function createOvertimeRequest(data) {
+  const now = new Date().toISOString();
+  const id = data.id || `ovt-${Date.now()}`;
+  const staff = getUserById(data.staffId);
+  const staffName = data.staffName || staff?.name || 'Tenaga Outsourcing';
+  const staffNip = data.staffNip || staff?.nip || '';
+  const divisionId = data.divisionId || staff?.divisionId || 'div-renlap';
+  const divisionName = data.divisionName || staff?.divisionName || '';
+  const supervisorId = data.supervisorId || staff?.supervisorId || 'usr-spv-renlap';
+  const supervisor = getUserById(supervisorId);
+  const supervisorName = data.supervisorName || supervisor?.name || 'Atasan Penilai';
+  const date = data.date || now.slice(0, 10);
+  const startTimePlan = data.startTimePlan || '17:00';
+  const estimatedHours = Number(data.estimatedHours) || 1;
+  const reason = data.reason || 'Penyelesaian tugas kedinasan mendesak';
+  const status = 'PENDING';
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      INSERT INTO overtime_requests (
+        id, staff_id, staff_name, staff_nip, division_id, division_name,
+        supervisor_id, supervisor_name, date, start_time_plan, estimated_hours,
+        reason, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, data.staffId, staffName, staffNip, divisionId, divisionName,
+      supervisorId, supervisorName, date, startTimePlan, estimatedHours,
+      reason, status, now, now
+    );
+  } else {
+    if (!fallbackStore.overtime_requests) fallbackStore.overtime_requests = [];
+    fallbackStore.overtime_requests.push({
+      id, staffId: data.staffId, staffName, staffNip, divisionId, divisionName,
+      supervisorId, supervisorName, date, startTimePlan, estimatedHours,
+      reason, status, createdAt: now, updatedAt: now
+    });
+    persistFallback();
+  }
+
+  return getOvertimeById(id);
+}
+
+export function getOvertimeById(id) {
+  if (isNodeSqlite && dbEngine) {
+    const row = dbEngine.prepare('SELECT * FROM overtime_requests WHERE id = ?').get(id);
+    return row ? mapOvertimeRow(row) : null;
+  } else {
+    const list = fallbackStore.overtime_requests || [];
+    return list.find((o) => o.id === id) || null;
+  }
+}
+
+export function listOvertimeRequests(filters = {}) {
+  const { staffId, supervisorId, date, status } = filters;
+  if (isNodeSqlite && dbEngine) {
+    let query = 'SELECT * FROM overtime_requests WHERE 1=1';
+    const params = [];
+    if (staffId) {
+      query += ' AND staff_id = ?';
+      params.push(staffId);
+    }
+    if (supervisorId) {
+      query += ' AND supervisor_id = ?';
+      params.push(supervisorId);
+    }
+    if (date) {
+      query += ' AND date = ?';
+      params.push(date);
+    }
+    if (status) {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+    query += ' ORDER BY date DESC, created_at DESC';
+    const rows = dbEngine.prepare(query).all(...params);
+    return rows.map((r) => mapOvertimeRow(r));
+  } else {
+    return (fallbackStore.overtime_requests || []).filter((r) => {
+      if (staffId && r.staffId !== staffId) return false;
+      if (supervisorId && r.supervisorId !== supervisorId) return false;
+      if (date && r.date !== date) return false;
+      if (status && r.status !== status) return false;
+      return true;
+    });
+  }
+}
+
+export function approveOvertimeRequest(id, { approved, supervisorNotes }) {
+  const now = new Date().toISOString();
+  const newStatus = approved ? 'APPROVED' : 'REJECTED';
+  const notes = supervisorNotes || (approved ? 'Disetujui untuk dilaksanakan di kantor dinas.' : 'Permohonan lembur belum dapat disetujui.');
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      UPDATE overtime_requests
+      SET status = ?, supervisor_notes = ?, approved_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(newStatus, notes, approved ? now : null, now, id);
+  } else {
+    const req = (fallbackStore.overtime_requests || []).find((o) => o.id === id);
+    if (req) {
+      req.status = newStatus;
+      req.supervisorNotes = notes;
+      req.approvedAt = approved ? now : null;
+      req.updatedAt = now;
+      persistFallback();
+    }
+  }
+  return getOvertimeById(id);
+}
+
+export function startOvertime(id, { clockInTime, selfieUrl, coords }) {
+  const now = new Date().toISOString();
+  const savedSelfie = saveBase64Image(selfieUrl, 'attendance');
+  const coordsJson = coords ? JSON.stringify(coords) : null;
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      UPDATE overtime_requests
+      SET status = 'IN_PROGRESS',
+          clock_in_time = ?,
+          clock_in_selfie_url = ?,
+          clock_in_coords = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(clockInTime, savedSelfie, coordsJson, now, id);
+  } else {
+    const req = (fallbackStore.overtime_requests || []).find((o) => o.id === id);
+    if (req) {
+      req.status = 'IN_PROGRESS';
+      req.clockInTime = clockInTime;
+      req.clockInSelfieUrl = savedSelfie;
+      req.clockInCoords = coords;
+      req.updatedAt = now;
+      persistFallback();
+    }
+  }
+  return getOvertimeById(id);
+}
+
+export function finishOvertime(id, { clockOutTime, selfieUrl, coords, workSummary, durationMinutes }) {
+  const now = new Date().toISOString();
+  const savedSelfie = saveBase64Image(selfieUrl, 'reports');
+  const coordsJson = coords ? JSON.stringify(coords) : null;
+  const duration = Number(durationMinutes) || 60;
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      UPDATE overtime_requests
+      SET status = 'COMPLETED',
+          clock_out_time = ?,
+          clock_out_selfie_url = ?,
+          clock_out_coords = ?,
+          work_summary = ?,
+          actual_duration_minutes = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(clockOutTime, savedSelfie, coordsJson, workSummary || '', duration, now, id);
+  } else {
+    const req = (fallbackStore.overtime_requests || []).find((o) => o.id === id);
+    if (req) {
+      req.status = 'COMPLETED';
+      req.clockOutTime = clockOutTime;
+      req.clockOutSelfieUrl = savedSelfie;
+      req.clockOutCoords = coords;
+      req.workSummary = workSummary || '';
+      req.actualDurationMinutes = duration;
+      req.updatedAt = now;
+      persistFallback();
+    }
+  }
+  return getOvertimeById(id);
 }
 
 // DAILY REPORTS

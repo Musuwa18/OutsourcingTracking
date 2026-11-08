@@ -18,9 +18,8 @@ import {
   Coffee,
   Moon,
 } from 'lucide-react';
-import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, FieldCheckinRecord } from '../types';
-import { PRIMARY_OFFICES } from '../utils/geo';
-import { getDayOfWeekKey, getTodayDateStr } from '../utils/date';
+import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, FieldCheckinRecord, OvertimeRecord } from '../types';
+import { getDayOfWeekKey, getTodayDateStr, getCurrentWitaTimeStr } from '../utils/date';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { WatermarkCameraModal } from '../components/WatermarkCameraModal';
 import { AiDuplicateValidationModal } from '../components/AiDuplicateValidationModal';
@@ -45,6 +44,32 @@ interface StaffHomeViewProps {
   onBreakIn?: (selfieBase64: string, locationData: any) => void;
   onClockOut: (selfieBase64: string, locationData: any) => void;
   onSubmitReport: (newReport: Omit<DailyWorkReport, 'id' | 'createdAt'>) => void;
+  overtimeRecords?: OvertimeRecord[];
+  onSubmitOvertimeRequest?: (data: {
+    staffId: string;
+    staffName?: string;
+    staffNip?: string;
+    divisionId?: string;
+    divisionName?: string;
+    supervisorId?: string;
+    supervisorName?: string;
+    date: string;
+    startTimePlan?: string;
+    estimatedHours: number;
+    reason: string;
+  }) => Promise<void> | void;
+  onStartOvertime?: (id: string, payload: {
+    clockInTime: string;
+    selfieUrl: string;
+    coords?: Partial<OvertimeRecord['clockInCoords']>;
+  }) => Promise<void> | void;
+  onFinishOvertime?: (id: string, payload: {
+    clockOutTime: string;
+    selfieUrl: string;
+    coords?: Partial<OvertimeRecord['clockOutCoords']>;
+    workSummary: string;
+    durationMinutes: number;
+  }) => Promise<void> | void;
 }
 export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   staff,
@@ -64,6 +89,10 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   onBreakIn,
   onClockOut,
   onSubmitReport,
+  overtimeRecords = [],
+  onSubmitOvertimeRequest,
+  onStartOvertime,
+  onFinishOvertime,
 }) => {
   const safeOffice = staff?.assignedLocation || PRIMARY_OFFICES[0];
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
@@ -139,6 +168,127 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
     todayAttendance.clockInTime >= '18:00' &&
     todayAttendance.date !== getTodayDateStr()
   );
+  // Overtime Engine State
+  const [overtimeModalOpen, setOvertimeModalOpen] = useState(false);
+  const [overtimeDate, setOvertimeDate] = useState(getTodayDateStr());
+  const [overtimeStartTime, setOvertimeStartTime] = useState('17:00');
+  const [overtimeEstimatedHours, setOvertimeEstimatedHours] = useState<number>(2);
+  const [overtimeReason, setOvertimeReason] = useState('');
+  const [isSubmittingOvertime, setIsSubmittingOvertime] = useState(false);
+
+  // Overtime Camera & Finish Modals
+  const [overtimeCameraOpen, setOvertimeCameraOpen] = useState(false);
+  const [activeOvertimeAction, setActiveOvertimeAction] = useState<{
+    id: string;
+    type: 'start' | 'finish';
+  } | null>(null);
+
+  const [overtimeFinishModalOpen, setOvertimeFinishModalOpen] = useState(false);
+  const [overtimeWorkSummary, setOvertimeWorkSummary] = useState('');
+  const [overtimeFinishSelfie, setOvertimeFinishSelfie] = useState('');
+  const [overtimeFinishCoords, setOvertimeFinishCoords] = useState<unknown>(null);
+  const [overtimeCalculatedMins, setOvertimeCalculatedMins] = useState(60);
+
+  const myOvertimeRecords = (overtimeRecords || []).filter((o) => o.staffId === staff.id);
+
+  const handleCreateOvertimeRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!overtimeReason.trim()) return;
+    setIsSubmittingOvertime(true);
+    try {
+      if (onSubmitOvertimeRequest) {
+        await onSubmitOvertimeRequest({
+          staffId: staff.id,
+          staffName: staff.name,
+          staffNip: staff.nip,
+          divisionId: staff.divisionId || staff.division,
+          divisionName: staff.division,
+          supervisorId: staff.supervisorId || 'usr-spv-renlap',
+          date: overtimeDate,
+          startTimePlan: overtimeStartTime,
+          estimatedHours: overtimeEstimatedHours,
+          reason: overtimeReason.trim(),
+        });
+      }
+      setOvertimeModalOpen(false);
+      setOvertimeReason('');
+    } catch (err) {
+      console.error('Submit overtime error:', err);
+    } finally {
+      setIsSubmittingOvertime(false);
+    }
+  };
+
+  const handleOpenOvertimeCamera = (type: 'start' | 'finish', otId: string) => {
+    setActiveOvertimeAction({ id: otId, type });
+    setOvertimeCameraOpen(true);
+  };
+
+  const handleOvertimeCapture = async (selfieBase64: string, locationData: unknown) => {
+    if (!activeOvertimeAction) return;
+    const loc = locationData as { withinRadius?: boolean; distanceMeters?: number } | null;
+
+    if (activeOvertimeAction.type === 'start') {
+      if (loc && loc.withinRadius === false) {
+        alert(`Presensi Mulai Lembur Ditolak: Lembur wajib dilaksanakan di dalam area kantor dinas (Radius Aman). Lokasi GPS Anda terdeteksi berjarak ${loc.distanceMeters || 0} meter dari kantor.`);
+        return;
+      }
+      if (onStartOvertime) {
+        await onStartOvertime(activeOvertimeAction.id, {
+          clockInTime: getCurrentWitaTimeStr(),
+          selfieUrl: selfieBase64,
+          coords: locationData as Partial<OvertimeRecord['clockInCoords']>,
+        });
+      }
+      setOvertimeCameraOpen(false);
+      setActiveOvertimeAction(null);
+    } else if (activeOvertimeAction.type === 'finish') {
+      const ot = (overtimeRecords || []).find((o) => o.id === activeOvertimeAction.id);
+      let diffMins = 60;
+      if (ot?.clockInTime) {
+        const [inH, inM] = ot.clockInTime.replace(/\./g, ':').split(':').map(Number);
+        const now = new Date();
+        const nowStr = new Intl.DateTimeFormat('id-ID', {
+          timeZone: 'Asia/Makassar',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).format(now).replace(/\./g, ':');
+        const [nowH, nowM] = nowStr.split(':').map(Number);
+        diffMins = (nowH * 60 + nowM) - (inH * 60 + inM);
+        if (diffMins < 0) diffMins += 24 * 60;
+      }
+      if (diffMins < 60) {
+        alert(`Peringatan Aturan Kedinasan: Durasi lembur Anda baru berjalan ${diffMins} menit. Sesuai aturan keuangan, batas durasi lembur minimal yang sah adalah 60 menit (1 Jam). Harap tuntaskan pekerjaan Anda.`);
+        return;
+      }
+      setOvertimeFinishSelfie(selfieBase64);
+      setOvertimeFinishCoords(locationData);
+      setOvertimeCalculatedMins(Math.max(60, diffMins));
+      setOvertimeCameraOpen(false);
+      setOvertimeFinishModalOpen(true);
+    }
+  };
+
+  const handleConfirmFinishOvertime = async () => {
+    if (!activeOvertimeAction) return;
+    if (!overtimeWorkSummary.trim()) {
+      alert('Harap isi ringkasan hasil pekerjaan yang telah diselesaikan selama lembur.');
+      return;
+    }
+    if (onFinishOvertime) {
+      await onFinishOvertime(activeOvertimeAction.id, {
+        clockOutTime: getCurrentWitaTimeStr(),
+        selfieUrl: overtimeFinishSelfie,
+        coords: overtimeFinishCoords as Partial<OvertimeRecord['clockOutCoords']>,
+        workSummary: overtimeWorkSummary.trim(),
+        durationMinutes: overtimeCalculatedMins,
+      });
+    }
+    setOvertimeFinishModalOpen(false);
+    setActiveOvertimeAction(null);
+    setOvertimeWorkSummary('');
+  };
 
   const isPresensiMode = tabMode === 'presensi';
   const isLaporanMode = tabMode === 'laporan';
@@ -701,7 +851,8 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
       {/* Daily Work Reports Section (Hanya tampil di Tab Laporan & Desktop Mode) */}
       {!isPresensiMode && (
-        <div className="space-y-3">
+        <div className="space-y-5">
+          <div className="space-y-3">
           {isHybridMode && (
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -1032,6 +1183,190 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           </div>
         )}
         </div>
+
+        {/* ============================================================== */}
+        {/* TUGAS LEMBUR KEDINASAN (OVERTIME ENGINE PRO)                   */}
+        {/* ============================================================== */}
+        <div className="p-5 glass-card space-y-4 border border-indigo-200/60 dark:border-indigo-900/40">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-cyan-400 flex items-center justify-center shrink-0 shadow-xs">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-tight flex items-center gap-2">
+                  <span>Tugas Lembur Kedinasan (Overtime)</span>
+                  <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">
+                    {myOvertimeRecords.length} Tiket
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Lembur resmi kantor di luar jam kerja / hari libur dengan verifikasi geofence & approval atasan
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setOvertimeModalOpen(true)}
+              className="px-3.5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white transition-all flex items-center gap-1.5 shadow-md shadow-indigo-500/20 cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Ajukan Izin Lembur</span>
+            </button>
+          </div>
+
+          {/* Daftar Tiket Lembur Staf */}
+          {myOvertimeRecords.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-800 text-center space-y-2">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+                <Clock className="w-4 h-4" />
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                Belum Ada Pengajuan Tugas Lembur
+              </p>
+              <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed">
+                Jika ada pekerjaan mendesak yang harus diselesaikan di kantor di luar jam kerja resmi, klik tombol <strong>"Ajukan Izin Lembur"</strong> di atas.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {myOvertimeRecords.map((ot) => {
+                const isPending = ot.status === 'PENDING';
+                const isApproved = ot.status === 'APPROVED';
+                const isInProgress = ot.status === 'IN_PROGRESS';
+                const isCompleted = ot.status === 'COMPLETED';
+
+                return (
+                  <div
+                    key={ot.id}
+                    className="p-4 rounded-2xl bg-white dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 space-y-3 shadow-xs"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-700/60">
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">
+                          Lembur Tanggal: {ot.date}
+                        </span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-2 font-mono">
+                          (Rencana Mulai: {ot.startTimePlan || '17:00'} WITA · Est: {ot.estimatedHours} Jam)
+                        </span>
+                      </div>
+
+                      {/* Status Badge */}
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full self-start sm:self-auto font-mono ${
+                          isPending
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                            : isApproved
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                            : isInProgress
+                            ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 animate-pulse'
+                            : isCompleted
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                        }`}
+                      >
+                        {isPending
+                          ? '⏳ Menunggu ACC Atasan'
+                          : isApproved
+                          ? '✅ Disetujui (Siap Mulai)'
+                          : isInProgress
+                          ? '⚡ Lembur Berjalan'
+                          : isCompleted
+                          ? '🏆 Selesai & Terkunci'
+                          : '❌ Ditolak'}
+                      </span>
+                    </div>
+
+                    <div className="text-xs space-y-1">
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Uraian Tugas Lembur:</span>
+                      <p className="text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
+                        {ot.reason}
+                      </p>
+                    </div>
+
+                    {/* Catatan Atasan jika ada */}
+                    {ot.supervisorNotes && (
+                      <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-[11px] text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-800">
+                        <strong className="text-slate-900 dark:text-white">Catatan Atasan ({ot.supervisorName}):</strong> {ot.supervisorNotes}
+                      </div>
+                    )}
+
+                    {/* Informasi Jam Realisasi & Hasil Lembur jika Selesai */}
+                    {isCompleted && (
+                      <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 space-y-2 text-xs">
+                        <div className="flex items-center justify-between text-emerald-900 dark:text-emerald-200">
+                          <span className="font-bold flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Realisasi Lembur Sah:</span>
+                            <span className="font-mono text-indigo-700 dark:text-cyan-400">
+                              {ot.clockInTime} - {ot.clockOutTime} WITA
+                            </span>
+                          </span>
+                          <span className="font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-200/60 dark:bg-emerald-900/80 text-emerald-900 dark:text-emerald-100">
+                            {Math.floor(ot.actualDurationMinutes / 60)}j {ot.actualDurationMinutes % 60}m
+                          </span>
+                        </div>
+
+                        {ot.workSummary && (
+                          <div className="pt-1 text-[11px] text-slate-700 dark:text-slate-300 border-t border-emerald-200/60 dark:border-emerald-900/40">
+                            <strong>Output Kerja:</strong> {ot.workSummary}
+                          </div>
+                        )}
+
+                        {ot.clockOutSelfieUrl && (
+                          <div className="pt-1">
+                            <span className="text-[10px] text-slate-500 block mb-1">Bukti Foto Dokumentasi:</span>
+                            <img
+                              src={ot.clockOutSelfieUrl}
+                              alt="Bukti Lembur"
+                              className="w-28 h-20 object-cover rounded-lg border border-slate-300 dark:border-slate-700 shadow-2xs"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Tombol Aksi Sesuai Tahapan */}
+                    {isApproved && (
+                      <div className="pt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenOvertimeCamera('start', ot.id)}
+                          className="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 text-white shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span>Mulai Lembur (Presensi GPS Kantor)</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {isInProgress && (
+                      <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
+                        <div className="flex items-center gap-2 text-indigo-950 dark:text-indigo-200 text-xs">
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-600"></span>
+                          </span>
+                          <span>Mulai sejak: <strong>{ot.clockInTime} WITA</strong> (Geofence Kantor Aman)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenOvertimeCamera('finish', ot.id)}
+                          className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-all flex items-center justify-center gap-1.5 shadow-md cursor-pointer shrink-0"
+                        >
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          <span>Selesaikan Lembur (Upload Bukti)</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        </div>
       )}
 
       {/* Modals */}
@@ -1065,6 +1400,210 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           reason={duplicateMatchInfo.reason}
           onRetakePhoto={handleRetakeFromModal}
           onSubmitWithFlag={handleSubmitWithFlagFromModal}
+        />
+      )}
+
+      {/* Modal 1: Formulir Pengajuan Izin Lembur */}
+      {overtimeModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-cyan-400 flex items-center justify-center font-bold">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Formulir Pengajuan Izin Lembur
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOvertimeModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateOvertimeRequest} className="p-5 space-y-4 text-xs">
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed space-y-1">
+                <span className="font-bold block">Ketentuan Lembur Kedinasan Disdik HST:</span>
+                <p>1. Lembur wajib dilaksanakan di <strong>dalam kantor dinas</strong> (geofence radius terverifikasi).</p>
+                <p>2. Durasi lembur sah minimal <strong>60 menit (1 Jam)</strong>.</p>
+                <p>3. Wajib disetujui atasan langsung ({staff?.supervisorId ? 'Kasubag / Kasi' : 'Atasan'}) sebelum presensi mulai lembur dapat dibuka.</p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Tanggal Pelaksanaan Lembur
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={overtimeDate}
+                  onChange={(e) => setOvertimeDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Jam Mulai Rencana
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={overtimeStartTime}
+                    onChange={(e) => setOvertimeStartTime(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Estimasi Durasi (Jam)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    step={0.5}
+                    required
+                    value={overtimeEstimatedHours}
+                    onChange={(e) => setOvertimeEstimatedHours(parseFloat(e.target.value) || 1)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Uraian Pekerjaan / Alasan Lembur Mendalam
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Jelaskan secara spesifik berkas atau tugas kedinasan yang mendesak untuk diselesaikan..."
+                  value={overtimeReason}
+                  onChange={(e) => setOvertimeReason(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white leading-relaxed placeholder:text-slate-400"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setOvertimeModalOpen(false)}
+                  className="px-3.5 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingOvertime}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{isSubmittingOvertime ? 'Mengirim...' : 'Kirim Pengajuan Izin'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Formulir Selesai Lembur & Ringkasan Output */}
+      {overtimeFinishModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Selesaikan Tugas Lembur
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOvertimeFinishModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-emerald-800 dark:text-emerald-300 font-medium block">Total Durasi Lembur Riil:</span>
+                  <span className="text-base font-extrabold font-mono text-emerald-900 dark:text-emerald-100">
+                    {Math.floor(overtimeCalculatedMins / 60)} Jam {overtimeCalculatedMins % 60} Menit
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-1 rounded bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100 font-bold">
+                  Sah ({overtimeCalculatedMins} Mins)
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Ringkasan Hasil Output Lembur
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Sebutkan hasil tugas yang diselesaikan (contoh: 25 berkas SPJ selesai diarsip, verifikasi data aset rampung)..."
+                  value={overtimeWorkSummary}
+                  onChange={(e) => setOvertimeWorkSummary(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white leading-relaxed placeholder:text-slate-400"
+                />
+              </div>
+
+              {Boolean(overtimeFinishSelfie) && (
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                    Foto Bukti Dokumentasi di Kantor:
+                  </span>
+                  <img
+                    src={overtimeFinishSelfie}
+                    alt="Bukti Lembur"
+                    className="w-full aspect-video object-cover rounded-xl border border-slate-200 dark:border-slate-700"
+                  />
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setOvertimeFinishModalOpen(false)}
+                  className="px-3.5 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmFinishOvertime}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Kunci & Selesaikan Lembur</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Kamera Presensi Mulai / Selesai Lembur */}
+      {overtimeCameraOpen && (
+        <CameraCaptureModal
+          isOpen={overtimeCameraOpen}
+          onClose={() => setOvertimeCameraOpen(false)}
+          onCapture={handleOvertimeCapture}
+          assignedLocation={safeOffice}
+          actionType={activeOvertimeAction?.type === 'start' ? 'overtime-start' : 'overtime-finish'}
         />
       )}
     </div>

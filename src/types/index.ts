@@ -551,4 +551,48 @@ export const DEFAULT_INSTITUTION_SETTINGS: InstitutionSettings = {
   pejabatJabatan: 'Sekretaris Dinas Pendidikan',
 };
 
+export type OvertimeStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'IN_PROGRESS' | 'COMPLETED';
+
+export interface OvertimeRecord {
+  id: string;
+  staffId: string;
+  staffName: string;
+  staffNip?: string;
+  divisionId: string;
+  divisionName?: string;
+  supervisorId: string;
+  supervisorName?: string;
+  date: string;
+  startTimePlan?: string;
+  estimatedHours: number;
+  reason: string;
+  status: OvertimeStatus;
+  supervisorNotes?: string;
+  approvedAt?: string;
+  clockInTime?: string;
+  clockInSelfieUrl?: string;
+  clockInCoords?: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    locationName: string;
+    withinRadius?: boolean;
+    distanceMeters?: number;
+  };
+  clockOutTime?: string;
+  clockOutSelfieUrl?: string;
+  clockOutCoords?: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    locationName: string;
+    withinRadius?: boolean;
+    distanceMeters?: number;
+  };
+  actualDurationMinutes: number;
+  workSummary?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 

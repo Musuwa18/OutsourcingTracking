@@ -28,6 +28,7 @@ import {
   CompetencyRatings,
   AttendanceRecord,
   AuthUser,
+  OvertimeRecord,
 } from '../types';
 import { getTodayDateStr } from '../utils/date';
 import { StarRating } from '../components/StarRating';
@@ -45,6 +46,8 @@ interface SupervisorEvaluationViewProps {
   onApproveReport: (reportId: string, notes?: string) => void;
   onRequestRevisionReport: (reportId: string, notes: string) => void;
   onSubmitEvaluation: (evalData: Omit<WeeklyEvaluation, 'id' | 'submittedAt'>) => void;
+  overtimeRecords?: OvertimeRecord[];
+  onApproveOvertime?: (id: string, payload: { approved: boolean; supervisorNotes?: string }) => void;
 }
 
 export const DEFAULT_ONE_STAR_RATINGS: CompetencyRatings = {
@@ -74,8 +77,11 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
   onApproveReport,
   onRequestRevisionReport,
   onSubmitEvaluation,
+  overtimeRecords = [],
+  onApproveOvertime,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'eval-form' | 'report-feed'>('eval-form');
+  const [activeSubTab, setActiveSubTab] = useState<'eval-form' | 'report-feed' | 'overtime-feed'>('eval-form');
+  const [overtimeNotesInputs, setOvertimeNotesInputs] = useState<Record<string, string>>({});
 
   // Inspection modal state for geofence alerts
   const [inspectedRecord, setInspectedRecord] = useState<AttendanceRecord | null>(null);
@@ -219,6 +225,27 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
     }));
   };
 
+  // Filter overtime requests for supervisor
+  const displayedOvertime = useMemo(() => {
+    return (overtimeRecords || []).filter((ot) => {
+      if (currentUser?.role === 'supervisor') {
+        const isMyStaff = staffList.some((s) => s.id === ot.staffId);
+        const isMySpvId = ot.supervisorId === currentUser.id || ot.supervisorId === currentUser.nip;
+        return isMyStaff || isMySpvId;
+      }
+      return true;
+    });
+  }, [overtimeRecords, staffList, currentUser]);
+
+  const pendingOvertimeCount = displayedOvertime.filter((o) => o.status === 'PENDING').length;
+
+  const handleApproveOvertimeAction = (id: string, approved: boolean) => {
+    const notes = overtimeNotesInputs[id] || (approved ? 'Disetujui untuk dilaksanakan di kantor dinas.' : 'Permohonan lembur belum dapat disetujui.');
+    if (onApproveOvertime) {
+      onApproveOvertime(id, { approved, supervisorNotes: notes });
+    }
+  };
+
   if (staffList.length === 0) {
     return (
       <div className="space-y-6">
@@ -309,6 +336,23 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
           >
             <span>Feed Laporan Kerja</span>
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('overtime-feed')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 font-medium ${
+              activeSubTab === 'overtime-feed'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-indigo-500" />
+            <span>Verifikasi Lembur</span>
+            {pendingOvertimeCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500 text-white">
+                {pendingOvertimeCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -815,7 +859,7 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeSubTab === 'report-feed' ? (
         /* ================= SUBORDINATE WORK REPORT FEED ================= */
         <div className="space-y-4">
           <div className="text-xs text-slate-500">
@@ -972,7 +1016,176 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
             )}
           </div>
         </div>
-      )}
+      ) : activeSubTab === 'overtime-feed' ? (
+        /* ================= OVERTIME REQUESTS VERIFICATION FEED ================= */
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <span className="text-slate-500">
+              Daftar permohonan dan realisasi tugas lembur staf alih daya di kantor dinas
+            </span>
+            <span className="font-mono text-[11px] text-slate-400">
+              Total: {displayedOvertime.length} Tiket ({pendingOvertimeCount} Menunggu Persetujuan)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {displayedOvertime.length === 0 ? (
+              <div className="col-span-full p-12 text-center glass-card rounded-2xl text-xs text-slate-500 space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <p className="font-medium text-slate-700 dark:text-slate-300">Belum Ada Permohonan Lembur</p>
+                <p className="text-[11px] text-slate-400">Permohonan lembur dari staf binaan Anda akan muncul di panel ini untuk disetujui.</p>
+              </div>
+            ) : (
+              displayedOvertime.map((ot) => {
+                const staff = staffList.find((s) => s.id === ot.staffId);
+                const isPending = ot.status === 'PENDING';
+                const isApproved = ot.status === 'APPROVED';
+                const isInProgress = ot.status === 'IN_PROGRESS';
+                const isCompleted = ot.status === 'COMPLETED';
+                const noteInput = overtimeNotesInputs[ot.id] || '';
+
+                return (
+                  <div
+                    key={ot.id}
+                    className="p-5 glass-card space-y-4 flex flex-col justify-between"
+                  >
+                    <div className="space-y-3">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white text-xs shrink-0"
+                            style={{ backgroundColor: staff?.avatarColor || '#6366f1' }}
+                          >
+                            {staff?.initials || ot.staffName.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-900 dark:text-white">
+                              {ot.staffName}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {ot.date} · Rencana Mulai: {ot.startTimePlan || '17:00'} WITA (Est: {ot.estimatedHours} Jam)
+                            </div>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 font-mono ${
+                            isPending
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                              : isApproved
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                              : isInProgress
+                              ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 animate-pulse'
+                              : isCompleted
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                          }`}
+                        >
+                          {isPending
+                            ? 'Menunggu ACC'
+                            : isApproved
+                            ? 'Disetujui'
+                            : isInProgress
+                            ? 'Lembur Aktif'
+                            : isCompleted
+                            ? 'Selesai & Sah'
+                            : 'Ditolak'}
+                        </span>
+                      </div>
+
+                      {/* Content */}
+                      <div className="space-y-1.5 text-xs">
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold">Tugas yang Diajukan:</span>
+                        <p className="text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
+                          {ot.reason}
+                        </p>
+                      </div>
+
+                      {/* Completed Details */}
+                      {isCompleted && (
+                        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 space-y-2 text-xs">
+                          <div className="flex items-center justify-between text-emerald-900 dark:text-emerald-200">
+                            <span className="font-bold flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Realisasi Jam:</span>
+                              <span className="font-mono text-indigo-700 dark:text-cyan-400">
+                                {ot.clockInTime} - {ot.clockOutTime} WITA
+                              </span>
+                            </span>
+                            <span className="font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-200/60 dark:bg-emerald-900/80 text-emerald-900 dark:text-emerald-100">
+                              {Math.floor(ot.actualDurationMinutes / 60)}j {ot.actualDurationMinutes % 60}m
+                            </span>
+                          </div>
+
+                          {ot.workSummary && (
+                            <div className="pt-1 text-[11px] text-slate-700 dark:text-slate-300 border-t border-emerald-200/60 dark:border-emerald-900/40">
+                              <strong>Output Kerja:</strong> {ot.workSummary}
+                            </div>
+                          )}
+
+                          {ot.clockOutSelfieUrl && (
+                            <div className="pt-1">
+                              <span className="text-[10px] text-slate-500 block mb-1">Bukti Foto Dokumentasi Watermark:</span>
+                              <img
+                                src={ot.clockOutSelfieUrl}
+                                alt="Bukti Lembur"
+                                className="w-28 h-20 object-cover rounded-lg border border-slate-300 dark:border-slate-700 shadow-2xs"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Supervisor Notes display */}
+                      {ot.supervisorNotes && (
+                        <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 text-[11px] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                          <strong>Catatan Anda:</strong> {ot.supervisorNotes}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Bar for Pending Overtime */}
+                    {isPending && (
+                      <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+                        <input
+                          type="text"
+                          placeholder="Catatan arahan / instruksi lembur..."
+                          value={noteInput}
+                          onChange={(e) =>
+                            setOvertimeNotesInputs((prev) => ({ ...prev, [ot.id]: e.target.value }))
+                          }
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+
+                        <div className="flex items-center gap-2 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveOvertimeAction(ot.id, false)}
+                            className="px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer font-medium"
+                          >
+                            Tolak Lembur
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApproveOvertimeAction(ot.id, true)}
+                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-semibold shadow-xs"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Setujui Lembur (ACC)</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* Geofence Breach Inspection Modal */}
       <AttendanceInspectionModal

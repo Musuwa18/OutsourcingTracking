@@ -58,7 +58,7 @@ import { NotificationDrawer } from './components/NotificationDrawer';
 import { AiAnalyticsChatModal } from './components/AiAnalyticsChatModal';
 import { CustomLocationModal } from './components/CustomLocationModal';
 import { AuthView } from './views/AuthView';
-import { AuthUser, Division, Vendor, FieldCheckinRecord, HelpDeskConfig, DEFAULT_HELPDESK_CONFIG, InstitutionSettings, DEFAULT_INSTITUTION_SETTINGS } from './types';
+import { AuthUser, Division, Vendor, FieldCheckinRecord, HelpDeskConfig, DEFAULT_HELPDESK_CONFIG, InstitutionSettings, DEFAULT_INSTITUTION_SETTINGS, OvertimeRecord } from './types';
 import {
   apiFetchDivisions,
   apiFetchVendors,
@@ -79,6 +79,11 @@ import {
   apiUpdateStaffSupervisor,
   apiGetInstitutionSettings,
   apiSaveInstitutionSettings,
+  apiSubmitOvertimeRequest,
+  apiFetchOvertime,
+  apiApproveOvertime,
+  apiStartOvertime,
+  apiFinishOvertime,
 } from './services/api';
 import { getTodayDateStr, getCurrentWitaTimeStr, getYesterdayWitaDateStr, getWitaHour } from './utils/date';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
@@ -368,6 +373,14 @@ export default function App() {
         localStorage.setItem('ot_institution_settings', JSON.stringify(cfg));
       }
     });
+
+    // 7. Sinkronisasi Data Tugas Lembur dari SQLite
+    apiFetchOvertime().then((list) => {
+      if (list && list.length > 0) {
+        setOvertimeRecords(list);
+        localStorage.setItem('ot_overtime_records', JSON.stringify(list));
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -393,6 +406,13 @@ export default function App() {
         if (repList && repList.length > 0) {
           setDailyReports(repList);
           localStorage.setItem('ot_daily_reports', JSON.stringify(repList));
+        }
+      });
+
+      apiFetchOvertime().then((list) => {
+        if (list && list.length > 0) {
+          setOvertimeRecords(list);
+          localStorage.setItem('ot_overtime_records', JSON.stringify(list));
         }
       });
     }
@@ -499,6 +519,15 @@ export default function App() {
   });
   const [fieldCheckins, setFieldCheckins] = useState<FieldCheckinRecord[]>([]);
   const [helpDeskConfig, setHelpDeskConfig] = useState<HelpDeskConfig>(DEFAULT_HELPDESK_CONFIG);
+  const [overtimeRecords, setOvertimeRecords] = useState<OvertimeRecord[]>(() => {
+    const saved = localStorage.getItem('ot_overtime_records');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
   const [institutionSettings, setInstitutionSettings] = useState<InstitutionSettings>(() => {
     const saved = localStorage.getItem('ot_institution_settings');
     if (saved) {
@@ -827,6 +856,127 @@ export default function App() {
     setInstitutionSettings(newCfg);
     localStorage.setItem('ot_institution_settings', JSON.stringify(newCfg));
     addAuditLog('Pembaruan Identitas Instansi', `Kop surat & profil instansi (${newCfg.namaSkpd}) diperbarui.`, 'Pengaturan');
+  };
+
+  // Handle Submit Overtime Request (Staff)
+  const handleSubmitOvertimeRequest = async (data: {
+    staffId: string;
+    staffName?: string;
+    staffNip?: string;
+    divisionId?: string;
+    divisionName?: string;
+    supervisorId?: string;
+    supervisorName?: string;
+    date: string;
+    startTimePlan?: string;
+    estimatedHours: number;
+    reason: string;
+  }) => {
+    try {
+      const created = await apiSubmitOvertimeRequest(data);
+      setOvertimeRecords((prev) => [created, ...prev.filter((o) => o.id !== created.id)]);
+      localStorage.setItem('ot_overtime_records', JSON.stringify([created, ...overtimeRecords.filter((o) => o.id !== created.id)]));
+      showToast('Permohonan izin lembur berhasil diajukan, menunggu persetujuan atasan.', 'success');
+      addAuditLog(
+        'Pengajuan Izin Lembur',
+        `Staf (${data.staffName || data.staffId}) mengajukan lembur tanggal ${data.date} (Est: ${data.estimatedHours} Jam): "${data.reason}".`,
+        'Lembur',
+        currentUser?.name || data.staffName,
+        currentUser?.roleTitle || 'Tenaga Outsourcing'
+      );
+      addNotification(
+        'Pengajuan Izin Lembur Baru',
+        `${data.staffName || 'Staf'} mengajukan lembur tanggal ${data.date} untuk tugas: ${data.reason}.`,
+        'attendance',
+        { staffId: data.staffId, userId: data.supervisorId }
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal mengajukan izin lembur.';
+      showToast(msg, 'warning');
+    }
+  };
+
+  // Handle Start Overtime (Staff Clock-In di Kantor)
+  const handleStartOvertime = async (id: string, payload: {
+    clockInTime: string;
+    selfieUrl: string;
+    coords?: Partial<OvertimeRecord['clockInCoords']>;
+  }) => {
+    try {
+      const updated = await apiStartOvertime(id, payload);
+      setOvertimeRecords((prev) => prev.map((o) => (o.id === id ? updated : o)));
+      localStorage.setItem('ot_overtime_records', JSON.stringify(overtimeRecords.map((o) => (o.id === id ? updated : o))));
+      showToast('Presensi mulai lembur di kantor berhasil dicatat. Selamat bertugas!', 'success');
+      addAuditLog(
+        'Presensi Mulai Lembur',
+        `Staf memulai lembur pada pukul ${payload.clockInTime} WITA di area kantor dinas.`,
+        'Lembur'
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal mencatat jam mulai lembur.';
+      showToast(msg, 'warning');
+    }
+  };
+
+  // Handle Finish Overtime (Staff Clock-Out di Kantor)
+  const handleFinishOvertime = async (id: string, payload: {
+    clockOutTime: string;
+    selfieUrl: string;
+    coords?: Partial<OvertimeRecord['clockOutCoords']>;
+    workSummary: string;
+    durationMinutes: number;
+  }) => {
+    try {
+      const updated = await apiFinishOvertime(id, payload);
+      setOvertimeRecords((prev) => prev.map((o) => (o.id === id ? updated : o)));
+      localStorage.setItem('ot_overtime_records', JSON.stringify(overtimeRecords.map((o) => (o.id === id ? updated : o))));
+      const hours = Math.floor(payload.durationMinutes / 60);
+      const mins = payload.durationMinutes % 60;
+      showToast(`Lembur tuntas! Durasi riil: ${hours} Jam ${mins} Menit. Terima kasih atas dedikasinya.`, 'success');
+      addAuditLog(
+        'Presensi Selesai Lembur',
+        `Staf mengunci selesai lembur pada pukul ${payload.clockOutTime} WITA (Durasi: ${hours}j ${mins}m, Output: "${payload.workSummary}").`,
+        'Lembur'
+      );
+      addNotification(
+        'Tugas Lembur Selesai & Terkunci',
+        `Tugas lembur staf telah selesai (${hours}j ${mins}m) dengan bukti dokumentasi lengkap.`,
+        'attendance'
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal mengunci selesai lembur.';
+      showToast(msg, 'warning');
+    }
+  };
+
+  // Handle Approve Overtime (Supervisor)
+  const handleApproveOvertime = async (id: string, payload: {
+    approved: boolean;
+    supervisorNotes?: string;
+  }) => {
+    try {
+      const updated = await apiApproveOvertime(id, payload);
+      setOvertimeRecords((prev) => prev.map((o) => (o.id === id ? updated : o)));
+      localStorage.setItem('ot_overtime_records', JSON.stringify(overtimeRecords.map((o) => (o.id === id ? updated : o))));
+      showToast(payload.approved ? 'Pengajuan lembur disetujui.' : 'Pengajuan lembur ditolak.', payload.approved ? 'success' : 'info');
+      const ot = overtimeRecords.find((o) => o.id === id);
+      addAuditLog(
+        payload.approved ? 'Persetujuan Izin Lembur' : 'Penolakan Izin Lembur',
+        `Atasan (${currentUser?.name || 'Supervisor'}) ${payload.approved ? 'menyetujui' : 'menolak'} lembur staf ${ot?.staffName}: "${ot?.reason}". Catatan: "${payload.supervisorNotes || '-'}"`,
+        'Lembur',
+        currentUser?.name || 'Supervisor',
+        currentUser?.roleTitle || 'Supervisor Kedinasan'
+      );
+      addNotification(
+        payload.approved ? 'Izin Lembur Disetujui' : 'Izin Lembur Ditolak',
+        `Pengajuan lembur Anda untuk tanggal ${ot?.date} telah ${payload.approved ? 'disetujui' : 'ditolak'} oleh atasan.`,
+        'approval',
+        { staffId: ot?.staffId, userId: ot?.staffId }
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal memperbarui status lembur.';
+      showToast(msg, 'warning');
+    }
   };
 
   // Auto-sync Core Data to LocalStorage
@@ -1660,6 +1810,10 @@ export default function App() {
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
                   onNavigateToReports={() => setMobileTab('laporan')}
+                  overtimeRecords={overtimeRecords}
+                  onSubmitOvertimeRequest={handleSubmitOvertimeRequest}
+                  onStartOvertime={handleStartOvertime}
+                  onFinishOvertime={handleFinishOvertime}
                 />
               )}
 
@@ -1680,9 +1834,12 @@ export default function App() {
                   onBreakIn={handleBreakIn}
                   onClockOut={handleClockOut}
                   onSubmitReport={handleSubmitReport}
+                  overtimeRecords={overtimeRecords}
+                  onSubmitOvertimeRequest={handleSubmitOvertimeRequest}
+                  onStartOvertime={handleStartOvertime}
+                  onFinishOvertime={handleFinishOvertime}
                 />
               )}
-
               {mobileTab === 'riwayat' && (
                 <StaffHistoryView
                   staff={currentStaff}
@@ -1768,6 +1925,8 @@ export default function App() {
                   onApproveReport={handleApproveReport}
                   onRequestRevisionReport={handleRequestRevisionReport}
                   onSubmitEvaluation={handleSubmitEvaluation}
+                  overtimeRecords={overtimeRecords}
+                  onApproveOvertime={handleApproveOvertime}
                 />
               )}
 
@@ -1781,9 +1940,10 @@ export default function App() {
                   onApproveReport={handleApproveReport}
                   onRequestRevisionReport={handleRequestRevisionReport}
                   onSubmitEvaluation={handleSubmitEvaluation}
+                  overtimeRecords={overtimeRecords}
+                  onApproveOvertime={handleApproveOvertime}
                 />
               )}
-
               {adminTab === 'analitik-bulanan' && (
                 <AnalyticsMonthlyView
                   staffList={filteredStaffList}
@@ -1870,6 +2030,7 @@ export default function App() {
         currentDivisionId={currentUser?.divisionId}
         currentUser={currentUser}
         institutionSettings={institutionSettings}
+        overtimeRecords={overtimeRecords}
       />
 
       {/* Google Drive Cloud Sync Modal */}

@@ -19,7 +19,7 @@ interface CameraCaptureModalProps {
     fieldDutyNotes?: string;
   }) => void;
   assignedLocation?: OfficeLocation;
-  actionType: 'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin';
+  actionType: 'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin' | 'overtime-start' | 'overtime-finish';
 }
 
 export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
@@ -319,6 +319,10 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         ? 'CLOCK OUT'
         : actionType === 'field-checkin'
         ? 'TUGAS LAPANGAN'
+        : actionType === 'overtime-start'
+        ? 'MULAI LEMBUR'
+        : actionType === 'overtime-finish'
+        ? 'SELESAI LEMBUR'
         : 'ISTIRAHAT';
     ctx.fillText(`PRESENSI RESMI · ${actionLabel}`, 16, canvas.height - 38);
     ctx.fillStyle = '#e2e8f0';
@@ -361,6 +365,8 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       case 'break-out': return 'Presensi Istirahat Keluar';
       case 'break-in': return 'Presensi Selesai Istirahat';
       case 'field-checkin': return 'Presensi Tugas Lapangan (Multi-Titik)';
+      case 'overtime-start': return 'Presensi Mulai Lembur (Kantor)';
+      case 'overtime-finish': return 'Presensi Selesai Lembur (Kantor)';
       default: return 'Presensi WebRTC';
     }
   };

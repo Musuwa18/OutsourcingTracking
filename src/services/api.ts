@@ -3,7 +3,7 @@
  * Menghubungkan frontend React ke backend Express REST API di Port 3010
  * Dinas Pendidikan Kabupaten Hulu Sungai Tengah
  */
-import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings } from '../types';
+import { AuthUser, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings, OvertimeRecord } from '../types';
 
 const API_BASE = '/api';
 
@@ -652,4 +652,104 @@ export async function apiSaveInstitutionSettings(settings: InstitutionSettings):
     throw new Error(json.error || 'Gagal menyimpan pengaturan identitas instansi.');
   }
   return json.settings || settings;
+}
+
+// 18. OVERTIME ENGINE PRO API
+export async function apiSubmitOvertimeRequest(data: {
+  staffId: string;
+  staffName?: string;
+  staffNip?: string;
+  divisionId?: string;
+  divisionName?: string;
+  supervisorId?: string;
+  supervisorName?: string;
+  date: string;
+  startTimePlan?: string;
+  estimatedHours: number;
+  reason: string;
+}): Promise<OvertimeRecord> {
+  const res = await fetch(`${API_BASE}/overtime/request`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || 'Gagal mengajukan izin lembur.');
+  }
+  return json.overtime;
+}
+
+export async function apiFetchOvertime(filters: {
+  staffId?: string;
+  supervisorId?: string;
+  date?: string;
+  status?: string;
+} = {}): Promise<OvertimeRecord[]> {
+  try {
+    const params = new URLSearchParams();
+    if (filters.staffId) params.append('staffId', filters.staffId);
+    if (filters.supervisorId) params.append('supervisorId', filters.supervisorId);
+    if (filters.date) params.append('date', filters.date);
+    if (filters.status) params.append('status', filters.status);
+    const res = await fetch(`${API_BASE}/overtime?${params.toString()}`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    return json.overtime || [];
+  } catch (err: unknown) {
+    console.warn('apiFetchOvertime warning:', err);
+    return [];
+  }
+}
+
+export async function apiApproveOvertime(id: string, payload: {
+  approved: boolean;
+  supervisorNotes?: string;
+}): Promise<OvertimeRecord> {
+  const res = await fetch(`${API_BASE}/overtime/${id}/approve`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || 'Gagal memperbarui persetujuan lembur.');
+  }
+  return json.overtime;
+}
+
+export async function apiStartOvertime(id: string, payload: {
+  clockInTime: string;
+  selfieUrl: string;
+  coords?: Partial<OvertimeRecord['clockInCoords']>;
+}): Promise<OvertimeRecord> {
+  const res = await fetch(`${API_BASE}/overtime/${id}/start`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || 'Gagal mencatat jam mulai lembur.');
+  }
+  return json.overtime;
+}
+
+export async function apiFinishOvertime(id: string, payload: {
+  clockOutTime: string;
+  selfieUrl: string;
+  coords?: Partial<OvertimeRecord['clockOutCoords']>;
+  workSummary: string;
+  durationMinutes: number;
+}): Promise<OvertimeRecord> {
+  const res = await fetch(`${API_BASE}/overtime/${id}/finish`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || 'Gagal mengunci jam selesai lembur.');
+  }
+  return json.overtime;
 }

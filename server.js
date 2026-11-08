@@ -54,6 +54,12 @@ import {
   saveHelpDeskSettings,
   getInstitutionSettings,
   saveInstitutionSettings,
+  createOvertimeRequest,
+  listOvertimeRequests,
+  approveOvertimeRequest,
+  startOvertime,
+  finishOvertime,
+  getOvertimeById,
 } from './server/db.js';
 dotenv.config();
 
@@ -750,6 +756,62 @@ app.post('/api/settings/institution', (req, res) => {
     res.json({ success: true, settings: saved, message: 'Pengaturan identitas instansi & kop surat berhasil disimpan.' });
   } catch (err) {
     res.status(500).json({ error: 'Gagal menyimpan pengaturan instansi.' });
+  }
+});
+
+// 11e. TUGAS LEMBUR RESMI / OVERTIME ENGINE PRO
+app.post('/api/overtime/request', (req, res) => {
+  try {
+    const created = createOvertimeRequest(req.body);
+    res.status(201).json({ success: true, overtime: created, message: 'Izin lembur berhasil diajukan, menunggu persetujuan atasan langsung.' });
+  } catch (err) {
+    console.error('[API Error] Overtime Request:', err);
+    res.status(500).json({ error: 'Gagal mengajukan izin lembur.' });
+  }
+});
+
+app.get('/api/overtime', (req, res) => {
+  try {
+    const { staffId, supervisorId, date, status } = req.query;
+    const list = listOvertimeRequests({ staffId, supervisorId, date, status });
+    res.json({ success: true, overtime: list });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal memuat daftar tugas lembur.' });
+  }
+});
+
+app.patch('/api/overtime/:id/approve', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { approved, supervisorNotes } = req.body;
+    const updated = approveOvertimeRequest(id, { approved: Boolean(approved), supervisorNotes });
+    res.json({ success: true, overtime: updated, message: approved ? 'Pengajuan lembur disetujui.' : 'Pengajuan lembur ditolak.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal memperbarui status persetujuan lembur.' });
+  }
+});
+
+app.post('/api/overtime/:id/start', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { clockInTime, selfieUrl, coords } = req.body;
+    const updated = startOvertime(id, { clockInTime, selfieUrl, coords });
+    res.json({ success: true, overtime: updated, message: 'Presensi mulai lembur di kantor berhasil dicatat.' });
+  } catch (err) {
+    console.error('[API Error] Overtime Start:', err);
+    res.status(500).json({ error: 'Gagal mencatat jam mulai lembur.' });
+  }
+});
+
+app.post('/api/overtime/:id/finish', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { clockOutTime, selfieUrl, coords, workSummary, durationMinutes } = req.body;
+    const updated = finishOvertime(id, { clockOutTime, selfieUrl, coords, workSummary, durationMinutes });
+    res.json({ success: true, overtime: updated, message: 'Laporan dan jam selesai lembur berhasil dikunci.' });
+  } catch (err) {
+    console.error('[API Error] Overtime Finish:', err);
+    res.status(500).json({ error: 'Gagal mengunci jam selesai lembur.' });
   }
 });
 

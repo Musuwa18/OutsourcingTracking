@@ -21,6 +21,7 @@ import {
   AuthUser,
   InstitutionSettings,
   DEFAULT_INSTITUTION_SETTINGS,
+  OvertimeRecord,
 } from '../types';
 interface PrintReportModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ interface PrintReportModalProps {
   currentDivisionId?: string;
   currentUser?: AuthUser | null;
   institutionSettings?: InstitutionSettings;
+  overtimeRecords?: OvertimeRecord[];
 }
 
 export const PrintReportModal: React.FC<PrintReportModalProps> = ({
@@ -48,10 +50,11 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   currentDivisionId,
   currentUser,
   institutionSettings,
+  overtimeRecords = [],
 }) => {
   if (!isOpen) return null;
 
-  const [printMode, setPrintMode] = useState<'rekap-divisi' | 'rapor-staf'>('rekap-divisi');
+  const [printMode, setPrintMode] = useState<'rekap-divisi' | 'rapor-staf' | 'sptl-lembur'>('rekap-divisi');
   const [selectedStaffId, setSelectedStaffId] = useState<string>(staffList[0]?.id || '');
 
   const handlePrint = () => {
@@ -152,6 +155,17 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                 }`}
               >
                 Rapor Individu
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintMode('sptl-lembur')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  printMode === 'sptl-lembur'
+                    ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-cyan-400 font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                SPTL Lembur
               </button>
             </div>
 
@@ -487,6 +501,92 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================= MODE 3: SURAT PERINTAH TUGAS LEMBUR (SPTL) ================= */}
+          {printMode === 'sptl-lembur' && (
+            <div className="space-y-6">
+              <div className="text-center space-y-1 pt-2">
+                <h4 className="text-sm font-extrabold uppercase underline text-slate-950">
+                  SURAT PERINTAH & REKAPITULASI PELAKSANAAN TUGAS LEMBUR (SPTL)
+                </h4>
+                <p className="text-xs text-slate-600 font-mono">
+                  Nomor: {inst.nomorSuratPrefix || '800.1 / OTP-DISDIK'} / SPTL / X / 2026 · Periode: Oktober 2026
+                </p>
+              </div>
+
+              {/* Dasar Penugasan */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs leading-relaxed text-slate-700 space-y-1">
+                <strong className="text-slate-900 block">Dasar Pelaksanaan Lembur:</strong>
+                <p>
+                  Berdasarkan kebutuhan kedinasan mendesak di lingkungan {inst.namaSkpd} ({inst.namaPemda}), dengan ini diperintahkan dan direkapitulasi pelaksanaan tugas lembur yang dilaksanakan di dalam area kantor dinas di luar jam kerja resmi atau pada hari libur sebagai berikut:
+                </p>
+              </div>
+
+              {/* Tabel Pelaksanaan Lembur */}
+              <div className="space-y-2">
+                <h5 className="text-xs font-bold text-slate-900 uppercase">
+                  Daftar Realisasi Jam Lembur Staf Alih Daya Terverifikasi Geofence
+                </h5>
+                <table className="w-full text-left text-xs border border-slate-300 border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+                      <th className="py-2 px-2.5 border-r border-slate-300 w-8 text-center">No</th>
+                      <th className="py-2 px-3 border-r border-slate-300">Nama Personel / NIP</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300 text-center">Tanggal</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300 text-center">Jam Riil</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300 text-center">Total Durasi</th>
+                      <th className="py-2 px-3 border-r border-slate-300">Uraian Output Pekerjaan Lembur</th>
+                      <th className="py-2 px-2.5 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {(overtimeRecords || []).filter(o => o.status === 'COMPLETED' || o.status === 'APPROVED').length === 0 ? (
+                       <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-400 italic">
+                          Belum ada data realisasi tugas lembur yang tercatat pada periode ini.
+                        </td>
+                      </tr>
+                    ) : (
+                      (overtimeRecords || [])
+                        .filter(o => o.status === 'COMPLETED' || o.status === 'APPROVED')
+                        .map((ot, idx) => {
+                          const durationH = Math.floor(ot.actualDurationMinutes / 60);
+                          const durationM = ot.actualDurationMinutes % 60;
+                          return (
+                            <tr key={ot.id} className="hover:bg-slate-50">
+                              <td className="py-2 px-2.5 border-r border-slate-200 text-center font-mono">
+                                {idx + 1}
+                              </td>
+                              <td className="py-2 px-3 border-r border-slate-200">
+                                <div className="font-bold text-slate-900">{ot.staffName}</div>
+                                <div className="text-[10px] text-slate-500 font-mono">{ot.staffNip || '-'}</div>
+                              </td>
+                              <td className="py-2 px-2.5 border-r border-slate-200 text-center font-mono text-[11px]">
+                                {ot.date}
+                              </td>
+                              <td className="py-2 px-2.5 border-r border-slate-200 text-center font-mono text-[11px] font-semibold text-slate-800">
+                                {ot.clockInTime ? `${ot.clockInTime} - ${ot.clockOutTime || 'Selesai'}` : `${ot.startTimePlan || '17:00'} WITA`}
+                              </td>
+                              <td className="py-2 px-2.5 border-r border-slate-200 text-center font-mono font-bold text-emerald-700">
+                                {ot.actualDurationMinutes > 0 ? `${durationH}j ${durationM}m` : `${ot.estimatedHours} Jam (Rencana)`}
+                              </td>
+                              <td className="py-2 px-3 border-r border-slate-200 text-[11px] text-slate-700">
+                                {ot.workSummary || ot.reason}
+                              </td>
+                              <td className="py-2 px-2.5 text-center">
+                                <span className="font-semibold text-emerald-800 font-mono text-[10px] px-2 py-0.5 rounded bg-emerald-50">
+                                  {ot.status === 'COMPLETED' ? 'Sah Kantor' : 'Disetujui'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
