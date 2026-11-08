@@ -220,6 +220,9 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
   const myOvertimeRecords = (overtimeRecords || []).filter((o) => o.staffId === staff.id);
 
+  // Sub-menu Switcher for Tab Laporan: 'harian' | 'lembur' | 'izin'
+  const [laporanSubTab, setLaporanSubTab] = useState<'harian' | 'lembur' | 'izin'>('harian');
+
   // Leave Engine State (Smart Leave Pro)
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [leaveCameraOpen, setLeaveCameraOpen] = useState(false);
@@ -933,8 +936,59 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         </div>
       )}
 
-      {/* Tab Laporan: Header Kinerja Harian & Ringkasan Verifikasi */}
+      {/* Tab Laporan: Sub-Menu Switcher & Content */}
       {isLaporanMode && (
+        <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl text-xs font-semibold border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
+          <button
+            type="button"
+            onClick={() => setLaporanSubTab('harian')}
+            className={`py-2 px-1 rounded-xl transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 text-center ${
+              laporanSubTab === 'harian'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Briefcase className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+            <span className="truncate">Laporan Harian</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setLaporanSubTab('lembur')}
+            className={`py-2 px-1 rounded-xl transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 text-center ${
+              laporanSubTab === 'lembur'
+                ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-cyan-400 shadow-xs font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+            <span className="truncate">Tugas Lembur</span>
+            {myOvertimeRecords.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-mono">
+                {myOvertimeRecords.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setLaporanSubTab('izin')}
+            className={`py-2 px-1 rounded-xl transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 text-center ${
+              laporanSubTab === 'izin'
+                ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <HeartPulse className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+            <span className="truncate">Izin & Cuti</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200 font-mono font-bold">
+              {activeAnnualRemaining}h
+            </span>
+          </button>
+        </div>
+      )}
+
+      {isLaporanMode && laporanSubTab === 'harian' && (
         <div className="p-5 glass-card space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1003,8 +1057,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
       )}
 
       {/* Daily Work Reports Section (Hanya tampil di Tab Laporan & Desktop Mode) */}
-      {!isPresensiMode && (
-        <div className="space-y-5">
+      {(!isPresensiMode && (isHybridMode || laporanSubTab === 'harian')) && (
           <div className="space-y-3">
           {isHybridMode && (
             <div className="flex items-center justify-between">
@@ -1336,11 +1389,13 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           </div>
         )}
         </div>
+      )}
 
         {/* ============================================================== */}
         {/* TUGAS LEMBUR KEDINASAN (OVERTIME ENGINE PRO)                   */}
         {/* ============================================================== */}
-        <div className="p-5 glass-card space-y-4 border border-indigo-200/60 dark:border-indigo-900/40">
+        {(!isPresensiMode && (isHybridMode || laporanSubTab === 'lembur')) && (
+          <div className="p-5 glass-card space-y-4 border border-indigo-200/60 dark:border-indigo-900/40">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-cyan-400 flex items-center justify-center shrink-0 shadow-xs">
@@ -1518,14 +1573,14 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               })}
             </div>
           )}
-        </div>
-        </div>
-      )}
+          </div>
+        )}
 
         {/* ============================================================== */}
         {/* PUSAT PERIZINAN & HAK CUTI STAF (SMART LEAVE PRO)              */}
         {/* ============================================================== */}
-        <div className="p-5 glass-card space-y-4 border border-teal-200/60 dark:border-teal-900/40">
+        {(!isPresensiMode && (isHybridMode || laporanSubTab === 'izin')) && (
+          <div className="p-5 glass-card space-y-4 border border-teal-200/60 dark:border-teal-900/40">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0 shadow-xs">
@@ -1710,7 +1765,8 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               })}
             </div>
           )}
-        </div>
+          </div>
+        )}
 
       {/* Modals */}
       <CameraCaptureModal
@@ -1748,9 +1804,9 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
       {/* Modal 1: Formulir Pengajuan Izin Lembur */}
       {overtimeModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 pb-28 sm:pb-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[78vh] sm:max-h-[88vh] flex flex-col mb-16 sm:mb-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-cyan-400 flex items-center justify-center font-bold">
                   <Clock className="w-4 h-4" />
@@ -1768,7 +1824,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreateOvertimeRequest} className="p-5 space-y-4 text-xs">
+            <form id="overtime-request-form" onSubmit={handleCreateOvertimeRequest} className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs flex-1">
               <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed space-y-1">
                 <span className="font-bold block">Ketentuan Lembur Kedinasan Disdik HST:</span>
                 <p>1. Lembur wajib dilaksanakan di <strong>dalam kantor dinas</strong> (geofence radius terverifikasi).</p>
@@ -1833,33 +1889,35 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setOvertimeModalOpen(false)}
-                  className="px-3.5 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingOvertime}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>{isSubmittingOvertime ? 'Mengirim...' : 'Kirim Pengajuan Izin'}</span>
-                </button>
-              </div>
             </form>
+
+            <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setOvertimeModalOpen(false)}
+                className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                form="overtime-request-form"
+                disabled={isSubmittingOvertime}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isSubmittingOvertime ? 'Mengirim...' : 'Kirim Pengajuan Izin'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Modal 2: Formulir Selesai Lembur & Ringkasan Output */}
       {overtimeFinishModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 pb-28 sm:pb-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[78vh] sm:max-h-[88vh] flex flex-col mb-16 sm:mb-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
                   <CheckCircle2 className="w-4 h-4" />
@@ -1877,7 +1935,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs">
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs flex-1">
               <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between">
                 <div>
                   <span className="text-[10px] text-emerald-800 dark:text-emerald-300 font-medium block">Total Durasi Lembur Riil:</span>
@@ -1917,23 +1975,24 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 </div>
               )}
 
-              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setOvertimeFinishModalOpen(false)}
-                  className="px-3.5 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmFinishOvertime}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Kunci & Selesaikan Lembur</span>
-                </button>
-              </div>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setOvertimeFinishModalOpen(false)}
+                className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmFinishOvertime}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Kunci & Selesaikan Lembur</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1952,9 +2011,9 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
       {/* Modal 4: Formulir Pengajuan Izin & Cuti Terpadu */}
       {leaveModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[92vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 pb-28 sm:pb-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[78vh] sm:max-h-[88vh] flex flex-col mb-16 sm:mb-0">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold">
                   <HeartPulse className="w-4 h-4" />
@@ -1964,7 +2023,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                     Formulir Permohonan Izin & Cuti
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Sisa Cuti Tahunan Anda: <strong className="text-teal-600 dark:text-teal-400">{activeAnnualRemaining} Hari</strong>
+                    Sisa Cuti Tahunan: <strong className="text-teal-600 dark:text-teal-400 font-mono">{activeAnnualRemaining} Hari</strong>
                   </p>
                 </div>
               </div>
@@ -1977,7 +2036,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreateLeaveRequest} className="p-5 overflow-y-auto space-y-4 text-xs">
+            <form id="leave-request-form" onSubmit={handleCreateLeaveRequest} className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs flex-1">
               {/* Pilihan Jenis Izin */}
               <div className="space-y-1.5">
                 <label className="font-bold text-slate-700 dark:text-slate-300 block">
@@ -2132,24 +2191,26 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 )}
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setLeaveModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 font-medium cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingLeave}
-                  className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold rounded-xl shadow-md shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>{isSubmittingLeave ? 'Mengirim...' : 'Kirim Permohonan Izin'}</span>
-                </button>
-              </div>
             </form>
+
+            <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-950/95 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setLeaveModalOpen(false)}
+                className="px-4 py-2 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                form="leave-request-form"
+                disabled={isSubmittingLeave}
+                className="px-5 py-2 text-xs bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold rounded-xl shadow-md shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isSubmittingLeave ? 'Mengirim...' : 'Kirim Permohonan Izin'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
