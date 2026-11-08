@@ -1,7 +1,7 @@
 import XLSX from 'xlsx';
 import { listAllUsers, listAttendance, listOvertimeRequests, listLeaveRequests, getInstitutionSettings } from './db.js';
 
-export function generateRekapPresensiWorkbook({ monthStr = '2026-10', targetStaffId = null, vendorFilter = null } = {}) {
+export function generateRekapPresensiWorkbook({ monthStr = '2026-10', targetStaffId = null, vendorFilter = null, categoryFilter = null } = {}) {
   const [yearNum, monthNum] = monthStr.split('-').map(Number);
   const totalDays = new Date(yearNum, monthNum, 0).getDate();
   const monthNames = [
@@ -23,7 +23,14 @@ export function generateRekapPresensiWorkbook({ monthStr = '2026-10', targetStaf
 
   // Ambil seluruh staf alih daya aktif
   let allUsers = listAllUsers().filter((u) => u.role === 'outsourcing');
-  if (vendorFilter && vendorFilter !== 'ALL') {
+  if (categoryFilter && categoryFilter !== 'ALL') {
+    allUsers = allUsers.filter((u) => {
+      const v = (u.vendorName || '').toUpperCase();
+      if (categoryFilter === 'pppk_paruh_waktu') return v.includes('PPPK');
+      if (categoryFilter === 'magang') return v.includes('MAGANG');
+      return !v.includes('PPPK') && !v.includes('MAGANG');
+    });
+  } else if (vendorFilter && vendorFilter !== 'ALL') {
     allUsers = allUsers.filter((u) => u.vendorName === vendorFilter);
   }
   if (allUsers.length === 0) {

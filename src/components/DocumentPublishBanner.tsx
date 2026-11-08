@@ -240,6 +240,25 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
         }
 
         @media print {
+          /* Netralkan seluruh container fixed & overflow agar page-break berjalan alami per lembar */
+          .fixed,
+          [class*="fixed"] {
+            position: static !important;
+            inset: auto !important;
+            transform: none !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+          }
+
+          .overflow-y-auto,
+          .overflow-x-auto,
+          .overflow-auto,
+          .overflow-hidden {
+            overflow: visible !important;
+          }
+
           html,
           body {
             background: #ffffff !important;
@@ -265,11 +284,6 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
             color-scheme: light !important;
           }
 
-          div, main, section, article {
-            background-color: transparent !important;
-            background: transparent !important;
-          }
-
           *, *::before, *::after {
             box-shadow: none !important;
             text-shadow: none !important;
@@ -280,8 +294,8 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
           [class*="no-print"],
           nav,
           aside,
-          header,
-          footer,
+          header.no-print,
+          footer.no-print,
           button,
           input,
           select {
@@ -292,20 +306,24 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
             padding: 0 !important;
           }
 
-          #batata-document-export-container,
-          .batata-print-page,
-          .batata-hidden-page,
-          .print-page-white-bg {
+          #batata-document-export-container {
             display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
             overflow: visible !important;
-            background: #ffffff !important;
-            background-color: #ffffff !important;
-            color: #000000 !important;
           }
 
           .batata-print-page {
+            display: block !important;
+            position: relative !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            color: #000000 !important;
             width: 100% !important;
             max-width: 100% !important;
             min-height: 0 !important;
@@ -313,6 +331,18 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
             padding: 0 !important;
             border: none !important;
             box-shadow: none !important;
+            box-sizing: border-box !important;
+          }
+
+          .batata-print-page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+
+          .batata-hidden-page {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
           }
         }
       `}</style>

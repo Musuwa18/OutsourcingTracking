@@ -768,6 +768,7 @@ export default function App() {
   // Gemini AI Analytics & Custom Location Modal States
   const [aiChatOpen, setAiChatOpen] = useState<boolean>(false);
   const [customLocationStaff, setCustomLocationStaff] = useState<StaffProfile | null>(null);
+  const [printModalCategory, setPrintModalCategory] = useState<'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang'>('ALL');
 
   const handleStaffLocationUpdated = (staffId: string, newLocation: OfficeLocation, note?: string) => {
     // 1. Update staffList state & localStorage
@@ -2253,7 +2254,10 @@ export default function App() {
                   monthlyAggregates={monthlyAggregates}
                   weeklyEvaluations={weeklyEvaluations}
                   attendanceRecords={attendanceRecords}
-                  onOpenPrintModal={() => setPrintModalOpen(true)}
+                  onOpenPrintModal={(cat) => {
+                    setPrintModalCategory(cat || 'ALL');
+                    setPrintModalOpen(true);
+                  }}
                   onOpenAiChat={() => setAiChatOpen(true)}
                 />
               )}
@@ -2335,6 +2339,7 @@ export default function App() {
         institutionSettings={institutionSettings}
         overtimeRecords={overtimeRecords}
         leaveRecords={leaveRecords}
+        initialCategory={printModalCategory}
       />
 
       {/* Google Drive Cloud Sync Modal */}

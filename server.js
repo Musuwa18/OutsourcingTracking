@@ -1029,7 +1029,7 @@ app.post('/api/attendance/auto-close', (req, res) => {
 // 11g. EXPORT REKAP PRESENSI EXCEL (.XLSX MULTI-SHEET IDENTIK REFERENSI)
 app.get('/api/reports/rekap-presensi/excel', async (req, res) => {
   try {
-    const { month, staffId, vendor } = req.query;
+    const { month, staffId, vendor, category } = req.query;
     const monthStr = month || new Date().toISOString().slice(0, 7);
     const { generateRekapPresensiWorkbook } = await import('./server/excelReport.js');
     const xlsxModule = await import('xlsx');
@@ -1037,7 +1037,8 @@ app.get('/api/reports/rekap-presensi/excel', async (req, res) => {
     const wb = generateRekapPresensiWorkbook({
       monthStr,
       targetStaffId: staffId || null,
-      vendorFilter: vendor || null
+      vendorFilter: vendor || null,
+      categoryFilter: category || null
     });
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

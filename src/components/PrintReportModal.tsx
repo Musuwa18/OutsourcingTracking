@@ -43,6 +43,7 @@ interface PrintReportModalProps {
   institutionSettings?: InstitutionSettings;
   overtimeRecords?: OvertimeRecord[];
   leaveRecords?: LeaveRequest[];
+  initialCategory?: 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang';
 }
 
 // Komponen Kop Surat Resmi Kedinasan
@@ -108,6 +109,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   institutionSettings,
   overtimeRecords = [],
   leaveRecords = [],
+  initialCategory = 'ALL',
 }) => {
   if (!isOpen) return null;
 
@@ -116,8 +118,23 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   >('rekap-matriks');
   const [selectedStaffId, setSelectedStaffId] = useState<string>(staffList[0]?.id || '');
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-10');
+  const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang'>(initialCategory || 'ALL');
 
-  const [yearNum, monthNum] = selectedMonth.split('-').map(Number);
+  React.useEffect(() => {
+    if (initialCategory) {
+      setSelectedCategory(initialCategory);
+    }
+  }, [initialCategory]);
+
+  const displayedStaffList = useMemo(() => {
+    if (selectedCategory === 'ALL') return staffList;
+    return staffList.filter((st) => {
+      const v = (st.vendorName || '').toUpperCase();
+      if (selectedCategory === 'pppk_paruh_waktu') return v.includes('PPPK');
+      if (selectedCategory === 'magang') return v.includes('MAGANG');
+      return !v.includes('PPPK') && !v.includes('MAGANG');
+    });
+  }, [staffList, selectedCategory]);
   const totalDaysInMonth = new Date(yearNum, monthNum, 0).getDate();
   const monthNames = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -134,9 +151,9 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
     year: 'numeric',
   });
 
-  const staffMap = useMemo(() => new Map(staffList.map((s) => [s.id, s])), [staffList]);
+  const staffMap = useMemo(() => new Map(displayedStaffList.map((s) => [s.id, s])), [displayedStaffList]);
   const inst = institutionSettings || DEFAULT_INSTITUTION_SETTINGS;
-  const selectedStaff = staffMap.get(selectedStaffId) || staffList[0];
+  const selectedStaff = staffMap.get(selectedStaffId) || displayedStaffList[0] || staffList[0];
 
   // Lookup cepat kehadiran, lembur, dan izin
   const attLookup = useMemo(() => {
@@ -185,7 +202,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
   // Data Matriks Bulanan (Sheet 1)
   const matrixStaffData = useMemo(() => {
-    return staffList.map((st, idx) => {
+    return displayedStaffList.map((st, idx) => {
       let hadir = 0, sakit = 0, izin = 0, cuti = 0, alpa = 0, libur = 0, lemburJam = 0;
       const dailyCodes: string[] = [];
 
@@ -257,7 +274,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
         pct,
       };
     });
-  }, [staffList, totalDaysInMonth, selectedMonth, attLookup, otLookup, leaveLookup]);
+  }, [displayedStaffList, totalDaysInMonth, selectedMonth, attLookup, otLookup, leaveLookup]);
 
   const dailyHadirTotals = useMemo(() => {
     const totals: number[] = [];
@@ -268,9 +285,9 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
     return totals;
   }, [matrixStaffData, totalDaysInMonth]);
 
-  // Dynamic Page Chunking untuk Matriks F4 Landscape (11 staf per halaman F4)
+  // Dynamic Page Chunking untuk Matriks F4 Landscape (10 staf per lembar F4)
   const matrixChunks = useMemo(() => {
-    const chunkSize = 11;
+    const chunkSize = 10;
     const chunks = [];
     for (let i = 0; i < matrixStaffData.length; i += chunkSize) {
       chunks.push(matrixStaffData.slice(i, i + chunkSize));
@@ -439,6 +456,15 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   const orientation: 'portrait' | 'landscape' =
     printMode === 'rekap-matriks' ? 'landscape' : 'portrait';
 
+  const categoryLabel =
+    selectedCategory === 'vendor'
+      ? 'Tenaga Alih Daya (Vendor Swasta - PT. YASMINE BUIH PERSADA)'
+      : selectedCategory === 'pppk_paruh_waktu'
+      ? 'Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)'
+      : selectedCategory === 'magang'
+      ? 'Siswa / Mahasiswa Magang (PKL)'
+      : 'Seluruh Pegawai Alih Daya, PPPK & Magang';
+
   const docTitle =
     printMode === 'rekap-matriks'
       ? `Rekapitulasi Presensi Matriks Bulanan (${selectedMonthName} ${selectedYear})`
@@ -451,7 +477,6 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
       : printMode === 'rekap-divisi'
       ? `Rekapitulasi Kinerja Bulanan 4 Pilar (${selectedMonthName} ${selectedYear})`
       : `Rapor Kinerja Individu - ${selectedStaff.name}`;
-
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block">
       <div className="relative w-full max-w-[96vw] 2xl:max-w-7xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl my-2 sm:my-4 print:border-none print:shadow-none print:m-0 print:w-full print:max-w-none print:rounded-none">
@@ -543,6 +568,18 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
               </button>
             </div>
 
+            {/* Filter Kelompok / Kategori Pegawai */}
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value as 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang')}
+              className="px-2.5 py-1.5 text-xs rounded-xl border border-slate-700 bg-slate-800 text-white font-medium cursor-pointer"
+            >
+              <option value="ALL">Semua Kelompok ({staffList.length})</option>
+              <option value="vendor">🏢 Vendor Swasta</option>
+              <option value="pppk_paruh_waktu">🏛️ PPPK Paruh Waktu</option>
+              <option value="magang">🎓 Siswa Magang</option>
+            </select>
+
             {/* Selector Bulan */}
             <select
               value={selectedMonth}
@@ -554,7 +591,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
               <option value="2026-09">September 2026</option>
             </select>
 
-            {/* Selector Staf */}
+            {/* Selector Staf jika mode Rapor Individu / Timesheet Harian / Surat Izin */}
             {(printMode === 'rapor-staf' || printMode === 'surat-izin' || printMode === 'timesheet-harian') && (
               <select
                 value={selectedStaffId}
@@ -562,7 +599,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                 className="px-2.5 py-1.5 text-xs rounded-xl border border-slate-700 bg-slate-800 text-white font-medium max-w-[170px] cursor-pointer"
               >
                 {printMode === 'surat-izin' && <option value="ALL">Semua Personel</option>}
-                {staffList.map((s) => (
+                {displayedStaffList.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.division ? s.division.split(' ')[0] : 'Umum'})
                   </option>
@@ -589,8 +626,8 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           onClose={onClose}
           extraActions={
             <a
-              href={`/api/reports/rekap-presensi/excel?month=${selectedMonth}&staffId=${selectedStaff?.id || ''}&vendor=${encodeURIComponent(selectedStaff?.vendorName || '')}`}
-              download={`rekap_presensi_outsourcing_${selectedMonth}.xlsx`}
+              href={`/api/reports/rekap-presensi/excel?month=${selectedMonth}&staffId=${selectedStaff?.id || ''}&category=${selectedCategory}`}
+              download={`rekap_presensi_${selectedCategory}_${selectedMonth}.xlsx`}
               className="inline-flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
               title="Unduh Berkas Excel (.xlsx) 2 Sheet Asli Berformula COUNTIF & SUM"
             >
@@ -611,7 +648,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
               return (
                 <div
                   key={cIdx}
-                  className="bg-white text-slate-900 w-[330mm] min-h-[215mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full select-text"
+                  className="bg-white text-slate-900 w-[330mm] min-h-[215mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:!static print:!block print:!w-full print:!max-w-full print:!min-h-0 print:!h-auto print:!p-0 print:!m-0 print:!border-none print:!shadow-none select-text"
                 >
                   <div>
                     {pageNum === 1 ? (
@@ -622,7 +659,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                             REKAPITULASI PRESENSI BULANAN PEGAWAI OUTSOURCING
                           </h4>
                           <p className="text-[10px] text-slate-600 font-mono">
-                            Periode: {selectedMonthName} {selectedYear} (1 s.d. {totalDaysInMonth} {selectedMonthName} {selectedYear}) · Penempatan: {inst.namaSkpd} {inst.namaPemda}
+                            Periode: {selectedMonthName} {selectedYear} (1 s.d. {totalDaysInMonth} {selectedMonthName} {selectedYear}) · Kelompok: {categoryLabel} · Penempatan: {inst.namaSkpd} {inst.namaPemda}
                           </p>
                         </div>
                       </>
@@ -811,7 +848,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           {/* 2. TIMESHEET HARIAN INDIVIDU (SHEET 2 - F4 PORTRAIT)                     */}
           {/* ========================================================================= */}
           {printMode === 'timesheet-harian' && selectedStaff && (
-            <div className="bg-white text-slate-900 w-[215mm] min-h-[330mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full select-text">
+            <div className="bg-white text-slate-900 w-[215mm] min-h-[330mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:!static print:!block print:!w-full print:!max-w-full print:!min-h-0 print:!h-auto print:!p-0 print:!m-0 print:!border-none print:!shadow-none select-text">
               <div>
                 <KopSuratKedinasan inst={inst} isLandscape={false} />
                 <div className="text-center space-y-0.5 mb-2">
@@ -1005,7 +1042,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           {/* 3. REKAPITULASI KINERJA 4 PILAR TIM (F4 PORTRAIT)                        */}
           {/* ========================================================================= */}
           {printMode === 'rekap-divisi' && (
-            <div className="bg-white text-slate-900 w-[215mm] min-h-[330mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full select-text">
+            <div className="bg-white text-slate-900 w-[215mm] min-h-[330mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:!static print:!block print:!w-full print:!max-w-full print:!min-h-0 print:!h-auto print:!p-0 print:!m-0 print:!border-none print:!shadow-none select-text">
               <div>
                 <KopSuratKedinasan inst={inst} isLandscape={false} />
                 <div className="text-center space-y-0.5 mb-3">
@@ -1144,7 +1181,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           {/* 4. RAPOR INDIVIDU 4 PILAR (F4 PORTRAIT)                                  */}
           {/* ========================================================================= */}
           {printMode === 'rapor-staf' && selectedStaff && (
-            <div className="bg-white text-slate-900 w-[215mm] min-h-[330mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full select-text">
+            <div className="bg-white text-slate-900 w-[215mm] min-h-[330mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:!static print:!block print:!w-full print:!max-w-full print:!min-h-0 print:!h-auto print:!p-0 print:!m-0 print:!border-none print:!shadow-none select-text">
               <div>
                 <KopSuratKedinasan inst={inst} isLandscape={false} />
                 <div className="text-center space-y-0.5 mb-3">
@@ -1243,7 +1280,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           {/* 5. SURAT PERINTAH TUGAS LEMBUR (SPTL - F4 PORTRAIT)                       */}
           {/* ========================================================================= */}
           {printMode === 'sptl-lembur' && (
-            <div className="bg-white text-slate-900 w-[215mm] min-h-[330mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full select-text">
+            <div className="bg-white text-slate-900 w-[215mm] min-h-[330mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:!static print:!block print:!w-full print:!max-w-full print:!min-h-0 print:!h-auto print:!p-0 print:!m-0 print:!border-none print:!shadow-none select-text">
               <div>
                 <KopSuratKedinasan inst={inst} isLandscape={false} />
                 <div className="text-center space-y-0.5 mb-3">
@@ -1364,7 +1401,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           {/* 6. SURAT KETERANGAN IZIN & HAK CUTI RESMI (F4 PORTRAIT)                   */}
           {/* ========================================================================= */}
           {printMode === 'surat-izin' && (
-            <div className="bg-white text-slate-900 w-[215mm] min-h-[330mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:shadow-none print:border-none print:m-0 print:p-0 print:w-full select-text">
+            <div className="bg-white text-slate-900 w-[215mm] min-h-[330mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:!static print:!block print:!w-full print:!max-w-full print:!min-h-0 print:!h-auto print:!p-0 print:!m-0 print:!border-none print:!shadow-none select-text">
               <div>
                 <KopSuratKedinasan inst={inst} isLandscape={false} />
                 <div className="text-center space-y-0.5 mb-3">

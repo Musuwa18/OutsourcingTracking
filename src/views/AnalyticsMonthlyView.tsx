@@ -31,7 +31,7 @@ interface AnalyticsMonthlyViewProps {
   monthlyAggregates: MonthlyAggregate[];
   weeklyEvaluations: WeeklyEvaluation[];
   attendanceRecords: AttendanceRecord[];
-  onOpenPrintModal: () => void;
+  onOpenPrintModal: (category?: 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang') => void;
   onOpenAiChat?: () => void;
 }
 
@@ -60,10 +60,24 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
 }) => {
   const [selectedStaffId, setSelectedStaffId] = useState(staffList[0]?.id || '');
   const [selectedMonth, setSelectedMonth] = useState('2026-10');
+  const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDivision, setSelectedDivision] = useState('ALL');
   const [sortBy, setSortBy] = useState<'kpi_desc' | 'kpi_asc' | 'name_asc' | 'name_desc'>('kpi_desc');
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  const categoryCounts = useMemo(() => {
+    let vendorCount = 0;
+    let pppkCount = 0;
+    let magangCount = 0;
+    staffList.forEach((s) => {
+      const v = (s.vendorName || '').toUpperCase();
+      if (v.includes('PPPK')) pppkCount++;
+      else if (v.includes('MAGANG')) magangCount++;
+      else vendorCount++;
+    });
+    return { vendorCount, pppkCount, magangCount };
+  }, [staffList]);
 
   // Daftar unik divisi untuk filter
   const divisions = useMemo(() => {
@@ -80,6 +94,17 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
   // Filter & Urutkan daftar pegawai (untuk ratusan data)
   const filteredAndSortedStaff = useMemo(() => {
     let list = staffList.filter((st) => {
+      const v = (st.vendorName || '').toUpperCase();
+      const stCat = v.includes('PPPK')
+        ? 'pppk_paruh_waktu'
+        : v.includes('MAGANG')
+        ? 'magang'
+        : 'vendor';
+
+      if (selectedCategory !== 'ALL' && stCat !== selectedCategory) {
+        return false;
+      }
+
       const matchDivision = selectedDivision === 'ALL' || st.division === selectedDivision;
       if (!matchDivision) return false;
       if (!searchQuery.trim()) return true;
@@ -104,7 +129,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
       if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
       return 0;
     });
-  }, [staffList, selectedDivision, searchQuery, sortBy, aggMap]);
+  }, [staffList, selectedCategory, selectedDivision, searchQuery, sortBy, aggMap]);
 
   const staffMap = useMemo(() => new Map(staffList.map((s) => [s.id, s])), [staffList]);
   const currentStaff = (selectedStaffId ? staffMap.get(selectedStaffId) : null) || filteredAndSortedStaff[0] || staffList[0];
@@ -202,14 +227,31 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
                   <div className="font-bold text-xs truncate leading-tight">
                     {st.name}
                   </div>
-                  <div
-                    className={`text-[10px] truncate mt-0.5 ${
-                      isSelected
-                        ? 'text-slate-300 dark:text-slate-600'
-                        : 'text-slate-500 dark:text-slate-400'
-                    }`}
-                  >
-                    {st.division || 'Disdik HST'}
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span
+                      className={`text-[10px] truncate ${
+                        isSelected
+                          ? 'text-slate-300 dark:text-slate-600'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      {st.division || 'Disdik HST'}
+                    </span>
+                    <span
+                      className={`text-[8.5px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
+                        (st.vendorName || '').toUpperCase().includes('PPPK')
+                          ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/40'
+                          : (st.vendorName || '').toUpperCase().includes('MAGANG')
+                          ? 'bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 border border-purple-300/40'
+                          : 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/40'
+                      }`}
+                    >
+                      {(st.vendorName || '').toUpperCase().includes('PPPK')
+                        ? 'PPPK'
+                        : (st.vendorName || '').toUpperCase().includes('MAGANG')
+                        ? 'Magang'
+                        : 'Vendor'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -295,7 +337,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
 
           <button
             type="button"
-            onClick={onOpenPrintModal}
+            onClick={() => onOpenPrintModal(selectedCategory)}
             className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors flex items-center gap-2 cursor-pointer shadow-xs"
           >
             <Printer className="w-3.5 h-3.5" />
@@ -355,7 +397,55 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
               {filteredAndSortedStaff.length} / {staffList.length}
             </span>
           </div>
+          {/* Segmented Category Filter Pills (Pemilahan Pegawai Vendor vs PPPK vs Magang) */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[10.5px]">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('ALL')}
+              className={`py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer ${
+                selectedCategory === 'ALL'
+                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-cyan-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              Semua ({staffList.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('vendor')}
+              className={`py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer truncate ${
+                selectedCategory === 'vendor'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              🏢 Vendor ({categoryCounts.vendorCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('pppk_paruh_waktu')}
+              className={`py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer truncate ${
+                selectedCategory === 'pppk_paruh_waktu'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              🏛️ PPPK ({categoryCounts.pppkCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('magang')}
+              className={`py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer truncate ${
+                selectedCategory === 'magang'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              🎓 Magang ({categoryCounts.magangCount})
+            </button>
+          </div>
 
+          {/* Header Panel Kiri */}
           {/* Pencarian Cepat Nama / NIP */}
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -415,7 +505,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
           </div>
 
           {/* Reset Filter Jika Aktif */}
-          {(searchQuery || selectedDivision !== 'ALL' || sortBy !== 'kpi_desc') && (
+          {(searchQuery || selectedDivision !== 'ALL' || sortBy !== 'kpi_desc' || selectedCategory !== 'ALL') && (
             <div className="flex items-center justify-between text-[10px] text-slate-500 px-0.5">
               <span>Filter diterapkan</span>
               <button
@@ -424,6 +514,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
                   setSearchQuery('');
                   setSelectedDivision('ALL');
                   setSortBy('kpi_desc');
+                  setSelectedCategory('ALL');
                 }}
                 className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline flex items-center gap-0.5 cursor-pointer"
               >
@@ -458,6 +549,21 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
                     {currentStaff?.nip}
                   </span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      (currentStaff?.vendorName || '').toUpperCase().includes('PPPK')
+                        ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300/60'
+                        : (currentStaff?.vendorName || '').toUpperCase().includes('MAGANG')
+                        ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border-purple-300/60'
+                        : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200/60'
+                    }`}
+                  >
+                    {(currentStaff?.vendorName || '').toUpperCase().includes('PPPK')
+                      ? '🏛️ PPPK Paruh Waktu'
+                      : (currentStaff?.vendorName || '').toUpperCase().includes('MAGANG')
+                      ? '🎓 Siswa / Mahasiswa Magang'
+                      : '🏢 Tenaga Alih Daya (Vendor)'}
+                  </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-1">
                   <span className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
@@ -467,7 +573,7 @@ export const AnalyticsMonthlyView: React.FC<AnalyticsMonthlyViewProps> = ({
                   <span>•</span>
                   <span className="flex items-center gap-1">
                     <Briefcase className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{currentStaff?.vendorName || 'PT Handil Bakti Utama (Mitra Disdik HST)'}</span>
+                    <span>{currentStaff?.vendorName || 'PT. YASMINE BUIH PERSADA'}</span>
                   </span>
                 </div>
               </div>
