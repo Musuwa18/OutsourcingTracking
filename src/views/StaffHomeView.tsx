@@ -33,6 +33,7 @@ import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { WatermarkCameraModal } from '../components/WatermarkCameraModal';
 import { AiDuplicateValidationModal } from '../components/AiDuplicateValidationModal';
 import { validateReportPhotoAgainstHistory, computeImagePerceptualHash } from '../utils/imageHash';
+import { IndonesianDatePicker } from '../components/IndonesianDatePicker';
 import { createWorkPhotoThumbnail } from '../data/mockData';
 
 interface StaffHomeViewProps {
@@ -1836,12 +1837,12 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Tanggal Pelaksanaan Lembur
                 </label>
-                <input
-                  type="date"
+                <IndonesianDatePicker
                   required
                   value={overtimeDate}
-                  onChange={(e) => setOvertimeDate(e.target.value)}
+                  onChange={(val) => setOvertimeDate(val)}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  accentColor="indigo"
                 />
               </div>
 
@@ -2073,30 +2074,31 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                   <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                     Tanggal Mulai:
                   </label>
-                  <input
-                    type="date"
+                  <IndonesianDatePicker
                     required
                     value={leaveStartDate}
-                    onChange={(e) => {
-                      setLeaveStartDate(e.target.value);
-                      if (e.target.value > leaveEndDate) {
-                        setLeaveEndDate(e.target.value);
+                    onChange={(val) => {
+                      setLeaveStartDate(val);
+                      if (val > leaveEndDate) {
+                        setLeaveEndDate(val);
                       }
                     }}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
+                    accentColor="teal"
                   />
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                     Tanggal Selesai:
                   </label>
-                  <input
-                    type="date"
+                  <IndonesianDatePicker
                     required
                     min={leaveStartDate}
                     value={leaveEndDate}
-                    onChange={(e) => setLeaveEndDate(e.target.value)}
+                    onChange={(val) => setLeaveEndDate(val)}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
+                    accentColor="teal"
+                    align="right"
                   />
                 </div>
                 <div className="col-span-2 pt-1 flex items-center justify-between text-[11px] border-t border-slate-200/60 dark:border-slate-700/60">
