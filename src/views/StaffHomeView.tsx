@@ -17,6 +17,7 @@ import {
   Briefcase,
   Coffee,
   Moon,
+  X,
 } from 'lucide-react';
 import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, FieldCheckinRecord, OvertimeRecord } from '../types';
 import { getDayOfWeekKey, getTodayDateStr, getCurrentWitaTimeStr } from '../utils/date';
