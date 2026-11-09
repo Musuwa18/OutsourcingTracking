@@ -88,10 +88,9 @@ export const RadarChart: React.FC<RadarChartProps> = ({
             <g key={lvl}>
               <polygon
                 points={points}
-                fill={lvl === 5 ? 'rgba(241, 245, 249, 0.3)' : 'none'}
-                stroke="currentColor"
+                fill={lvl === 5 ? 'rgba(241, 245, 249, 0.4)' : 'none'}
+                stroke="#cbd5e1"
                 strokeWidth="1"
-                className="text-slate-200 dark:text-slate-800"
               />
               <text
                 x={center}
@@ -115,10 +114,9 @@ export const RadarChart: React.FC<RadarChartProps> = ({
               y1={center}
               x2={x}
               y2={y}
-              stroke="currentColor"
+              stroke="#cbd5e1"
               strokeWidth="1"
               strokeDasharray="2 3"
-              className="text-slate-200 dark:text-slate-800"
             />
           );
         })}
