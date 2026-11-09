@@ -18,6 +18,7 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
   workReports,
   onOpenTimesheet,
 }) => {
+  const [filterType, setFilterType] = useState<'all' | 'attendance' | 'field' | 'reports'>('all');
   const [selectedItem, setSelectedItem] = useState<AttendanceRecord | DailyWorkReport | FieldCheckinRecord | null>(null);
   const [modalMode, setModalMode] = useState<'default' | 'break'>('default');
   const [isModalOpen, setIsModalOpen] = useState(false);
