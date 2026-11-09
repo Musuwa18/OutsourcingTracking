@@ -188,9 +188,11 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
     currentShortHash: string;
   } | null>(null);
 
+  const breakOutValue = todayAttendance?.breakOutTime || todayAttendance?.break_out_time;
+  const breakInValue = todayAttendance?.breakInTime || todayAttendance?.break_in_time;
   const hasClockedIn = !!todayAttendance && todayAttendance.status !== 'Izin';
-  const hasBrokenOut = !!todayAttendance?.breakOutTime && todayAttendance.breakOutTime !== '-';
-  const hasBrokenIn = !!todayAttendance?.breakInTime && todayAttendance.breakInTime !== '-';
+  const hasBrokenOut = !!breakOutValue && breakOutValue !== '-';
+  const hasBrokenIn = !!breakInValue && breakInValue !== '-';
   const hasClockedOut = !!todayAttendance?.clockOutTime && todayAttendance.clockOutTime !== '-';
   const isOvernightShift = Boolean(
     todayAttendance &&
@@ -446,9 +448,11 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
     let diffMinutes = (endH * 60 + endM) - (inH * 60 + inM);
     if (diffMinutes < 0) diffMinutes += 24 * 60;
 
-    if (todayAttendance.breakOutTime && todayAttendance.breakInTime) {
-      const [bOutH, bOutM] = todayAttendance.breakOutTime.replace(/\./g, ':').split(':').map(Number);
-      const [bInH, bInM] = todayAttendance.breakInTime.replace(/\./g, ':').split(':').map(Number);
+    const effectiveBreakOut = todayAttendance.breakOutTime || todayAttendance.break_out_time;
+    const effectiveBreakIn = todayAttendance.breakInTime || todayAttendance.break_in_time;
+    if (effectiveBreakOut && effectiveBreakIn) {
+      const [bOutH, bOutM] = effectiveBreakOut.replace(/\./g, ':').split(':').map(Number);
+      const [bInH, bInM] = effectiveBreakIn.replace(/\./g, ':').split(':').map(Number);
       if (!isNaN(bOutH) && !isNaN(bInH)) {
         const breakMins = (bInH * 60 + bInM) - (bOutH * 60 + bOutM);
         if (breakMins > 0) diffMinutes = Math.max(0, diffMinutes - breakMins);
@@ -719,17 +723,17 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                   <span>Sesi Istirahat Kerja</span>
                   <span className="font-mono text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
-                    ({todaySchedule?.enableBreak ? `${todaySchedule.breakStart} - ${todaySchedule.breakEnd} WITA` : '12:00 - 13:00 / Fleksibel'})
+                    ({todaySchedule?.enableBreak ? `${todaySchedule.breakStart} - 15:00 WITA (Fleksibel)` : '11:30 - 15:00 WITA (Fleksibel)'})
                   </span>
                 </span>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
                   {hasBrokenOut && !hasBrokenIn
-                    ? `Sedang istirahat keluar sejak ${todayAttendance?.breakOutTime} WITA`
+                    ? `Sedang istirahat keluar sejak ${breakOutValue} WITA`
                     : hasBrokenIn
-                    ? `Istirahat selesai (${todayAttendance?.breakOutTime} - ${todayAttendance?.breakInTime} WITA)`
+                    ? `Istirahat selesai (${breakOutValue} - ${breakInValue} WITA)`
                     : hasClockedOut
                     ? 'Jam kerja telah dikunci (Clock Out).'
-                    : 'Klik "Clock Out Istirahat" saat keluar & "Clock In Istirahat" saat kembali.'}
+                    : 'Klik "Clock Out Istirahat" saat keluar & "Clock In Istirahat" saat kembali (Toleransi Fleksibel s.d. 15:00 WITA).'}
                 </p>
               </div>
             </div>
@@ -755,7 +759,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               </button>
             ) : (
               <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20 shrink-0 whitespace-nowrap">
-                Sesi Istirahat Tuntas
+                Istirahat Selesai ({breakOutValue} - {breakInValue} WITA)
               </span>
             )}
           </div>

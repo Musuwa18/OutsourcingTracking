@@ -83,6 +83,8 @@ if (isNodeSqlite && dbEngine) {
       division_id TEXT NOT NULL,
       date TEXT NOT NULL,
       clock_in_time TEXT NOT NULL,
+      break_out_time TEXT,
+      break_in_time TEXT,
       clock_out_time TEXT,
       status TEXT NOT NULL,
       selfie_url TEXT,
@@ -1749,8 +1751,8 @@ export function saveAttendance(attData) {
   // Jika tugas lapangan, otomatis lolos validasi geofence
   const isGeoValid = isFieldDuty ? 1 : ((attData.locationCoords?.withinRadius ?? attData.isGeofenceValid ?? true) ? 1 : 0);
   const dist = attData.locationCoords?.distanceMeters ?? attData.distanceMeters ?? 0;
-  const breakOut = attData.breakOutTime || null;
-  const breakIn = attData.breakInTime || null;
+  const breakOut = attData.breakOutTime || attData.break_out_time || null;
+  const breakIn = attData.breakInTime || attData.break_in_time || null;
   const autoClosed = attData.autoClosed ? 1 : 0;
 
   if (isNodeSqlite && dbEngine) {
@@ -1837,7 +1839,9 @@ export function saveAttendance(attData) {
         divisionId,
         clockInTime: finalClockIn,
         breakOutTime: finalBreakOut,
+        break_out_time: finalBreakOut,
         breakInTime: finalBreakIn,
+        break_in_time: finalBreakIn,
         clockOutTime: finalClockOut,
         isFieldDuty: Boolean(isFieldDuty),
         fieldDutyNotes: fieldDutyNotes || '',
@@ -1885,7 +1889,9 @@ export function saveAttendance(attData) {
         date: recordDate,
         selfieUrl,
         breakOutTime: breakOut,
+        break_out_time: breakOut,
         breakInTime: breakIn,
+        break_in_time: breakIn,
         isFieldDuty: Boolean(isFieldDuty),
         fieldDutyNotes: fieldDutyNotes || '',
         autoClosed: Boolean(autoClosed),
@@ -1900,8 +1906,10 @@ export function saveAttendance(attData) {
         ...fallbackStore.attendance[existingIdx],
         ...attData,
         clockInTime: attData.clockInTime || fallbackStore.attendance[existingIdx].clockInTime,
-        breakOutTime: breakOut || fallbackStore.attendance[existingIdx].breakOutTime,
-        breakInTime: breakIn || fallbackStore.attendance[existingIdx].breakInTime,
+        breakOutTime: breakOut || fallbackStore.attendance[existingIdx].breakOutTime || fallbackStore.attendance[existingIdx].break_out_time,
+        break_out_time: breakOut || fallbackStore.attendance[existingIdx].breakOutTime || fallbackStore.attendance[existingIdx].break_out_time,
+        breakInTime: breakIn || fallbackStore.attendance[existingIdx].breakInTime || fallbackStore.attendance[existingIdx].break_in_time,
+        break_in_time: breakIn || fallbackStore.attendance[existingIdx].breakInTime || fallbackStore.attendance[existingIdx].break_in_time,
         clockOutTime: attData.clockOutTime || fallbackStore.attendance[existingIdx].clockOutTime,
         selfieUrl: selfieUrl || fallbackStore.attendance[existingIdx].selfieUrl,
         isFieldDuty: Boolean(isFieldDuty),
@@ -1913,7 +1921,9 @@ export function saveAttendance(attData) {
         id,
         selfieUrl,
         breakOutTime: breakOut,
+        break_out_time: breakOut,
         breakInTime: breakIn,
+        break_in_time: breakIn,
         isFieldDuty: Boolean(isFieldDuty),
         fieldDutyNotes: fieldDutyNotes || '',
         createdAt: now
@@ -1952,7 +1962,9 @@ export function listAttendance(filters = {}) {
       date: r.date,
       clockInTime: r.clock_in_time,
       breakOutTime: r.break_out_time || null,
+      break_out_time: r.break_out_time || null,
       breakInTime: r.break_in_time || null,
+      break_in_time: r.break_in_time || null,
       clockOutTime: r.clock_out_time,
       status: r.status,
       selfieUrl: r.selfie_url,
@@ -1988,12 +2000,20 @@ export function listAttendance(filters = {}) {
       createdAt: r.created_at
     }));
   } else {
-    return fallbackStore.attendance.filter((r) => {
-      if (staffId && r.staffId !== staffId) return false;
-      if (divisionId && divisionId !== 'div-all' && r.divisionId !== divisionId) return false;
-      if (date && r.date !== date) return false;
-      return true;
-    });
+    return fallbackStore.attendance
+      .filter((r) => {
+        if (staffId && r.staffId !== staffId) return false;
+        if (divisionId && divisionId !== 'div-all' && r.divisionId !== divisionId) return false;
+        if (date && r.date !== date) return false;
+        return true;
+      })
+      .map((r) => ({
+        ...r,
+        breakOutTime: r.breakOutTime || r.break_out_time || null,
+        break_out_time: r.break_out_time || r.breakOutTime || null,
+        breakInTime: r.breakInTime || r.break_in_time || null,
+        break_in_time: r.break_in_time || r.breakInTime || null,
+      }));
   }
 }
 

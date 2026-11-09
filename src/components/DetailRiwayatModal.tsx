@@ -152,10 +152,12 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
 
   // Hitung durasi istirahat jika ada
   const calculateBreakDuration = () => {
-    if (!attRecord?.breakOutTime || !attRecord?.breakInTime) return 'Sedang berlangsung';
+    const bOut = attRecord?.breakOutTime || attRecord?.break_out_time;
+    const bIn = attRecord?.breakInTime || attRecord?.break_in_time;
+    if (!bOut || !bIn) return 'Sedang berlangsung';
     try {
-      const [h1, m1, s1] = attRecord.breakOutTime.split(':').map(Number);
-      const [h2, m2, s2] = attRecord.breakInTime.split(':').map(Number);
+      const [h1, m1, s1] = bOut.split(':').map(Number);
+      const [h2, m2, s2] = bIn.split(':').map(Number);
       const diffSec = (h2 * 3600 + m2 * 60 + (s2 || 0)) - (h1 * 3600 + m1 * 60 + (s1 || 0));
       if (diffSec <= 0) return 'Tuntas tercatat';
       if (diffSec < 60) return `${diffSec} detik`;
@@ -199,7 +201,7 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
               {/* Status Badge */}
               {isBreakDetail ? (
                 <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                  {attRecord?.breakInTime ? 'Sesi Istirahat Tuntas' : 'Sedang Istirahat'}
+                  {(attRecord?.breakInTime || attRecord?.break_in_time) ? 'Sesi Istirahat Tuntas' : 'Sedang Istirahat'}
                 </span>
               ) : isFieldCheckin ? (
                 <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-amber-500/20 text-amber-400 border-amber-500/30">
@@ -280,7 +282,7 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
                       <Clock className="w-3 h-3 text-amber-400" /> Clock Out Istirahat
                     </div>
                     <div className="font-mono text-sm font-bold text-white">
-                      {attRecord.breakOutTime ? `${attRecord.breakOutTime} WITA` : '-'}
+                      {(attRecord.breakOutTime || attRecord.break_out_time) ? `${attRecord.breakOutTime || attRecord.break_out_time} WITA` : '-'}
                     </div>
                     <div className="text-[10px] text-slate-500">Mulai istirahat keluar</div>
                   </div>
@@ -290,7 +292,7 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
                       <Clock className="w-3 h-3 text-emerald-400" /> Clock In Kembali
                     </div>
                     <div className="font-mono text-sm font-bold text-white">
-                      {attRecord.breakInTime ? `${attRecord.breakInTime} WITA` : 'Sedang Istirahat'}
+                      {(attRecord.breakInTime || attRecord.break_in_time) ? `${attRecord.breakInTime || attRecord.break_in_time} WITA` : 'Sedang Istirahat'}
                     </div>
                     <div className="text-[10px] text-slate-500">Selesai & kembali kerja</div>
                   </div>
@@ -469,29 +471,33 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
                     </div>
                   </div>
                 {/* Informasi Sesi Istirahat Jika Ada */}
-                {isAttendance && attRecord?.breakOutTime && (
-                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] text-amber-500 dark:text-amber-400 font-semibold">
-                      <span className="flex items-center gap-1.5">
-                        <Coffee className="w-3.5 h-3.5" />
-                        <span>Sesi Istirahat Kerja</span>
-                      </span>
-                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
-                        {attRecord.breakInTime ? 'Sesi Istirahat Tuntas' : 'Sedang Istirahat'}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-500/20 text-xs font-mono">
-                      <div>
-                        <div className="text-[10px] text-slate-400 font-sans">Clock Out Istirahat:</div>
-                        <div className="font-bold text-white">{attRecord.breakOutTime} WITA</div>
+                {isAttendance && (attRecord?.breakOutTime || attRecord?.break_out_time) && (() => {
+                  const bOut = attRecord.breakOutTime || attRecord.break_out_time;
+                  const bIn = attRecord.breakInTime || attRecord.break_in_time;
+                  return (
+                    <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-amber-500 dark:text-amber-400 font-semibold">
+                        <span className="flex items-center gap-1.5">
+                          <Coffee className="w-3.5 h-3.5" />
+                          <span>Sesi Istirahat Kerja</span>
+                        </span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                          {bIn ? 'Sesi Istirahat Tuntas' : 'Sedang Istirahat'}
+                        </span>
                       </div>
-                      <div>
-                        <div className="text-[10px] text-slate-400 font-sans">Clock In Kembali:</div>
-                        <div className="font-bold text-white">{attRecord.breakInTime ? `${attRecord.breakInTime} WITA` : 'Belum Kembali'}</div>
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-500/20 text-xs font-mono">
+                        <div>
+                          <div className="text-[10px] text-slate-400 font-sans">Clock Out Istirahat:</div>
+                          <div className="font-bold text-white">{bOut} WITA</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-slate-400 font-sans">Clock In Kembali:</div>
+                          <div className="font-bold text-white">{bIn ? `${bIn} WITA` : 'Belum Kembali'}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Informasi Kunjungan Tugas Lapangan Jika Ada */}
                 {isAttendance && dayFieldCheckins && dayFieldCheckins.length > 0 && (

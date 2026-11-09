@@ -683,6 +683,73 @@ app.get('/api/attendance', (req, res) => {
   }
 });
 
+app.get('/api/attendance/today', (req, res) => {
+  try {
+    const { staffId } = req.query;
+    if (!staffId) {
+      return res.status(400).json({ error: 'Parameter staffId diperlukan.' });
+    }
+    const todayDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Makassar',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+
+    autoClosePreviousDayAttendance(todayDateStr);
+    const records = listAttendance({ staffId, date: todayDateStr });
+    const todayRecord = records.find((r) => r.staffId === staffId && r.date === todayDateStr) || records[0] || null;
+    res.json({ success: true, attendance: todayRecord, records });
+  } catch (err) {
+    console.error('[API Error] Get Today Attendance:', err);
+    res.status(500).json({ error: 'Gagal memuat presensi hari ini.' });
+  }
+});
+
+app.post('/api/attendance/break', (req, res) => {
+  try {
+    const { type, staffId, date, time } = req.body;
+    if (!type || (type !== 'break-out' && type !== 'break-in')) {
+      return res.status(400).json({ error: 'Tipe sesi istirahat tidak valid (gunakan break-out atau break-in).' });
+    }
+    const todayDateStr = date || new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Makassar',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+
+    const currentWitaTime = time || new Intl.DateTimeFormat('id-ID', {
+      timeZone: 'Asia/Makassar',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(new Date()).replace(/\./g, ':');
+
+    const payload = {
+      ...req.body,
+      staffId,
+      date: todayDateStr,
+      status: req.body.status || 'Hadir',
+    };
+
+    if (type === 'break-out') {
+      payload.breakOutTime = currentWitaTime;
+      payload.break_out_time = currentWitaTime;
+    } else {
+      payload.breakInTime = currentWitaTime;
+      payload.break_in_time = currentWitaTime;
+    }
+
+    const saved = saveAttendance(payload);
+    res.status(200).json({ success: true, attendance: saved, message: type === 'break-out' ? 'Istirahat keluar berhasil dicatat.' : 'Kembali bekerja berhasil dicatat.' });
+  } catch (err) {
+    console.error('[API Error] Break Attendance:', err);
+    res.status(500).json({ error: 'Gagal memproses sesi istirahat presensi.' });
+  }
+});
+
 app.post('/api/attendance', (req, res) => {
   try {
     const saved = saveAttendance(req.body);

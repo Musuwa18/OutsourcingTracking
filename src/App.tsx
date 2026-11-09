@@ -70,9 +70,9 @@ import {
   apiFetchOffices,
   apiUpdateOffices,
   apiFetchAttendance,
-  apiFetchReports,
-  apiFetchEvaluations,
+  apiFetchTodayAttendance,
   apiSubmitAttendance,
+  apiSubmitBreakAttendance,
   apiSubmitReport,
   apiApproveReport,
   apiSubmitEvaluation,
@@ -1582,84 +1582,130 @@ export default function App() {
   };
 
   // Handle Break Out (Staff)
-  const handleBreakOut = (selfieBase64: string, locationData: any) => {
+  const handleBreakOut = async (selfieBase64: string, locationData: any) => {
     const timeStr = getCurrentWitaTimeStr();
     const targetStaffId = currentStaff?.id || 'usr-os-default';
+    const targetRecord = staffTodayAttendance;
+    const targetDate = targetRecord?.date || todayDateStr;
 
+    // Optimistic local state update
     setAttendanceRecords((prev) =>
       prev.map((r) => {
-        if (r.staffId === targetStaffId && r.date === todayDateStr) {
+        if (
+          (targetRecord && r.id === targetRecord.id) ||
+          (r.staffId === targetStaffId && r.date === targetDate)
+        ) {
           return {
             ...r,
             breakOutTime: timeStr,
+            break_out_time: timeStr,
           };
         }
         return r;
       })
     );
 
-    apiSubmitAttendance({
-      staffId: targetStaffId,
-      date: todayDateStr,
-      breakOutTime: timeStr,
-      locationCoords: locationData,
-      status: 'Hadir',
-    }).catch((err) => console.warn('Sync break-out failed:', err));
+    try {
+      await apiSubmitAttendance({
+        id: targetRecord?.id,
+        staffId: targetStaffId,
+        date: targetDate,
+        breakOutTime: timeStr,
+        break_out_time: timeStr,
+        locationCoords: locationData,
+        status: targetRecord?.status || 'Hadir',
+      });
 
-    addAuditLog(
-      'Sesi Istirahat Keluar (Break Out)',
-      `Staf (${currentStaff?.name || 'Staf'}) mencatat jam istirahat keluar pada ${timeStr} WITA.`,
-      'Kehadiran'
-    );
+      // Segera re-fetch agar data tersinkronisasi instan
+      const updatedList = await apiFetchAttendance({ todayDateStr: getTodayDateStr() });
+      if (updatedList && updatedList.length > 0) {
+        setAttendanceRecords(updatedList);
+        localStorage.setItem('ot_attendance_records', JSON.stringify(updatedList));
+      }
 
-    addNotification(
-      'Istirahat Dimulai',
-      `Jam istirahat keluar tercatat pada ${timeStr} WITA. Selamat beristirahat.`,
-      'attendance',
-      { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
-    );
+      showToast(`Clock Out Istirahat berhasil dicatat (${timeStr} WITA). Selamat beristirahat!`, 'success');
+
+      addAuditLog(
+        'Sesi Istirahat Keluar (Break Out)',
+        `Staf (${currentStaff?.name || 'Staf'}) mencatat jam istirahat keluar pada ${timeStr} WITA.`,
+        'Kehadiran'
+      );
+
+      addNotification(
+        'Istirahat Dimulai',
+        `Jam istirahat keluar tercatat pada ${timeStr} WITA. Selamat beristirahat.`,
+        'attendance',
+        { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
+      );
+    } catch (err: unknown) {
+      console.error('Sync break-out failed:', err);
+      const msg = err instanceof Error ? err.message : 'Gagal mencatat Clock Out Istirahat ke server.';
+      showToast(msg, 'warning');
+    }
   };
 
   // Handle Break In (Staff)
-  const handleBreakIn = (selfieBase64: string, locationData: any) => {
+  const handleBreakIn = async (selfieBase64: string, locationData: any) => {
     const timeStr = getCurrentWitaTimeStr();
     const targetStaffId = currentStaff?.id || 'usr-os-default';
+    const targetRecord = staffTodayAttendance;
+    const targetDate = targetRecord?.date || todayDateStr;
 
+    // Optimistic local state update
     setAttendanceRecords((prev) =>
       prev.map((r) => {
-        if (r.staffId === targetStaffId && r.date === todayDateStr) {
+        if (
+          (targetRecord && r.id === targetRecord.id) ||
+          (r.staffId === targetStaffId && r.date === targetDate)
+        ) {
           return {
             ...r,
             breakInTime: timeStr,
+            break_in_time: timeStr,
           };
         }
         return r;
       })
     );
 
-    apiSubmitAttendance({
-      staffId: targetStaffId,
-      date: todayDateStr,
-      breakInTime: timeStr,
-      locationCoords: locationData,
-      status: 'Hadir',
-    }).catch((err) => console.warn('Sync break-in failed:', err));
+    try {
+      await apiSubmitAttendance({
+        id: targetRecord?.id,
+        staffId: targetStaffId,
+        date: targetDate,
+        breakInTime: timeStr,
+        break_in_time: timeStr,
+        locationCoords: locationData,
+        status: targetRecord?.status || 'Hadir',
+      });
 
-    addAuditLog(
-      'Sesi Kembali Kerja (Break In)',
-      `Staf (${currentStaff?.name || 'Staf'}) kembali dari istirahat pada ${timeStr} WITA. Melanjutkan dinas aktif.`,
-      'Kehadiran'
-    );
+      // Segera re-fetch agar data tersinkronisasi instan
+      const updatedList = await apiFetchAttendance({ todayDateStr: getTodayDateStr() });
+      if (updatedList && updatedList.length > 0) {
+        setAttendanceRecords(updatedList);
+        localStorage.setItem('ot_attendance_records', JSON.stringify(updatedList));
+      }
 
-    addNotification(
-      'Kembali Bertugas',
-      `Jam selesai istirahat tercatat pada ${timeStr} WITA. Selamat melanjutkan tugas!`,
-      'attendance',
-      { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
-    );
+      showToast(`Clock In Istirahat berhasil dicatat (${timeStr} WITA). Selamat melanjutkan tugas!`, 'success');
+
+      addAuditLog(
+        'Sesi Kembali Kerja (Break In)',
+        `Staf (${currentStaff?.name || 'Staf'}) kembali dari istirahat pada ${timeStr} WITA. Melanjutkan dinas aktif.`,
+        'Kehadiran'
+      );
+
+      addNotification(
+        'Kembali Bertugas',
+        `Jam selesai istirahat tercatat pada ${timeStr} WITA. Selamat melanjutkan tugas!`,
+        'attendance',
+        { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
+      );
+    } catch (err: unknown) {
+      console.error('Sync break-in failed:', err);
+      const msg = err instanceof Error ? err.message : 'Gagal mencatat Clock In Istirahat ke server.';
+      showToast(msg, 'warning');
+    }
   };
-
-  // Handle Clock Out (Staff - Mendukung Clock Out Shift Malam / Overnight)
   const handleClockOut = (selfieBase64: string, locationData: Partial<AttendanceRecord['locationCoords']>) => {
     const timeStr = getCurrentWitaTimeStr();
     const targetStaffId = currentStaff?.id || 'usr-os-default';

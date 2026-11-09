@@ -102,7 +102,9 @@ export interface AttendanceRecord {
   date: string; // YYYY-MM-DD
   clockInTime: string; // HH:mm:ss
   breakOutTime?: string; // HH:mm:ss (Istirahat Keluar)
+  break_out_time?: string; // snake_case compatibility
   breakInTime?: string; // HH:mm:ss (Istirahat Masuk Kembali)
+  break_in_time?: string; // snake_case compatibility
   clockOutTime?: string; // HH:mm:ss
   selfieUrl: string; // Data URL or styled SVG capture
   clockOutSelfieUrl?: string | null;
@@ -301,6 +303,9 @@ export interface UserAccount {
   initials: string;
   supervisedGroups?: string[];
   supervisedVendor?: string;
+  customLocation?: OfficeLocation | null;
+  assignedLocation?: OfficeLocation;
+  workspaceNote?: string;
 }
 
 export interface ActiveSession {

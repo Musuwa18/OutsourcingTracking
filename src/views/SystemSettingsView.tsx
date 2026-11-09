@@ -63,6 +63,7 @@ import {
   DEFAULT_INSTITUTION_SETTINGS,
 } from '../types';
 import { VisualMapPicker } from '../components/VisualMapPicker';
+import { StaffDetailModal } from '../components/StaffDetailModal';
 import {
   apiCreateDivision,
   apiUpdateDivision,
@@ -409,6 +410,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [newUserModalOpen, setNewUserModalOpen] = useState(false);
+  const [selectedUserDetail, setSelectedUserDetail] = useState<UserAccount | null>(null);
 
   const [newUserName, setNewUserName] = useState('');
   const [newUserNip, setNewUserNip] = useState('');
@@ -2025,15 +2027,31 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                       {/* Name & Avatar */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <div
-                            className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white text-xs shrink-0"
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedUserDetail(u);
+                            }}
+                            className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white text-xs shrink-0 cursor-pointer hover:opacity-90 hover:scale-105 transition-transform"
                             style={{ backgroundColor: u.avatarColor || '#6366f1' }}
+                            title={`Lihat Profil Lengkap: ${u.name}`}
                           >
                             {u.initials || 'US'}
-                          </div>
+                          </button>
                           <div>
-                            <div className="font-semibold text-slate-900 dark:text-white">
-                              {u.name}
+                            <div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedUserDetail(u);
+                                }}
+                                className="cursor-pointer text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline font-semibold transition-colors text-left"
+                                title={`Lihat Profil Lengkap: ${u.name}`}
+                              >
+                                {u.name}
+                              </button>
                             </div>
                             <div className="text-[10px] text-slate-400">
                               {u.email}
@@ -4295,6 +4313,18 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal Popup Profil Lengkap Pegawai & Atasan */}
+      <StaffDetailModal
+        isOpen={Boolean(selectedUserDetail)}
+        onClose={() => setSelectedUserDetail(null)}
+        user={selectedUserDetail}
+        supervisorName={selectedUserDetail ? getSupervisorName(selectedUserDetail.supervisorId) : undefined}
+        onEditAssignment={(user) => {
+          setSelectedUserDetail(null);
+          handleOpenEditUser(user);
+        }}
+      />
     </div>
   );
 };

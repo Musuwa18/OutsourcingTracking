@@ -366,6 +366,42 @@ export async function apiSubmitAttendance(attData: any): Promise<any> {
   return data.attendance;
 }
 
+export async function apiFetchTodayAttendance(staffId: string): Promise<AttendanceRecord | null> {
+  try {
+    const res = await fetch(`${API_BASE}/attendance/today?staffId=${encodeURIComponent(staffId)}`, {
+      headers: getAuthHeaders(staffId),
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return data.attendance as AttendanceRecord;
+    }
+  } catch (err) {
+    console.warn('[API] Fallback offline today attendance:', err);
+  }
+  return null;
+}
+
+export async function apiSubmitBreakAttendance(breakData: {
+  type: 'break-out' | 'break-in';
+  id?: string;
+  staffId: string;
+  date?: string;
+  time?: string;
+  selfieUrl?: string;
+  locationCoords?: Partial<AttendanceRecord['locationCoords']>;
+}): Promise<AttendanceRecord> {
+  const res = await fetch(`${API_BASE}/attendance/break`, {
+    method: 'POST',
+    headers: getAuthHeaders(breakData.staffId),
+    body: JSON.stringify(breakData),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Gagal menyimpan presensi sesi istirahat.');
+  }
+  return data.attendance as AttendanceRecord;
+}
+
 // 10. Daily Reports API
 export async function apiFetchReports(filters: {
   staffId?: string;

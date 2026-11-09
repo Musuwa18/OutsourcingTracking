@@ -175,9 +175,12 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                 )}
 
                 {/* Break Session Card (Sesi Istirahat Kerja) */}
-                {dayAttendance?.breakOutTime && filterType !== 'reports' && filterType !== 'field' && (
-                  <div
-                    onClick={() => handleOpenDetail(dayAttendance, 'break')}
+                {Boolean(dayAttendance?.breakOutTime || dayAttendance?.break_out_time) && filterType !== 'reports' && filterType !== 'field' && (() => {
+                  const bOut = dayAttendance?.breakOutTime || dayAttendance?.break_out_time;
+                  const bIn = dayAttendance?.breakInTime || dayAttendance?.break_in_time;
+                  return (
+                    <div
+                      onClick={() => handleOpenDetail(dayAttendance!, 'break')}
                     className="p-4 glass-card flex items-center justify-between text-xs cursor-pointer transition-all active:scale-[0.99] hover:border-amber-500/50"
                   >
                     <div className="flex items-center gap-3">
@@ -188,27 +191,28 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                         <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                           <span>Sesi Istirahat Kerja</span>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300">
-                            {dayAttendance.breakInTime ? 'Sesi Istirahat Tuntas' : 'Sedang Istirahat'}
+                            {bIn ? 'Sesi Istirahat Tuntas' : 'Sedang Istirahat'}
                           </span>
                         </div>
                         <div className="text-[11px] text-slate-700 dark:text-slate-300 font-mono mt-0.5 font-semibold">
-                          {dayAttendance.breakInTime
-                            ? `Istirahat selesai (${dayAttendance.breakOutTime} - ${dayAttendance.breakInTime} WITA)`
-                            : `Sedang istirahat keluar sejak ${dayAttendance.breakOutTime} WITA`}
+                          {bIn
+                            ? `Istirahat selesai (${bOut} - ${bIn} WITA)`
+                            : `Sedang istirahat keluar sejak ${bOut} WITA`}
                         </div>
                       </div>
                     </div>
 
                     <div className="text-right text-[11px] text-slate-700 dark:text-slate-400 font-medium">
                       <div className="font-semibold text-slate-800 dark:text-slate-300">
-                        {dayAttendance.breakInTime ? 'Status Sesi' : 'Status'}
+                        {bIn ? 'Status Sesi' : 'Status'}
                       </div>
                       <div className="font-mono text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                        {dayAttendance.breakInTime ? 'Tuntas Tercatat' : 'Keluar Istirahat'}
+                        {bIn ? 'Tuntas Tercatat' : 'Keluar Istirahat'}
                       </div>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
                 {/* Field Duty Check-in Cards */}
                 {filterType !== 'attendance' && filterType !== 'reports' &&
                   dayFieldCheckins.map((fc) => (
