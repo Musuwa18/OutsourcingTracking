@@ -135,6 +135,14 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
       return !v.includes('PPPK') && !v.includes('MAGANG');
     });
   }, [staffList, selectedCategory]);
+
+  const [yearNum, monthNum] = useMemo(() => {
+    const parts = (selectedMonth || '2026-10').split('-').map(Number);
+    const y = parts[0] || 2026;
+    const m = parts[1] || 10;
+    return [y, m];
+  }, [selectedMonth]);
+
   const totalDaysInMonth = new Date(yearNum, monthNum, 0).getDate();
   const monthNames = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -142,9 +150,8 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   ];
   const dayNamesShort = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
   const dayNamesLong = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-  const selectedMonthName = monthNames[monthNum - 1];
+  const selectedMonthName = monthNames[monthNum - 1] || 'Oktober';
   const selectedYear = yearNum;
-
   const today = new Date().toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
@@ -478,7 +485,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
       ? `Rekapitulasi Kinerja Bulanan 4 Pilar (${selectedMonthName} ${selectedYear})`
       : `Rapor Kinerja Individu - ${selectedStaff.name}`;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block">
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block">
       <div className="relative w-full max-w-[96vw] 2xl:max-w-7xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl my-2 sm:my-4 print:border-none print:shadow-none print:m-0 print:w-full print:max-w-none print:rounded-none">
         
         {/* Navigation Toolbar (No-Print) */}
