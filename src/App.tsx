@@ -1842,15 +1842,22 @@ export default function App() {
 
     // Background sync to SQLite server
     apiSubmitReport({
+      id: newReport.id,
       staffId: newReport.staffId,
+      date: newReport.date,
       title: newReport.title,
+      category: newReport.category,
+      startTime: newReport.startTime,
+      endTime: newReport.endTime,
+      status: newReport.status,
       description: newReport.summary,
       summary: newReport.summary,
-      category: newReport.category,
       photoUrl: newReport.documentationPhotoUrl,
       documentationPhotoUrl: newReport.documentationPhotoUrl,
+      imageHash: newReport.imageHash,
       locationCoords: newReport.locationCoords,
       aiDuplicateFlag: newReport.aiDuplicateFlag,
+      supervisorApproval: newReport.supervisorApproval,
     }).catch((err) => console.warn('Sync report failed:', err));
 
     if (newReport.aiDuplicateFlag?.isDuplicate) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Camera,
   MapPin,
@@ -173,8 +173,18 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   const [showReportForm, setShowReportForm] = useState(false);
   const [reportTitle, setReportTitle] = useState('');
   const [reportCategory, setReportCategory] = useState<DailyWorkReport['category']>('Pemeliharaan');
-  const [reportStartTime, setReportStartTime] = useState('09:00');
-  const [reportEndTime, setReportEndTime] = useState('12:00');
+  const [reportStartTime, setReportStartTime] = useState(isNightShiftWorker ? '20:00' : '09:00');
+  const [reportEndTime, setReportEndTime] = useState(isNightShiftWorker ? '06:00' : '12:00');
+
+  useEffect(() => {
+    if (isNightShiftWorker) {
+      setReportStartTime('20:00');
+      setReportEndTime('06:00');
+    } else {
+      setReportStartTime('09:00');
+      setReportEndTime('12:00');
+    }
+  }, [isNightShiftWorker, staff?.id]);
   const [reportSummary, setReportSummary] = useState('');
   const [reportStatus, setReportStatus] = useState<'Selesai' | 'On-Progress'>('Selesai');
   const [documentationPhoto, setDocumentationPhoto] = useState<string | null>(null);
@@ -577,6 +587,8 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
     setShowReportForm(false);
     setDuplicateModalOpen(false);
     setDuplicateMatchInfo(null);
+    setReportStartTime(isNightShiftWorker ? '20:00' : '09:00');
+    setReportEndTime(isNightShiftWorker ? '06:00' : '12:00');
   };
 
   const handleRetakeFromModal = () => {

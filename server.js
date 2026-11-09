@@ -40,6 +40,7 @@ import {
   saveDailyReport,
   listDailyReports,
   approveReport,
+  updateDailyReport,
   saveEvaluation,
   listEvaluations,
   getLiveAnalyticsContext,
@@ -1146,6 +1147,17 @@ app.patch('/api/reports/:id/approve', (req, res) => {
     res.json({ success: true, message: 'Status laporan berhasil diperbarui.' });
   } catch (err) {
     res.status(500).json({ error: 'Gagal memperbarui status persetujuan laporan.' });
+  }
+});
+
+app.patch('/api/reports/:id', (req, res) => {
+  try {
+    const reportId = req.params.id;
+    const updated = updateDailyReport(reportId, req.body);
+    res.json({ success: true, report: updated });
+  } catch (err) {
+    console.error('[API Error] Update Report:', err);
+    res.status(500).json({ error: 'Gagal memperbarui data laporan kerja.' });
   }
 });
 

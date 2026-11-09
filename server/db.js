@@ -2776,7 +2776,7 @@ export function saveDailyReport(repData) {
 
   if (isNodeSqlite && dbEngine) {
     dbEngine.prepare(
-      `INSERT INTO daily_reports (
+      `INSERT OR REPLACE INTO daily_reports (
         id, staff_id, staff_name, division_id, date, title, category, start_time, end_time,
         summary, status, documentation_photo_url, image_hash, ai_duplicate_flag_json, location_coords_json,
         supervisor_approval, supervisor_notes, approved_at, created_at
@@ -2875,6 +2875,66 @@ export function approveReport(reportId, approvalStatus, supervisorNotes) {
       report.approvedAt = now;
       persistFallback();
     }
+  }
+}
+
+export function updateDailyReport(reportId, updates = {}) {
+  if (isNodeSqlite && dbEngine) {
+    const fields = [];
+    const values = [];
+
+    if (updates.startTime !== undefined || updates.start_time !== undefined) {
+      fields.push('start_time = ?');
+      values.push(updates.startTime || updates.start_time);
+    }
+    if (updates.endTime !== undefined || updates.end_time !== undefined) {
+      fields.push('end_time = ?');
+      values.push(updates.endTime || updates.end_time);
+    }
+    if (updates.title !== undefined) {
+      fields.push('title = ?');
+      values.push(updates.title);
+    }
+    if (updates.summary !== undefined || updates.description !== undefined) {
+      fields.push('summary = ?');
+      values.push(updates.summary || updates.description);
+    }
+    if (updates.category !== undefined) {
+      fields.push('category = ?');
+      values.push(updates.category);
+    }
+    if (updates.status !== undefined) {
+      fields.push('status = ?');
+      values.push(updates.status);
+    }
+    if (updates.supervisorApproval !== undefined || updates.supervisor_approval !== undefined) {
+      fields.push('supervisor_approval = ?');
+      values.push(updates.supervisorApproval || updates.supervisor_approval);
+    }
+    if (updates.supervisorNotes !== undefined || updates.supervisor_notes !== undefined) {
+      fields.push('supervisor_notes = ?');
+      values.push(updates.supervisorNotes || updates.supervisor_notes);
+    }
+
+    if (fields.length > 0) {
+      values.push(reportId);
+      dbEngine.prepare(`UPDATE daily_reports SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    }
+    return dbEngine.prepare('SELECT * FROM daily_reports WHERE id = ?').get(reportId);
+  } else {
+    const report = fallbackStore.daily_reports.find((r) => r.id === reportId);
+    if (report) {
+      if (updates.startTime) report.startTime = updates.startTime;
+      if (updates.endTime) report.endTime = updates.endTime;
+      if (updates.title) report.title = updates.title;
+      if (updates.summary || updates.description) report.summary = updates.summary || updates.description;
+      if (updates.category) report.category = updates.category;
+      if (updates.status) report.status = updates.status;
+      if (updates.supervisorApproval) report.supervisorApproval = updates.supervisorApproval;
+      if (updates.supervisorNotes) report.supervisorNotes = updates.supervisorNotes;
+      persistFallback();
+    }
+    return report;
   }
 }
 
