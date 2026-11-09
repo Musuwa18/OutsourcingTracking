@@ -21,6 +21,7 @@ import {
   WeeklyEvaluation,
   Division,
   AuthUser,
+  UserAccount,
   InstitutionSettings,
   DEFAULT_INSTITUTION_SETTINGS,
   OvertimeRecord,
@@ -44,6 +45,9 @@ interface PrintReportModalProps {
   overtimeRecords?: OvertimeRecord[];
   leaveRecords?: LeaveRequest[];
   initialCategory?: 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang';
+  initialPrintMode?: 'rekap-matriks' | 'timesheet-harian' | 'rekap-divisi' | 'rapor-staf' | 'sptl-lembur' | 'surat-izin';
+  initialStaffId?: string;
+  users?: UserAccount[];
 }
 
 // Komponen Kop Surat Resmi Kedinasan
@@ -110,22 +114,46 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   overtimeRecords = [],
   leaveRecords = [],
   initialCategory = 'ALL',
+  initialPrintMode,
+  initialStaffId,
+  users = [],
 }) => {
   if (!isOpen) return null;
 
+  const isStaffUser = currentUser?.role === 'outsourcing';
+
+  const defaultStaffId = useMemo(() => {
+    if (initialStaffId) return initialStaffId;
+    if (isStaffUser && currentUser) {
+      const match = staffList.find((s) => s.id === currentUser.id || s.nip === currentUser.nip || s.email === currentUser.email);
+      if (match) return match.id;
+    }
+    return staffList[0]?.id || '';
+  }, [initialStaffId, isStaffUser, currentUser, staffList]);
+
   const [printMode, setPrintMode] = useState<
     'rekap-matriks' | 'timesheet-harian' | 'rekap-divisi' | 'rapor-staf' | 'sptl-lembur' | 'surat-izin'
-  >('rekap-matriks');
-  const [selectedStaffId, setSelectedStaffId] = useState<string>(staffList[0]?.id || '');
+  >(initialPrintMode || (isStaffUser ? 'timesheet-harian' : 'rekap-matriks'));
+  const [selectedStaffId, setSelectedStaffId] = useState<string>(defaultStaffId);
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-10');
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang'>(initialCategory || 'ALL');
 
   React.useEffect(() => {
-    if (initialCategory) {
-      setSelectedCategory(initialCategory);
+    if (isOpen) {
+      if (initialCategory) setSelectedCategory(initialCategory);
+      if (initialPrintMode) {
+        setPrintMode(initialPrintMode);
+      } else if (isStaffUser) {
+        setPrintMode('timesheet-harian');
+      }
+      if (initialStaffId) {
+        setSelectedStaffId(initialStaffId);
+      } else if (isStaffUser && currentUser) {
+        const match = staffList.find((s) => s.id === currentUser.id || s.nip === currentUser.nip || s.email === currentUser.email);
+        if (match) setSelectedStaffId(match.id);
+      }
     }
-  }, [initialCategory]);
-
+  }, [isOpen, initialCategory, initialPrintMode, initialStaffId, isStaffUser, currentUser, staffList]);
   const displayedStaffList = useMemo(() => {
     if (selectedCategory === 'ALL') return staffList;
     return staffList.filter((st) => {
@@ -161,6 +189,41 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   const staffMap = useMemo(() => new Map(displayedStaffList.map((s) => [s.id, s])), [displayedStaffList]);
   const inst = institutionSettings || DEFAULT_INSTITUTION_SETTINGS;
   const selectedStaff = staffMap.get(selectedStaffId) || displayedStaffList[0] || staffList[0];
+
+  // Lookup Pejabat Penilai definitif (atasan langsung pegawai)
+  const supervisorObj = useMemo(() => {
+    if (!selectedStaff) return null;
+    if (users && selectedStaff.supervisorId) {
+      const found = users.find((u) => u.id === selectedStaff.supervisorId || u.nip === selectedStaff.supervisorId);
+      if (found) {
+        return {
+          name: found.name,
+          roleTitle: found.roleTitle || 'Atasan Langsung / Kasubag',
+          nip: found.nip || '-'
+        };
+      }
+    }
+    const div = divisions.find((d) => d.name === selectedStaff.division || d.id === selectedStaff.division);
+    if (div?.supervisorName) {
+      return {
+        name: div.supervisorName,
+        roleTitle: 'Kepala Sub Bagian / Pejabat Penilai',
+        nip: '19821218 200604 1 008'
+      };
+    }
+    if (currentUser && currentUser.role === 'supervisor') {
+      return {
+        name: currentUser.name,
+        roleTitle: currentUser.roleTitle || 'Pejabat Penilai',
+        nip: currentUser.nip || '-'
+      };
+    }
+    return {
+      name: 'Salihin, S.Pd.SD',
+      roleTitle: 'Sekretaris Dinas Pendidikan',
+      nip: '19780502 200604 1 017'
+    };
+  }, [selectedStaff, users, divisions, currentUser]);
 
   // Lookup cepat kehadiran, lembur, dan izin
   const attLookup = useMemo(() => {
@@ -485,7 +548,10 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
       ? `Rekapitulasi Kinerja Bulanan 4 Pilar (${selectedMonthName} ${selectedYear})`
       : `Rapor Kinerja Individu - ${selectedStaff.name}`;
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block">
+    <div
+      data-print-modal="true"
+      className="fixed inset-0 z-[9999] flex items-start justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block"
+    >
       <div className="relative w-full max-w-[96vw] 2xl:max-w-7xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl my-2 sm:my-4 print:border-none print:shadow-none print:m-0 print:w-full print:max-w-none print:rounded-none">
         
         {/* Navigation Toolbar (No-Print) */}
@@ -507,85 +573,116 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             {/* Mode Switcher Pills */}
             <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-800 rounded-xl text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setPrintMode('rekap-matriks')}
-                className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                  printMode === 'rekap-matriks'
-                    ? 'bg-teal-600 text-white shadow-xs font-bold'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                📊 Matriks 1–31
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintMode('timesheet-harian')}
-                className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                  printMode === 'timesheet-harian'
-                    ? 'bg-teal-600 text-white shadow-xs font-bold'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                📝 Timesheet Staf
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintMode('rekap-divisi')}
-                className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                  printMode === 'rekap-divisi'
-                    ? 'bg-indigo-600 text-white shadow-xs font-bold'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Rekap 4P
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintMode('rapor-staf')}
-                className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                  printMode === 'rapor-staf'
-                    ? 'bg-indigo-600 text-white shadow-xs font-bold'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Rapor 4P
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintMode('sptl-lembur')}
-                className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                  printMode === 'sptl-lembur'
-                    ? 'bg-indigo-600 text-white shadow-xs font-bold'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                SPTL Lembur
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintMode('surat-izin')}
-                className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                  printMode === 'surat-izin'
-                    ? 'bg-teal-600 text-white shadow-xs font-bold'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Surat Izin
-              </button>
+              {isStaffUser ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setPrintMode('timesheet-harian')}
+                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                      printMode === 'timesheet-harian'
+                        ? 'bg-teal-600 text-white shadow-xs font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    📝 Timesheet Saya
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintMode('rapor-staf')}
+                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                      printMode === 'rapor-staf'
+                        ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Rapor Kinerja Saya
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setPrintMode('rekap-matriks')}
+                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                      printMode === 'rekap-matriks'
+                        ? 'bg-teal-600 text-white shadow-xs font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    📊 Matriks 1–31
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintMode('timesheet-harian')}
+                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                      printMode === 'timesheet-harian'
+                        ? 'bg-teal-600 text-white shadow-xs font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    📝 Timesheet Staf
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintMode('rekap-divisi')}
+                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                      printMode === 'rekap-divisi'
+                        ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Rekap 4P
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintMode('rapor-staf')}
+                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                      printMode === 'rapor-staf'
+                        ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Rapor 4P
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintMode('sptl-lembur')}
+                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                      printMode === 'sptl-lembur'
+                        ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    SPTL Lembur
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintMode('surat-izin')}
+                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                      printMode === 'surat-izin'
+                        ? 'bg-teal-600 text-white shadow-xs font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Surat Izin
+                  </button>
+                </>
+              )}
             </div>
 
-            {/* Filter Kelompok / Kategori Pegawai */}
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value as 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang')}
-              className="px-2.5 py-1.5 text-xs rounded-xl border border-slate-700 bg-slate-800 text-white font-medium cursor-pointer"
-            >
-              <option value="ALL">Semua Kelompok ({staffList.length})</option>
-              <option value="vendor">🏢 Vendor Swasta</option>
-              <option value="pppk_paruh_waktu">🏛️ PPPK Paruh Waktu</option>
-              <option value="magang">🎓 Siswa Magang</option>
-            </select>
+            {/* Filter Kelompok / Kategori Pegawai (Hanya untuk Admin / Pimpinan) */}
+            {!isStaffUser && (
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value as 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang')}
+                className="px-2.5 py-1.5 text-xs rounded-xl border border-slate-700 bg-slate-800 text-white font-medium cursor-pointer"
+              >
+                <option value="ALL">Semua Kelompok ({staffList.length})</option>
+                <option value="vendor">🏢 Vendor Swasta</option>
+                <option value="pppk_paruh_waktu">🏛️ PPPK Paruh Waktu</option>
+                <option value="magang">🎓 Siswa Magang</option>
+              </select>
+            )}
 
             {/* Selector Bulan */}
             <select
@@ -598,8 +695,8 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
               <option value="2026-09">September 2026</option>
             </select>
 
-            {/* Selector Staf jika mode Rapor Individu / Timesheet Harian / Surat Izin */}
-            {(printMode === 'rapor-staf' || printMode === 'surat-izin' || printMode === 'timesheet-harian') && (
+            {/* Selector Staf jika mode Rapor Individu / Timesheet Harian / Surat Izin (Hanya Admin) */}
+            {!isStaffUser && (printMode === 'rapor-staf' || printMode === 'surat-izin' || printMode === 'timesheet-harian') && (
               <select
                 value={selectedStaffId}
                 onChange={(e) => setSelectedStaffId(e.target.value)}
@@ -612,6 +709,14 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                   </option>
                 ))}
               </select>
+            )}
+
+            {/* Badge Info Pegawai Khusus Portal Staf */}
+            {isStaffUser && (
+              <div className="px-3 py-1.5 text-xs rounded-xl border border-indigo-500/40 bg-indigo-950/60 text-indigo-300 font-semibold flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="truncate max-w-[160px]">{selectedStaff?.name}</span>
+              </div>
             )}
 
             <button
@@ -1247,11 +1352,11 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                   <div className="space-y-12">
                     <div>
                       <p className="text-slate-600">Pejabat Penilai,</p>
-                      <p className="font-bold text-slate-800">{currentUser?.roleTitle || 'Atasan Langsung / Kasubag'}</p>
+                      <p className="font-bold text-slate-800">{supervisorObj?.roleTitle || 'Atasan Langsung / Kasubag'}</p>
                     </div>
                     <div>
-                      <p className="font-bold underline text-slate-950">{currentUser?.name || 'Muhammad Sugeng Wahyudi, A.Md'}</p>
-                      <p className="text-[9px] text-slate-500 font-mono">NIP: {currentUser?.nip || '19821218 200604 1 008'}</p>
+                      <p className="font-bold underline text-slate-950">{supervisorObj?.name || 'Salihin, S.Pd.SD'}</p>
+                      <p className="text-[9px] text-slate-500 font-mono">NIP: {supervisorObj?.nip || '-'}</p>
                     </div>
                   </div>
 

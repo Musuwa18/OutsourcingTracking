@@ -771,7 +771,17 @@ export default function App() {
   const [aiChatOpen, setAiChatOpen] = useState<boolean>(false);
   const [customLocationStaff, setCustomLocationStaff] = useState<StaffProfile | null>(null);
   const [printModalCategory, setPrintModalCategory] = useState<'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang'>('ALL');
+  const [printModalMode, setPrintModalMode] = useState<
+    'rekap-matriks' | 'timesheet-harian' | 'rekap-divisi' | 'rapor-staf' | 'sptl-lembur' | 'surat-izin'
+  >('rekap-matriks');
+  const [printModalStaffId, setPrintModalStaffId] = useState<string | undefined>(undefined);
 
+  const handleOpenStaffTimesheet = () => {
+    setPrintModalCategory('ALL');
+    setPrintModalMode('timesheet-harian');
+    setPrintModalStaffId(currentStaff?.id);
+    setPrintModalOpen(true);
+  };
   const handleStaffLocationUpdated = (staffId: string, newLocation: OfficeLocation, note?: string) => {
     // 1. Update staffList state & localStorage
     setStaffList((prev) => {
@@ -2151,6 +2161,7 @@ export default function App() {
                   leaveRecords={leaveRecords}
                   leaveQuota={currentStaffLeaveQuota}
                   onSubmitLeaveRequest={handleSubmitLeaveRequest}
+                  onOpenTimesheet={handleOpenStaffTimesheet}
                 />
               )}
 
@@ -2178,6 +2189,7 @@ export default function App() {
                   leaveRecords={leaveRecords}
                   leaveQuota={currentStaffLeaveQuota}
                   onSubmitLeaveRequest={handleSubmitLeaveRequest}
+                  onOpenTimesheet={handleOpenStaffTimesheet}
                 />
               )}
               {mobileTab === 'riwayat' && (
@@ -2186,9 +2198,9 @@ export default function App() {
                   attendanceRecords={attendanceRecords}
                   fieldCheckins={fieldCheckins}
                   workReports={dailyReports}
+                  onOpenTimesheet={handleOpenStaffTimesheet}
                 />
               )}
-
               {mobileTab === 'profil' && (
                 <div className="max-w-2xl mx-auto space-y-4 pb-20">
                   <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
@@ -2252,8 +2264,12 @@ export default function App() {
                   attendanceRecords={attendanceRecords}
                   dailyReports={dailyReports}
                   fieldCheckins={fieldCheckins}
-                  onOpenPrintModal={() => setPrintModalOpen(true)}
-                  onOpenAiChat={() => setAiChatOpen(true)}
+                  onOpenPrintModal={() => {
+                    setPrintModalCategory('ALL');
+                    setPrintModalMode('rekap-matriks');
+                    setPrintModalStaffId(undefined);
+                    setPrintModalOpen(true);
+                  }}
                   leaveRecords={leaveRecords}
                   onNavigateToLeaves={() => {
                     setSupervisorSubTab('leave-feed');
@@ -2304,6 +2320,8 @@ export default function App() {
                   attendanceRecords={attendanceRecords}
                   onOpenPrintModal={(cat) => {
                     setPrintModalCategory(cat || 'ALL');
+                    setPrintModalMode('rekap-matriks');
+                    setPrintModalStaffId(undefined);
                     setPrintModalOpen(true);
                   }}
                   onOpenAiChat={() => setAiChatOpen(true)}
@@ -2388,6 +2406,9 @@ export default function App() {
         overtimeRecords={overtimeRecords}
         leaveRecords={leaveRecords}
         initialCategory={printModalCategory}
+        initialPrintMode={printModalMode}
+        initialStaffId={printModalStaffId}
+        users={users}
       />
 
       {/* Google Drive Cloud Sync Modal */}

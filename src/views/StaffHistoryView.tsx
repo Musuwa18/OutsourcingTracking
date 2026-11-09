@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Clock, FileText, Briefcase, Coffee } from 'lucide-react';
+import { Calendar, Clock, FileText, Briefcase, Coffee, Printer } from 'lucide-react';
 import { AttendanceRecord, DailyWorkReport, StaffProfile, FieldCheckinRecord } from '../types';
 import { DetailRiwayatModal } from '../components/DetailRiwayatModal';
 
@@ -8,6 +8,7 @@ interface StaffHistoryViewProps {
   attendanceRecords: AttendanceRecord[];
   fieldCheckins?: FieldCheckinRecord[];
   workReports: DailyWorkReport[];
+  onOpenTimesheet?: () => void;
 }
 
 export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
@@ -15,8 +16,8 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
   attendanceRecords,
   fieldCheckins = [],
   workReports,
+  onOpenTimesheet,
 }) => {
-  const [filterType, setFilterType] = useState<'all' | 'attendance' | 'field' | 'reports'>('all');
   const [selectedItem, setSelectedItem] = useState<AttendanceRecord | DailyWorkReport | FieldCheckinRecord | null>(null);
   const [modalMode, setModalMode] = useState<'default' | 'break'>('default');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -45,13 +46,26 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
     <div className="max-w-2xl mx-auto space-y-5 pb-24 md:pb-8">
       {/* Header & Filter Controls */}
       <div className="p-5 glass-card space-y-4">
-        <div>
-          <h1 className="text-base font-bold text-slate-900 dark:text-white">
-            Linimasa Aktivitas 30 Hari Terakhir
-          </h1>
-          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
-            Riwayat presensi geofence dan laporan kinerja harian terlacak
-          </p>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-base font-bold text-slate-900 dark:text-white">
+              Linimasa Aktivitas 30 Hari Terakhir
+            </h1>
+            <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+              Riwayat presensi geofence dan laporan kinerja harian terlacak
+            </p>
+          </div>
+          {onOpenTimesheet && (
+            <button
+              type="button"
+              onClick={onOpenTimesheet}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs shadow-indigo-600/25 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer shrink-0"
+              title="Buka / Cetak Lembar Presensi & Timesheet Harian F4"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Pratinjau Timesheet (F4)</span>
+            </button>
+          )}
         </div>
 
         {/* Filter Segmented Control */}

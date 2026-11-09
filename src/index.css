@@ -149,6 +149,17 @@
 }
 
 @media print {
+  /* Strict Print Isolation: Sembunyikan seluruh UI latar belakang aplikasi jika modal cetak aktif */
+  body:has([data-print-modal="true"]) #root > *:not([data-print-modal="true"]),
+  body.is-printing-document #root > *:not([data-print-modal="true"]),
+  body:has(#batata-document-export-container) #root > *:not([data-print-modal="true"]) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+  }
+
   body {
     background: white !important;
     color: black !important;

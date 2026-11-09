@@ -25,6 +25,8 @@ import {
   CheckCircle,
   CalendarRange,
   ExternalLink,
+  Printer,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, DayWorkSchedule, FieldCheckinRecord, OvertimeRecord, LeaveRequest, LeaveQuota, LeaveType } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
@@ -97,7 +99,9 @@ interface StaffHomeViewProps {
     reason: string;
     attachmentUrl?: string;
   }) => Promise<void> | void;
+  onOpenTimesheet?: () => void;
 }
+
 export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   staff,
   todayAttendance,
@@ -123,6 +127,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   leaveRecords = [],
   leaveQuota = null,
   onSubmitLeaveRequest,
+  onOpenTimesheet,
 }) => {
   const safeOffice = staff?.assignedLocation || PRIMARY_OFFICES[0];
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
@@ -1040,6 +1045,24 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               </div>
             </div>
           </div>
+
+          {onOpenTimesheet && (
+            <div className="pt-2.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
+              <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
+                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-500" />
+                Lembar Presensi & Timesheet Bulanan
+              </span>
+              <button
+                type="button"
+                onClick={onOpenTimesheet}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 text-indigo-600 dark:text-cyan-400 border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
+                title="Buka Lembar Presensi & Timesheet Harian F4"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Pratinjau Timesheet (F4)</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 

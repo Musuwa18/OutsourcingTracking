@@ -87,6 +87,7 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
       document.title = originalTitleRef.current;
       originalTitleRef.current = null;
     }
+    document.body.classList.remove("is-printing-document");
     setIsGeneratingPdf(false);
     window.removeEventListener("afterprint", restoreState);
     window.removeEventListener("focus", restoreState);
@@ -94,6 +95,7 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
 
   useEffect(() => {
     return () => {
+      document.body.classList.remove("is-printing-document");
       clearTimeout(printTimeoutRef.current as NodeJS.Timeout);
       clearTimeout(fallbackTimeoutRef.current as NodeJS.Timeout);
       clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
@@ -104,7 +106,6 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
       window.removeEventListener("focus", restoreState);
     };
   }, []);
-
   const handlePageChange = (newPage: number) => {
     const clamped = Math.max(1, Math.min(newPage, detectedTotalPages));
     if (onPageChange) {
@@ -147,6 +148,7 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
       originalTitleRef.current = document.title;
     }
     document.title = cleanDocumentTitle;
+    document.body.classList.add("is-printing-document");
 
     window.addEventListener("afterprint", restoreState);
     window.addEventListener("focus", restoreState);
@@ -240,6 +242,17 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
         }
 
         @media print {
+          /* Strict Print Isolation: Sembunyikan seluruh UI latar belakang aplikasi jika modal cetak aktif */
+          body:has([data-print-modal="true"]) #root > *:not([data-print-modal="true"]),
+          body.is-printing-document #root > *:not([data-print-modal="true"]),
+          body:has(#batata-document-export-container) #root > *:not([data-print-modal="true"]) {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            max-height: 0 !important;
+            overflow: hidden !important;
+          }
+
           /* Netralkan seluruh container fixed & overflow agar page-break berjalan alami per lembar */
           .fixed,
           [class*="fixed"] {
