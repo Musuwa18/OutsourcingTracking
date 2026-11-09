@@ -149,29 +149,164 @@
 }
 
 @media print {
-  /* Strict Print Isolation: Sembunyikan seluruh UI latar belakang aplikasi jika modal cetak aktif */
-  body:has([data-print-modal="true"]) #root > *:not([data-print-modal="true"]),
-  body.is-printing-document #root > *:not([data-print-modal="true"]),
-  body:has(#batata-document-export-container) #root > *:not([data-print-modal="true"]) {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    max-height: 0 !important;
-    overflow: hidden !important;
+  /* 1. Reset container agar tidak terpotong */
+  html,
+  body,
+  #root,
+  #root > div,
+  main,
+  .app-layout {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
-  body {
-    background: white !important;
-    color: black !important;
-  }
-  .no-print {
+  /* 2. Sembunyikan elemen navigasi dan tombol UI */
+  nav,
+  header,
+  aside,
+  footer,
+  .no-print,
+  button,
+  input,
+  select,
+  .tab-controls,
+  .ambient-calm,
+  .ambient-canvas,
+  [data-toast="true"] {
     display: none !important;
   }
+
+  /* Sembunyikan konten latar belakang app jika modal cetak aktif */
+  body:has([data-print-modal="true"]) main,
+  body:has([data-print-modal="true"]) aside,
+  body:has([data-print-modal="true"]) nav,
+  body:has([data-print-modal="true"]) header,
+  body.is-printing-document main,
+  body.is-printing-document aside,
+  body.is-printing-document nav,
+  body.is-printing-document header {
+    display: none !important;
+  }
+
+  /* 3. Paksa modal overlay menjadi static container yang mengalir penuh */
+  [data-print-modal="true"] {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  [data-print-modal="true"] > div {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* 4. Tampilkan wadah dokumen cetak */
+  .printable-matrix-document,
+  #batata-document-export-container,
+  .batata-print-page {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+  }
+
+  /* 5. Ukuran Baku Kertas F4 / Folio Landscape (Standar Baku Disdik HST) */
+  @page {
+    size: 330mm 215mm;
+    margin: 8mm 10mm;
+  }
+
+  /* 6. Paksa semua teks solid hitam dan netralkan dark mode */
+  *,
+  *::before,
+  *::after {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+
+  /* 7. Standar Tabel Cetak Semantik SIP-SPJ */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    border: 1px solid #000000 !important;
+    font-size: 7.5pt !important;
+    background: #ffffff !important;
+  }
+
+  table,
+  table *,
+  table th,
+  table td,
+  table span,
+  table div,
+  table p,
+  table strong {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+  }
+
+  th,
+  td {
+    border: 1px solid #000000 !important;
+    border-color: #000000 !important;
+    background: #ffffff !important;
+    padding: 2px 2px !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .signature-block,
+  .page-break-inside-avoid,
+  .print-break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
   .print-only {
     display: block !important;
-  }
-  .print-break-inside-avoid {
-    break-inside: avoid;
-    page-break-inside: avoid;
   }
 }

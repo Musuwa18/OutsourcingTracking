@@ -550,9 +550,18 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   return (
     <div
       data-print-modal="true"
-      className="fixed inset-0 z-[9999] flex items-start justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block"
+      className="fixed inset-0 z-[9999] flex items-start justify-center p-2 sm:p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto print:!static print:!inset-auto print:!p-0 print:!m-0 print:!bg-white print:!overflow-visible print:!block print:!h-auto print:!min-h-0 print:!w-full"
     >
-      <div className="relative w-full max-w-[96vw] 2xl:max-w-7xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl my-2 sm:my-4 print:border-none print:shadow-none print:m-0 print:w-full print:max-w-none print:rounded-none">
+      {/* Dynamic @page CSS rule based on orientation */}
+      <style>{`
+        @media print {
+          @page {
+            size: ${orientation === 'landscape' ? '330mm 215mm' : '215mm 330mm'};
+            margin: ${orientation === 'landscape' ? '8mm 10mm' : '10mm 12mm'};
+          }
+        }
+      `}</style>
+      <div className="relative w-full max-w-[96vw] 2xl:max-w-7xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl my-2 sm:my-4 print:!static print:!border-none print:!shadow-none print:!m-0 print:!w-full print:!max-w-none print:!rounded-none print:!bg-white print:!overflow-visible print:!block print:!h-auto print:!min-h-0">
         
         {/* Navigation Toolbar (No-Print) */}
         <div className="sticky top-0 z-30 no-print flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-800 bg-[#161f2e] text-slate-200 shadow-md">
@@ -752,208 +761,191 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           {/* 1. REKAPITULASI PRESENSI MATRIKS BULANAN (SHEET 1 - F4 LANDSCAPE)        */}
           {/* ========================================================================= */}
           {printMode === 'rekap-matriks' && (
-            matrixChunks.map((chunk, cIdx) => {
-              const pageNum = cIdx + 1;
-              const totalParts = matrixChunks.length;
-              const isLastPage = pageNum === totalParts;
+            <div className="printable-matrix-document bg-white text-black w-full min-w-[297mm] max-w-[330mm] mx-auto p-4 sm:p-6 lg:p-8 box-border select-text print:p-0 print:m-0 print:w-full print:max-w-none shadow-2xl rounded-xs border border-slate-300 print:border-none print:shadow-none">
+              {/* Kop Surat Resmi Kedinasan */}
+              <KopSuratKedinasan inst={inst} isLandscape={true} />
 
-              return (
-                <div
-                  key={cIdx}
-                  className="bg-white text-slate-900 w-[330mm] min-h-[215mm] p-[10mm_12mm] shadow-2xl rounded-xs flex flex-col justify-between text-xs box-border border border-slate-200 print:!static print:!block print:!w-full print:!max-w-full print:!min-h-0 print:!h-auto print:!p-0 print:!m-0 print:!border-none print:!shadow-none select-text"
-                >
-                  <div>
-                    {pageNum === 1 ? (
-                      <>
-                        <KopSuratKedinasan inst={inst} isLandscape={true} />
-                        <div className="text-center space-y-0.5 mb-2.5">
-                          <h4 className="text-xs sm:text-sm font-extrabold uppercase underline text-slate-950 tracking-wide">
-                            REKAPITULASI PRESENSI BULANAN PEGAWAI OUTSOURCING
-                          </h4>
-                          <p className="text-[10px] text-slate-600 font-mono">
-                            Periode: {selectedMonthName} {selectedYear} (1 s.d. {totalDaysInMonth} {selectedMonthName} {selectedYear}) · Kelompok: {categoryLabel} · Penempatan: {inst.namaSkpd} {inst.namaPemda}
-                          </p>
-                        </div>
-                      </>
-                    ) : (
-                      <HeaderLanjutanMatriks inst={inst} partNumber={pageNum} totalParts={totalParts} monthName={selectedMonthName} yearNum={selectedYear} />
-                    )}
+              {/* Judul Dokumen */}
+              <div className="text-center space-y-0.5 mb-2.5">
+                <h4 className="text-xs sm:text-sm font-extrabold uppercase underline text-black tracking-wide">
+                  REKAPITULASI PRESENSI BULANAN PEGAWAI OUTSOURCING
+                </h4>
+                <p className="text-[10px] text-black font-mono">
+                  Periode: {selectedMonthName} {selectedYear} (1 s.d. {totalDaysInMonth} {selectedMonthName} {selectedYear}) · Kelompok: {categoryLabel} · Penempatan: {inst.namaSkpd} {inst.namaPemda}
+                </p>
+              </div>
 
-                    {/* Tabel Matriks Chunk */}
-                    <div className="overflow-x-auto print:overflow-visible">
-                      <table className="w-full text-left text-[9.5px] border border-slate-400 border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400 text-center">
-                            <th className="py-1.5 px-1 border-r border-slate-400 w-7" rowSpan={2}>No</th>
-                            <th className="py-1.5 px-1.5 border-r border-slate-400 w-20 text-left" rowSpan={2}>NIP / ID</th>
-                            <th className="py-1.5 px-2 border-r border-slate-400 text-left min-w-[130px]" rowSpan={2}>Nama Pegawai</th>
-                            <th className="py-1.5 px-1.5 border-r border-slate-400 text-left min-w-[110px]" rowSpan={2}>Jabatan / Formasi</th>
-                            <th className="py-1 border-r border-slate-400 bg-slate-200/80" colSpan={totalDaysInMonth}>
-                              Tanggal Presensi ({selectedMonthName} {selectedYear})
-                            </th>
-                            <th className="py-1 border-r border-slate-400 bg-emerald-50 text-emerald-950 w-6" rowSpan={2}>H</th>
-                            <th className="py-1 border-r border-slate-400 bg-rose-50 text-rose-950 w-6" rowSpan={2}>S</th>
-                            <th className="py-1 border-r border-slate-400 bg-blue-50 text-blue-950 w-6" rowSpan={2}>I</th>
-                            <th className="py-1 border-r border-slate-400 bg-amber-50 text-amber-950 w-6" rowSpan={2}>C</th>
-                            <th className="py-1 border-r border-slate-400 bg-red-50 text-red-950 w-6" rowSpan={2}>A</th>
-                            <th className="py-1 border-r border-slate-400 bg-slate-100 text-slate-700 w-7" rowSpan={2}>OFF</th>
-                            <th className="py-1 border-r border-slate-400 text-center min-w-[42px]" rowSpan={2}>Lembur</th>
-                            <th className="py-1 text-center min-w-[48px]" rowSpan={2}>% Hadir</th>
-                          </tr>
-                          <tr className="bg-slate-50 text-[8.5px] text-slate-700 border-b border-slate-400 text-center">
-                            {Array.from({ length: totalDaysInMonth }).map((_, dIdx) => {
-                              const dNum = dIdx + 1;
-                              const dateObj = new Date(yearNum, monthNum - 1, dNum);
-                              const isSunday = dateObj.getDay() === 0;
-                              return (
-                                <th
-                                  key={dNum}
-                                  className={`py-0.5 px-0.5 border-r border-slate-300 font-mono ${
-                                    isSunday ? 'bg-rose-100 text-rose-700 font-bold' : ''
-                                  }`}
-                                >
-                                  <div>{dNum}</div>
-                                  <div className="text-[7.5px] opacity-80">{dayNamesShort[dateObj.getDay()]}</div>
-                                </th>
-                              );
-                            })}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200">
-                          {chunk.map((row) => (
-                            <tr key={row.staff.id} className="hover:bg-slate-50/70">
-                              <td className="py-1 px-1 border-r border-slate-300 text-center font-mono">
-                                {row.no}
-                              </td>
-                              <td className="py-1 px-1.5 border-r border-slate-300 font-mono text-[9px]">
-                                {row.staff.nip || '-'}
-                              </td>
-                              <td className="py-1 px-2 border-r border-slate-300 font-semibold text-slate-900">
-                                {row.staff.name}
-                              </td>
-                              <td className="py-1 px-1.5 border-r border-slate-300 text-slate-700 text-[9px]">
-                                {row.staff.roleTitle || 'Tenaga Outsourcing'}
-                              </td>
-                              {row.dailyCodes.map((code, dIdx) => {
-                                const dateObj = new Date(yearNum, monthNum - 1, dIdx + 1);
-                                const isSunday = dateObj.getDay() === 0;
-                                return (
-                                  <td
-                                    key={dIdx}
-                                    className={`py-1 px-0.5 border-r border-slate-200 text-center font-mono font-bold text-[8.5px] ${
-                                      code === 'H'
-                                        ? 'text-emerald-700 bg-emerald-50/30'
-                                        : code === 'S'
-                                        ? 'text-rose-700 bg-rose-50'
-                                        : code === 'I'
-                                        ? 'text-blue-700 bg-blue-50'
-                                        : code === 'C'
-                                        ? 'text-amber-700 bg-amber-50'
-                                        : code === 'A'
-                                        ? 'text-red-700 bg-red-100'
-                                        : isSunday
-                                        ? 'text-slate-400 bg-slate-100/60'
-                                        : 'text-slate-300'
-                                    }`}
-                                  >
-                                    {code}
-                                  </td>
-                                );
-                              })}
-                              <td className="py-1 px-0.5 border-r border-slate-300 text-center font-mono font-bold text-emerald-800 bg-emerald-50/50">
-                                {row.hadir}
-                              </td>
-                              <td className="py-1 px-0.5 border-r border-slate-300 text-center font-mono font-bold text-rose-800 bg-rose-50/50">
-                                {row.sakit}
-                              </td>
-                              <td className="py-1 px-0.5 border-r border-slate-300 text-center font-mono font-bold text-blue-800 bg-blue-50/50">
-                                {row.izin}
-                              </td>
-                              <td className="py-1 px-0.5 border-r border-slate-300 text-center font-mono font-bold text-amber-800 bg-amber-50/50">
-                                {row.cuti}
-                              </td>
-                              <td className="py-1 px-0.5 border-r border-slate-300 text-center font-mono font-bold text-red-800 bg-red-50/50">
-                                {row.alpa}
-                              </td>
-                              <td className="py-1 px-0.5 border-r border-slate-300 text-center font-mono text-slate-600 bg-slate-100/50">
-                                {row.libur}
-                              </td>
-                              <td className="py-1 px-0.5 border-r border-slate-300 text-center font-mono font-bold text-indigo-700">
-                                {row.lemburJam > 0 ? `${row.lemburJam}j` : '-'}
-                              </td>
-                              <td className="py-1 px-0.5 text-center font-mono font-extrabold text-slate-900">
-                                {row.pct}
-                              </td>
-                            </tr>
-                          ))}
+              {/* Tabel Matriks Semantik Native Mengadopsi Pola SIP-SPJ */}
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full text-left border-collapse border border-black text-[7.5pt] print:text-[7pt]">
+                  <thead className="[display:table-header-group] bg-slate-100 print:bg-slate-200 text-black font-bold border-b border-black text-center">
+                    <tr className="border-b border-black break-inside-avoid">
+                      <th className="py-1.5 px-1 border border-black w-[2.5%]" rowSpan={2}>No</th>
+                      <th className="py-1.5 px-1 border border-black w-[6%] text-left" rowSpan={2}>NIP / ID</th>
+                      <th className="py-1.5 px-1.5 border border-black w-[15%] text-left" rowSpan={2}>Nama Pegawai</th>
+                      <th className="py-1.5 px-1 border border-black w-[11%] text-left" rowSpan={2}>Jabatan / Formasi</th>
+                      <th className="py-1 border border-black bg-slate-200/80 print:bg-slate-200" colSpan={totalDaysInMonth}>
+                        Tanggal Presensi ({selectedMonthName} {selectedYear})
+                      </th>
+                      <th className="py-1 border border-black w-[1.8%]" rowSpan={2}>H</th>
+                      <th className="py-1 border border-black w-[1.8%]" rowSpan={2}>S</th>
+                      <th className="py-1 border border-black w-[1.8%]" rowSpan={2}>I</th>
+                      <th className="py-1 border border-black w-[1.8%]" rowSpan={2}>C</th>
+                      <th className="py-1 border border-black w-[1.8%]" rowSpan={2}>A</th>
+                      <th className="py-1 border border-black w-[2.2%]" rowSpan={2}>OFF</th>
+                      <th className="py-1 border border-black w-[2.8%]" rowSpan={2}>Lembur</th>
+                      <th className="py-1 border border-black w-[3.5%]" rowSpan={2}>% Hadir</th>
+                    </tr>
+                    <tr className="border-b border-black text-[7pt] print:text-[6.5pt] break-inside-avoid">
+                      {Array.from({ length: totalDaysInMonth }).map((_, dIdx) => {
+                        const dNum = dIdx + 1;
+                        const dateObj = new Date(yearNum, monthNum - 1, dNum);
+                        const isSunday = dateObj.getDay() === 0;
+                        return (
+                          <th
+                            key={dNum}
+                            className={`py-0.5 px-0.5 border border-black font-mono ${
+                              isSunday ? 'bg-rose-100 print:bg-slate-300 font-bold' : ''
+                            }`}
+                            style={{ width: `${(46.5 / totalDaysInMonth).toFixed(2)}%` }}
+                          >
+                            <div>{dNum}</div>
+                            <div className="text-[6pt] opacity-80">{dayNamesShort[dateObj.getDay()]}</div>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black">
+                    {matrixStaffData.map((row) => (
+                      <tr key={row.staff.id} className="break-inside-avoid hover:bg-slate-50 print:hover:bg-transparent">
+                        <td className="py-1 px-0.5 border border-black text-center font-mono">
+                          {row.no}
+                        </td>
+                        <td className="py-1 px-1 border border-black font-mono text-[7pt] print:text-[6.5pt]">
+                          {row.staff.nip || '-'}
+                        </td>
+                        <td className="py-1 px-1.5 border border-black font-semibold text-black text-left">
+                          {row.staff.name}
+                        </td>
+                        <td className="py-1 px-1 border border-black text-black text-[7pt] print:text-[6.5pt] text-left">
+                          {row.staff.roleTitle || 'Tenaga Outsourcing'}
+                        </td>
+                        {row.dailyCodes.map((code, dIdx) => {
+                          const dateObj = new Date(yearNum, monthNum - 1, dIdx + 1);
+                          const isSunday = dateObj.getDay() === 0;
+                          return (
+                            <td
+                              key={dIdx}
+                              className={`py-0.5 px-0.5 border border-black text-center font-mono font-bold text-[7.5pt] print:text-[7pt] ${
+                                code === 'H'
+                                  ? 'text-emerald-800 bg-emerald-50/40 print:text-black print:bg-transparent'
+                                  : code === 'S'
+                                  ? 'text-rose-800 bg-rose-50/50 print:text-black print:bg-transparent'
+                                  : code === 'I'
+                                  ? 'text-blue-800 bg-blue-50/50 print:text-black print:bg-transparent'
+                                  : code === 'C'
+                                  ? 'text-amber-800 bg-amber-50/50 print:text-black print:bg-transparent'
+                                  : code === 'A'
+                                  ? 'text-red-800 bg-red-100 print:text-black print:bg-transparent'
+                                  : isSunday
+                                  ? 'text-slate-600 bg-slate-100 print:text-black print:bg-slate-200'
+                                  : 'text-slate-400 print:text-black'
+                              }`}
+                            >
+                              {code}
+                            </td>
+                          );
+                        })}
+                        <td className="py-1 px-0.5 border border-black text-center font-mono font-bold">
+                          {row.hadir}
+                        </td>
+                        <td className="py-1 px-0.5 border border-black text-center font-mono font-bold">
+                          {row.sakit}
+                        </td>
+                        <td className="py-1 px-0.5 border border-black text-center font-mono font-bold">
+                          {row.izin}
+                        </td>
+                        <td className="py-1 px-0.5 border border-black text-center font-mono font-bold">
+                          {row.cuti}
+                        </td>
+                        <td className="py-1 px-0.5 border border-black text-center font-mono font-bold">
+                          {row.alpa}
+                        </td>
+                        <td className="py-1 px-0.5 border border-black text-center font-mono">
+                          {row.libur}
+                        </td>
+                        <td className="py-1 px-0.5 border border-black text-center font-mono font-bold">
+                          {row.lemburJam > 0 ? `${row.lemburJam}j` : '-'}
+                        </td>
+                        <td className="py-1 px-0.5 border border-black text-center font-mono font-extrabold">
+                          {row.pct}
+                        </td>
+                      </tr>
+                    ))}
 
-                          {isLastPage && (
-                            <tr className="bg-slate-100 font-bold border-t-2 border-slate-400 text-center text-[9.5px]">
-                              <td colSpan={4} className="py-1.5 px-2 border-r border-slate-400 text-left uppercase">
-                                TOTAL KEHADIRAN HARIAN (H)
-                              </td>
-                              {dailyHadirTotals.map((tot, idx) => (
-                                <td key={idx} className="py-1 px-0.5 border-r border-slate-300 font-mono text-emerald-800">
-                                  {tot}
-                                </td>
-                              ))}
-                              <td colSpan={8} className="py-1 text-center text-slate-500 font-normal italic text-[8.5px]">
-                                Rekapitulasi Sah
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
+                    {/* Total Kehadiran Harian */}
+                    <tr className="bg-slate-100 print:bg-slate-200 font-bold border-t-2 border-black text-center text-[7.5pt] print:text-[7pt] break-inside-avoid">
+                      <td colSpan={4} className="py-1.5 px-2 border border-black text-left uppercase">
+                        TOTAL KEHADIRAN HARIAN (H)
+                      </td>
+                      {dailyHadirTotals.map((tot, idx) => (
+                        <td key={idx} className="py-1 px-0.5 border border-black font-mono">
+                          {tot}
+                        </td>
+                      ))}
+                      <td colSpan={8} className="py-1 text-center font-normal italic text-[7pt] border border-black">
+                        Rekapitulasi Sah
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Keterangan Kode & Tanda Tangan Resmi Dua Pihak (Anti Potong Halaman) */}
+              <div className="mt-3.5 signature-block break-inside-avoid page-break-inside-avoid">
+                <div className="p-2 rounded-lg bg-slate-50 print:bg-transparent border border-black text-[8pt] leading-relaxed flex flex-wrap gap-x-5 gap-y-0.5">
+                  <span className="font-bold">Keterangan Kode:</span>
+                  <span><strong>H</strong> = Hadir Fisik (GPS WebRTC)</span>
+                  <span><strong>S</strong> = Sakit (SKD Dokter)</span>
+                  <span><strong>I</strong> = Izin Terverifikasi</span>
+                  <span><strong>C</strong> = Hak Cuti Sah</span>
+                  <span><strong>A</strong> = Alpa</span>
+                  <span><strong>OFF</strong> = Libur Rutin</span>
+                </div>
+
+                {/* Tanda Tangan Resmi Dua Pihak */}
+                <div className="mt-4 pt-3 border-t border-black grid grid-cols-2 gap-8 text-[9pt] text-center">
+                  <div className="space-y-12">
+                    <div>
+                      <p className="text-slate-700 print:text-black">Dibuat Oleh (Vendor / Pengawas Lapangan):</p>
+                      <p className="font-bold text-black">{selectedStaff?.vendorName || 'PT. YASMINE BUIH PERSADA'}</p>
                     </div>
-
-                    {isLastPage && (
-                      <>
-                        <div className="mt-2.5 p-2 rounded-lg bg-slate-50 border border-slate-300 text-[9.5px] leading-relaxed text-slate-700 flex flex-wrap gap-x-5 gap-y-0.5">
-                          <span className="font-bold text-slate-900">Keterangan Kode:</span>
-                          <span><strong>H</strong> = Hadir Fisik (GPS WebRTC)</span>
-                          <span><strong>S</strong> = Sakit (SKD Dokter)</span>
-                          <span><strong>I</strong> = Izin Terverifikasi</span>
-                          <span><strong>C</strong> = Hak Cuti Sah</span>
-                          <span><strong>A</strong> = Alpa</span>
-                          <span><strong>OFF</strong> = Libur Rutin</span>
-                        </div>
-
-                        {/* Tanda Tangan Resmi Dua Pihak */}
-                        <div className="mt-3.5 pt-3 border-t border-slate-300 grid grid-cols-2 gap-8 text-[11px] text-center">
-                          <div className="space-y-12">
-                            <div>
-                              <p className="text-slate-600">Dibuat Oleh (Vendor / Pengawas Lapangan):</p>
-                              <p className="font-bold text-slate-900">{selectedStaff?.vendorName || 'PT. YASMINE BUIH PERSADA'}</p>
-                            </div>
-                            <div>
-                              <p className="font-bold underline text-slate-950">( ............................................. )</p>
-                              <p className="text-[10px] text-slate-500">Supervisor / Pengawas Lapangan</p>
-                            </div>
-                          </div>
-
-                          <div className="space-y-12">
-                            <div>
-                              <p className="text-slate-600">{inst.kotaSurat || 'Barabai'}, {today}</p>
-                              <p className="font-bold text-slate-900">{inst.pejabatJabatan || 'Sekretaris Dinas Pendidikan'}</p>
-                            </div>
-                            <div>
-                              <p className="font-bold underline text-slate-950">{inst.pejabatNama || 'Salihin, S.Pd.SD'}</p>
-                              <p className="text-[10px] text-slate-500 font-mono">NIP. {inst.pejabatNip || '19780502 200604 1 017'}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
+                    <div>
+                      <p className="font-bold underline text-black">( ............................................. )</p>
+                      <p className="text-[8pt] text-slate-600 print:text-black">Supervisor / Pengawas Lapangan</p>
+                    </div>
                   </div>
 
-                  {/* Footer Penomoran Baku F4 */}
-                  <div className="pt-2 border-t border-slate-200 mt-2 flex items-center justify-between text-[9px] text-slate-500 font-mono">
-                    <span>ID Dokumen: {documentId} • Sistem OutsourceTrack & KPI Pro</span>
-                    <span className="font-bold text-slate-700">Halaman {pageNum} dari {totalParts}</span>
+                  <div className="space-y-12">
+                    <div>
+                      <p className="text-slate-700 print:text-black">{inst.kotaSurat || 'Barabai'}, {today}</p>
+                      <p className="font-bold text-black">{inst.pejabatJabatan || 'Sekretaris Dinas Pendidikan'}</p>
+                    </div>
+                    <div>
+                      <p className="font-bold underline text-black">{inst.pejabatNama || 'Salihin, S.Pd.SD'}</p>
+                      <p className="text-[8pt] font-mono text-slate-600 print:text-black">NIP. {inst.pejabatNip || '19780502 200604 1 017'}</p>
+                    </div>
                   </div>
                 </div>
-              );
-            })
+
+                {/* Footer Penomoran Baku F4 */}
+                <div className="pt-2 border-t border-slate-300 print:border-black mt-3 flex items-center justify-between text-[8pt] font-mono text-slate-600 print:text-black">
+                  <span>ID Dokumen: {documentId} • Sistem OutsourceTrack & KPI Pro</span>
+                  <span className="font-bold">Standar Baku F4 / Folio Landscape (330 mm × 215 mm)</span>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* ========================================================================= */}
