@@ -38,7 +38,7 @@ if [ ! -f "$OUTSOURCE_DIR/data/outsource_track.db" ]; then
     cp "$LATEST_BAK" "$OUTSOURCE_DIR/data/outsource_track.db"
   fi
 fi
-
+sudo chown -R $(id -u):$(id -g) "$OUTSOURCE_DIR"
 npm run build
 sudo pm2 restart outsource-track
 
