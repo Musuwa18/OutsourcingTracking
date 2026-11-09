@@ -232,25 +232,93 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
   const paperSizeCss =
     orientation === "landscape" ? "size: 330mm 215mm;" : "size: 215mm 330mm;";
 
+  const paperMarginCss =
+    orientation === "landscape" ? "margin: 8mm 10mm;" : "margin: 10mm 12mm;";
+
   return (
     <div className="space-y-4">
       {/* CSS PRINT INJEKSI OTOMATIS STANDAR F4 FOLIO DISDIK HST */}
       <style>{`
         @page {
           ${paperSizeCss}
-          margin: 10mm 12mm 10mm 12mm;
+          ${paperMarginCss}
         }
 
         @media print {
-          /* Strict Print Isolation: Sembunyikan seluruh UI latar belakang aplikasi jika modal cetak aktif */
-          body:has([data-print-modal="true"]) #root > *:not([data-print-modal="true"]),
-          body.is-printing-document #root > *:not([data-print-modal="true"]),
-          body:has(#batata-document-export-container) #root > *:not([data-print-modal="true"]) {
+          /* Strict Print Isolation: Sembunyikan seluruh UI latar belakang aplikasi saat mencetak */
+          body:has([data-print-modal="true"]) main,
+          body:has([data-print-modal="true"]) aside,
+          body:has([data-print-modal="true"]) nav,
+          body:has([data-print-modal="true"]) header,
+          body:has([data-print-modal="true"]) .ambient-calm,
+          body:has([data-print-modal="true"]) .ambient-canvas,
+          body:has([data-print-modal="true"]) [data-toast="true"],
+          body.is-printing-document main,
+          body.is-printing-document aside,
+          body.is-printing-document nav,
+          body.is-printing-document header,
+          body.is-printing-document .ambient-calm,
+          body.is-printing-document .ambient-canvas,
+          body.is-printing-document [data-toast="true"],
+          body:has(#batata-document-export-container) main,
+          body:has(#batata-document-export-container) aside,
+          body:has(#batata-document-export-container) nav,
+          body:has(#batata-document-export-container) header,
+          body:has(#batata-document-export-container) .ambient-calm,
+          body:has(#batata-document-export-container) .ambient-canvas,
+          body:has(#batata-document-export-container) [data-toast="true"] {
             display: none !important;
             visibility: hidden !important;
             height: 0 !important;
             max-height: 0 !important;
             overflow: hidden !important;
+          }
+
+          /* Pastikan container root dan app mengalir alami sebagai block tanpa clipping */
+          #root,
+          #root > div {
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          [data-print-modal="true"] {
+            display: block !important;
+            position: static !important;
+            inset: auto !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            backdrop-filter: none !important;
+          }
+
+          [data-print-modal="true"] > div {
+            display: block !important;
+            position: static !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
           /* Netralkan seluruh container fixed & overflow agar page-break berjalan alami per lembar */
@@ -325,19 +393,17 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
             margin: 0 !important;
             padding: 0 !important;
             overflow: visible !important;
+            transform: none !important;
           }
 
           .batata-print-page {
             display: block !important;
             position: relative !important;
-            page-break-after: always !important;
-            break-after: page !important;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
             background: #ffffff !important;
             background-color: #ffffff !important;
             color: #000000 !important;
             width: 100% !important;
+            min-width: 0 !important;
             max-width: 100% !important;
             min-height: 0 !important;
             margin: 0 !important;
@@ -347,9 +413,25 @@ export const DocumentPublishBanner: React.FC<DocumentPublishBannerProps> = ({
             box-sizing: border-box !important;
           }
 
-          .batata-print-page:last-child {
+          /* Jika halaman merupakan chunk bernomor data-page-index */
+          .batata-print-page[data-page-index] {
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          .batata-print-page[data-page-index]:last-child {
             page-break-after: auto !important;
             break-after: auto !important;
+          }
+
+          /* Jika halaman berupa dokumen kontinu tunggal tanpa data-page-index (tabel matriks bulanan) */
+          .batata-print-page:not([data-page-index]) {
+            page-break-after: auto !important;
+            break-after: auto !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
           }
 
           .batata-hidden-page {
