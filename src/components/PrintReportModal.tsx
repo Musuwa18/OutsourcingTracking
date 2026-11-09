@@ -48,6 +48,7 @@ interface PrintReportModalProps {
   initialPrintMode?: 'rekap-matriks' | 'timesheet-harian' | 'rekap-divisi' | 'rapor-staf' | 'sptl-lembur' | 'surat-izin';
   initialStaffId?: string;
   users?: UserAccount[];
+  onOpenMatrixView?: () => void;
 }
 
 // Komponen Kop Surat Resmi Kedinasan
@@ -117,6 +118,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   initialPrintMode,
   initialStaffId,
   users = [],
+  onOpenMatrixView,
 }) => {
   if (!isOpen) return null;
 
@@ -762,6 +764,21 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           {/* ========================================================================= */}
           {printMode === 'rekap-matriks' && (
             <div className="printable-matrix-document bg-white text-black w-full min-w-[297mm] max-w-[330mm] mx-auto p-4 sm:p-6 lg:p-8 box-border select-text print:p-0 print:m-0 print:w-full print:max-w-none shadow-2xl rounded-xs border border-slate-300 print:border-none print:shadow-none">
+              {onOpenMatrixView && (
+                <div className="no-print mb-4 p-3 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-between gap-3 text-xs text-indigo-950">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Ingin berinteraksi langsung dengan data tabel, filter pencarian &amp; cetak instan?</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onOpenMatrixView}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer transition-colors shrink-0"
+                  >
+                    Buka Matriks Presensi Interaktif
+                  </button>
+                </div>
+              )}
               {/* Kop Surat Resmi Kedinasan */}
               <KopSuratKedinasan inst={inst} isLandscape={true} />
 

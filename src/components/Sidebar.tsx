@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Users,
   CalendarCheck2,
+  FileSpreadsheet,
   FileCheck2,
   Star,
   BarChart3,
@@ -66,6 +67,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       isAlertBadge: geofenceBreachCount > 0,
     },
     {
+      id: 'matriks-presensi',
+      label: 'Matriks Presensi 1-31',
+      icon: FileSpreadsheet,
+      badge: 'F4 Live',
+      isAlertBadge: false,
+    },
+    {
       id: 'persetujuan-laporan',
       label: 'Verifikasi Laporan',
       icon: FileCheck2,
@@ -105,7 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isSupervisor = currentRole === 'supervisor' || currentRole === 'coordinator';
   const displayedNavItems = isSupervisor
     ? adminNavItems.filter((item) =>
-        ['monitoring-presensi', 'persetujuan-laporan', 'evaluasi-mingguan', 'analitik-bulanan'].includes(
+        ['monitoring-presensi', 'matriks-presensi', 'persetujuan-laporan', 'evaluasi-mingguan', 'analitik-bulanan'].includes(
           item.id
         )
       )

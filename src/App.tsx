@@ -52,6 +52,7 @@ import { StaffHistoryView } from './views/StaffHistoryView';
 import { AdminAttendanceView } from './views/AdminAttendanceView';
 import { SupervisorEvaluationView } from './views/SupervisorEvaluationView';
 import { AnalyticsMonthlyView } from './views/AnalyticsMonthlyView';
+import { MonthlyMatrixView } from './views/MonthlyMatrixView';
 import { SettingsSecurityView } from './views/SettingsSecurityView';
 import { SystemSettingsView, SettingsTab } from './views/SystemSettingsView';
 import { AuditLogView } from './views/AuditLogView';
@@ -2271,9 +2272,10 @@ export default function App() {
                   attendanceRecords={attendanceRecords}
                   dailyReports={dailyReports}
                   fieldCheckins={fieldCheckins}
+                  onOpenMatrix={() => setAdminTab('matriks-presensi')}
                   onOpenPrintModal={() => {
                     setPrintModalCategory('ALL');
-                    setPrintModalMode('rekap-matriks');
+                    setPrintModalMode('timesheet-harian');
                     setPrintModalStaffId(undefined);
                     setPrintModalOpen(true);
                   }}
@@ -2281,6 +2283,22 @@ export default function App() {
                   onNavigateToLeaves={() => {
                     setSupervisorSubTab('leave-feed');
                     setAdminTab('persetujuan-laporan');
+                  }}
+                />
+              )}
+
+              {adminTab === 'matriks-presensi' && (
+                <MonthlyMatrixView
+                  staffList={filteredStaffList}
+                  attendanceRecords={attendanceRecords}
+                  monthlyAggregates={monthlyAggregates}
+                  overtimeRecords={overtimeRecords}
+                  leaveRecords={leaveRecords}
+                  institutionSettings={institutionSettings}
+                  currentUser={currentUser}
+                  onSelectStaff={(staff) => {
+                    setSelectedStaffForModal(staff);
+                    setIsStaffModalOpen(true);
                   }}
                 />
               )}
@@ -2416,6 +2434,10 @@ export default function App() {
         initialPrintMode={printModalMode}
         initialStaffId={printModalStaffId}
         users={users}
+        onOpenMatrixView={() => {
+          setPrintModalOpen(false);
+          setAdminTab('matriks-presensi');
+        }}
       />
 
       {/* Google Drive Cloud Sync Modal */}

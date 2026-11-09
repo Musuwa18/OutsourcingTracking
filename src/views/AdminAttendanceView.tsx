@@ -4,6 +4,7 @@ import {
   Filter,
   Download,
   Printer,
+  FileSpreadsheet,
   Eye,
   CheckCircle2,
   Clock,
@@ -30,6 +31,7 @@ interface AdminAttendanceViewProps {
   dailyReports: DailyWorkReport[];
   fieldCheckins?: FieldCheckinRecord[];
   onOpenPrintModal: () => void;
+  onOpenMatrix?: () => void;
   onConfigureLocation?: (staff: StaffProfile) => void;
   onOpenAiChat?: () => void;
   leaveRecords?: LeaveRequest[];
@@ -43,6 +45,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   dailyReports,
   fieldCheckins = [],
   onOpenPrintModal,
+  onOpenMatrix,
   onConfigureLocation,
   onOpenAiChat,
   leaveRecords = [],
@@ -180,13 +183,25 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
             <span>Ekspor Excel/CSV</span>
           </button>
 
+          {onOpenMatrix && (
+            <button
+              type="button"
+              onClick={onOpenMatrix}
+              className="px-3.5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-all flex items-center gap-2 cursor-pointer shadow-xs shadow-indigo-600/25"
+              title="Buka Data Matriks Presensi Interaktif 1 - 31 (Standar SIP-SPJ)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Matriks Presensi (1-31)</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onOpenPrintModal}
             className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors flex items-center gap-2 cursor-pointer shadow-xs"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Cetak Rekap / PDF</span>
+            <span>Cetak Dokumen F4</span>
           </button>
         </div>
       </div>
