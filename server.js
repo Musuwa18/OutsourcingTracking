@@ -8,17 +8,34 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from '@simplewebauthn/server';
+import {
   hashPassword,
   getUserByEmailOrNip,
   getUserById,
   createUser,
   updateUserDevice,
+  checkDeviceBindingConflict,
+  saveUserBiometricCredential,
+  getUserBiometricCredentials,
+  getBiometricCredentialById,
+  updateBiometricCounter,
+  deleteUserBiometricCredential,
   updateUserLocation,
   updateUserSupervisor,
   listSupervisors,
   requestSupervisorChange,
   approveSupervisorChange,
   rejectSupervisorChange,
+  requestUserProfileUpdate,
+  approveUserDivisionChange,
+  rejectUserDivisionChange,
+  approveUserAssignmentChange,
+  rejectUserAssignmentChange,
   listUsersByDivision,
   listDivisions,
   createDivision,
@@ -33,6 +50,7 @@ import {
   changeUserPassword,
   updateUserProfile,
   deleteUser,
+  getServerWitaTime,
   saveAttendance,
   listAttendance,
   saveFieldCheckin,
@@ -186,37 +204,60 @@ app.post('/api/auth/login', (req, res) => {
     }
 
     // ----------------------------------------------------
-    // Device Binding Enforcement (Anti-Titip Absen)
+    // Device Binding Enforcement (Anti-Titip Absen & Anti Multi-User)
     // ----------------------------------------------------
+    const hardwareFp = req.body.hardwareFingerprint || req.body.hardware_fingerprint || deviceId;
+
     // Aturan ketat 1 Akun = 1 HP khusus Tenaga Outsourcing
     if (user.role === 'outsourcing') {
-      if (user.deviceId) {
-        if (!deviceId || deviceId !== user.deviceId) {
+      // 1. Cek apakah perangkat fisik ini sudah terikat pada AKUN PEGAWAI LAIN
+      if (hardwareFp) {
+        const conflictUser = checkDeviceBindingConflict(hardwareFp, user.id);
+        if (conflictUser) {
+          const conflictName = conflictUser.name || 'Pegawai Lain';
+          const conflictNip = conflictUser.nip ? ` (${conflictUser.nip})` : '';
+          return res.status(403).json({
+            error: `Perangkat ini sudah terikat dengan akun pegawai lain [${conflictName}${conflictNip}]. 1 perangkat fisik hanya boleh digunakan oleh 1 akun pegawai demi integritas presensi.`,
+            code: 'DEVICE_BOUND_TO_ANOTHER_USER',
+            boundTo: {
+              name: conflictUser.name,
+              nip: conflictUser.nip
+            }
+          });
+        }
+      }
+
+      // 2. Cek apakah akun staf ini sudah terikat pada HP berbeda
+      const userBoundFp = user.hardwareFingerprint || user.deviceId;
+      if (userBoundFp) {
+        if (!hardwareFp || (hardwareFp !== userBoundFp && hardwareFp !== user.deviceId && hardwareFp !== user.hardwareFingerprint)) {
           return res.status(403).json({
             error: 'PERANGKAT TIDAK DIKENALI (ANTI-TITIP ABSEN): Akun Anda telah terikat secara resmi pada smartphone utama yang Anda daftarkan sebelumnya. Demi integritas presensi, dilarang login di HP orang lain untuk mencegah titip absen. Silakan gunakan HP terdaftar Anda, atau hubungi Kasubag / Administrator Disdik HST untuk reset kunci perangkat jika Anda resmi berganti HP baru.',
             code: 'DEVICE_BINDING_MISMATCH',
-            boundDeviceId: user.deviceId
+            boundDeviceId: userBoundFp
           });
         }
-      } else if (deviceId) {
+      } else if (hardwareFp) {
         // Ikat HP pertama kali (setelah registrasi atau setelah di-reset oleh admin)
-        updateUserDevice(user.id, deviceId);
-        user.deviceId = deviceId;
+        updateUserDevice(user.id, deviceId || hardwareFp, null, hardwareFp);
+        user.deviceId = deviceId || hardwareFp;
+        user.hardwareFingerprint = hardwareFp;
         user.deviceBinding = {
           registered: true,
-          deviceModel: deviceId,
+          deviceModel: deviceId || hardwareFp,
           registeredAt: new Date().toISOString(),
           biometricEnabled: !!user.biometricKey
         };
       }
     } else {
       // Supervisor, Admin, & Super Admin bebas login multi-perangkat (PC / Laptop / HP)
-      if (deviceId && !user.deviceId) {
-        updateUserDevice(user.id, deviceId);
-        user.deviceId = deviceId;
+      if (hardwareFp && !user.deviceId) {
+        updateUserDevice(user.id, deviceId || hardwareFp, null, hardwareFp);
+        user.deviceId = deviceId || hardwareFp;
+        user.hardwareFingerprint = hardwareFp;
         user.deviceBinding = {
           registered: true,
-          deviceModel: deviceId,
+          deviceModel: deviceId || hardwareFp,
           registeredAt: new Date().toISOString(),
           biometricEnabled: !!user.biometricKey
         };
@@ -234,6 +275,315 @@ app.post('/api/auth/login', (req, res) => {
   } catch (err) {
     console.error('[API Error] Login:', err);
     res.status(500).json({ error: 'Terjadi kesalahan pada server saat login.' });
+  }
+});
+
+// ==============================================================================
+// 2.B. WEBAUTHN / FIDO2 BIOMETRIC AUTHENTICATION (HARDWARE SENSOR HP)
+// ==============================================================================
+function getWebAuthnConfig(req) {
+  const originHeader = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : '');
+  const hostHeader = req.headers.host || '';
+
+  let rpID = 'outsourcing.renlapdisdikhst.pro';
+  if (hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1')) {
+    rpID = 'localhost';
+  } else if (hostHeader) {
+    rpID = hostHeader.split(':')[0];
+  }
+
+  let expectedOrigin = originHeader;
+  if (!expectedOrigin) {
+    const proto = req.headers['x-forwarded-proto'] || (rpID === 'localhost' ? 'http' : 'https');
+    expectedOrigin = `${proto}://${hostHeader || rpID}`;
+  }
+
+  return { rpID, expectedOrigin, rpName: 'OutsourceTrack Disdik HST' };
+}
+
+const biometricChallenges = new Map();
+
+function storeChallenge(key, challenge) {
+  biometricChallenges.set(key, { challenge, timestamp: Date.now() });
+}
+
+function retrieveChallenge(key) {
+  const entry = biometricChallenges.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > 5 * 60 * 1000) {
+    biometricChallenges.delete(key);
+    return null;
+  }
+  biometricChallenges.delete(key);
+  return entry.challenge;
+}
+
+// 2.B.1. Opsi Registrasi Sensor Biometrik (Passkey / WebAuthn Enrollment)
+app.post('/api/auth/biometric/register-options', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID wajib disertakan.' });
+    }
+    const user = getUserById(userId) || getUserByEmailOrNip(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
+    }
+
+    const { rpID, rpName } = getWebAuthnConfig(req);
+    const existingCredentials = getUserBiometricCredentials(user.id);
+
+    const options = await generateRegistrationOptions({
+      rpName,
+      rpID,
+      userID: Buffer.from(user.id),
+      userName: user.email || user.nip,
+      userDisplayName: user.name,
+      attestationType: 'none',
+      excludeCredentials: existingCredentials.map((cred) => ({
+        id: cred.credentialId,
+        transports: cred.transports,
+      })),
+      authenticatorSelection: {
+        authenticatorAttachment: 'platform', // Meminta sensor fisik bawaan HP (fingerprint / Face ID)
+        userVerification: 'required',
+        residentKey: 'preferred',
+      },
+    });
+
+    storeChallenge(`reg_${user.id}`, options.challenge);
+    res.json({ success: true, options });
+  } catch (err) {
+    console.error('[WebAuthn] Register Options Error:', err);
+    res.status(500).json({ error: 'Gagal membuat opsi pendaftaran biometrik.' });
+  }
+});
+
+// 2.B.2. Verifikasi & Penyimpanan Public Key Biometrik
+app.post('/api/auth/biometric/register-verify', async (req, res) => {
+  try {
+    const { userId, response, deviceName } = req.body;
+    if (!userId || !response) {
+      return res.status(400).json({ error: 'Data verifikasi biometrik tidak lengkap.' });
+    }
+    const user = getUserById(userId) || getUserByEmailOrNip(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
+    }
+
+    const expectedChallenge = retrieveChallenge(`reg_${user.id}`);
+    if (!expectedChallenge) {
+      return res.status(400).json({ error: 'Sesi pendaftaran biometrik kedaluwarsa. Silakan coba lagi.' });
+    }
+
+    const { rpID, expectedOrigin } = getWebAuthnConfig(req);
+    const verification = await verifyRegistrationResponse({
+      response,
+      expectedChallenge,
+      expectedOrigin,
+      expectedRPID: rpID,
+    });
+
+    if (!verification.verified || !verification.registrationInfo) {
+      return res.status(400).json({ error: 'Verifikasi biometrik gagal.' });
+    }
+
+    const { credential } = verification.registrationInfo;
+    const publicKeyBase64 = Buffer.from(credential.publicKey).toString('base64');
+
+    const saved = saveUserBiometricCredential({
+      userId: user.id,
+      credentialId: credential.id,
+      publicKey: publicKeyBase64,
+      counter: credential.counter,
+      deviceName: deviceName || 'Smartphone Biometrik',
+      transports: response.response?.transports || ['internal'],
+    });
+
+    res.json({
+      success: true,
+      message: 'Sidik Jari / Face ID berhasil didaftarkan di perangkat ini.',
+      credential: saved,
+    });
+  } catch (err) {
+    console.error('[WebAuthn] Register Verify Error:', err);
+    res.status(500).json({ error: 'Gagal memverifikasi pendaftaran biometrik: ' + (err.message || 'Error tidak diketahui') });
+  }
+});
+
+// 2.B.3. Opsi Autentikasi / Login Biometrik
+app.post('/api/auth/biometric/login-options', async (req, res) => {
+  try {
+    const rawIdentifier = req.body.usernameOrEmail || req.body.identifier;
+    const { rpID } = getWebAuthnConfig(req);
+    let allowCredentials = undefined;
+    let challengeKey = 'login_anon_' + Date.now();
+
+    if (rawIdentifier) {
+      const user = getUserByEmailOrNip(String(rawIdentifier).trim());
+      if (user) {
+        challengeKey = `login_${user.id}`;
+        const creds = getUserBiometricCredentials(user.id);
+        if (creds && creds.length > 0) {
+          allowCredentials = creds.map((c) => ({
+            id: c.credentialId,
+            transports: c.transports,
+          }));
+        }
+      }
+    }
+
+    const options = await generateAuthenticationOptions({
+      rpID,
+      allowCredentials,
+      userVerification: 'required',
+    });
+
+    storeChallenge(challengeKey, options.challenge);
+    storeChallenge(`challenge_${options.challenge}`, options.challenge);
+
+    res.json({ success: true, options, challengeKey });
+  } catch (err) {
+    console.error('[WebAuthn] Login Options Error:', err);
+    res.status(500).json({ error: 'Gagal menyiapkan autentikasi biometrik.' });
+  }
+});
+
+// 2.B.4. Verifikasi Login Biometrik & Penerbitan Sesi
+app.post('/api/auth/biometric/login-verify', async (req, res) => {
+  try {
+    const { response, challengeKey, deviceId } = req.body;
+    if (!response || !response.id) {
+      return res.status(400).json({ error: 'Data respons biometrik tidak valid.' });
+    }
+
+    const cred = getBiometricCredentialById(response.id);
+    if (!cred) {
+      return res.status(404).json({ error: 'Kredensial biometrik tidak terdaftar di sistem. Harap masuk terlebih dahulu dengan kata sandi, lalu daftarkan sidik jari di menu Profil.' });
+    }
+
+    const user = getUserById(cred.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Akun pengguna tidak ditemukan.' });
+    }
+
+    if (user.status === 'Nonaktif') {
+      return res.status(403).json({ error: 'Akun Anda dinonaktifkan oleh Administrator.' });
+    }
+
+    let expectedChallenge = null;
+    if (challengeKey) {
+      expectedChallenge = retrieveChallenge(challengeKey);
+    }
+    if (!expectedChallenge) {
+      expectedChallenge = retrieveChallenge(`login_${user.id}`);
+    }
+    if (!expectedChallenge) {
+      try {
+        const clientData = JSON.parse(Buffer.from(response.response.clientDataJSON, 'base64').toString('utf-8'));
+        if (clientData.challenge) {
+          expectedChallenge = retrieveChallenge(`challenge_${clientData.challenge}`);
+        }
+      } catch (e) {}
+    }
+
+    if (!expectedChallenge) {
+      return res.status(400).json({ error: 'Sesi biometrik kedaluwarsa atau tidak valid. Silakan coba lagi.' });
+    }
+
+    const { rpID, expectedOrigin } = getWebAuthnConfig(req);
+    const publicKeyBytes = Uint8Array.from(Buffer.from(cred.publicKey, 'base64'));
+
+    const verification = await verifyAuthenticationResponse({
+      response,
+      expectedChallenge,
+      expectedOrigin,
+      expectedRPID: rpID,
+      credential: {
+        id: cred.credentialId,
+        publicKey: publicKeyBytes,
+        counter: cred.counter,
+      },
+    });
+
+    if (!verification.verified || !verification.authenticationInfo) {
+      return res.status(400).json({ error: 'Verifikasi sidik jari gagal atau tidak cocok.' });
+    }
+
+    updateBiometricCounter(cred.credentialId, verification.authenticationInfo.newCounter);
+
+    // Device binding check untuk staf outsourcing (Anti-Titip Absen & Anti Multi-User)
+    const hardwareFp = req.body.hardwareFingerprint || req.body.hardware_fingerprint || deviceId;
+    if (user.role === 'outsourcing') {
+      if (hardwareFp) {
+        const conflictUser = checkDeviceBindingConflict(hardwareFp, user.id);
+        if (conflictUser) {
+          const conflictName = conflictUser.name || 'Pegawai Lain';
+          const conflictNip = conflictUser.nip ? ` (${conflictUser.nip})` : '';
+          return res.status(403).json({
+            error: `Perangkat ini sudah terikat dengan akun pegawai lain [${conflictName}${conflictNip}]. 1 perangkat fisik hanya boleh digunakan oleh 1 akun pegawai demi integritas presensi.`,
+            code: 'DEVICE_BOUND_TO_ANOTHER_USER',
+          });
+        }
+      }
+      const userBoundFp = user.hardwareFingerprint || user.deviceId;
+      if (userBoundFp && hardwareFp && hardwareFp !== userBoundFp && hardwareFp !== user.deviceId && hardwareFp !== user.hardwareFingerprint) {
+        return res.status(403).json({
+          error: 'PERANGKAT TIDAK DIKENALI: Akun Anda terikat pada HP lain. Demi keamanan presensi, dilarang login di perangkat berbeda.',
+          code: 'DEVICE_BINDING_MISMATCH',
+        });
+      }
+    }
+
+    const token = `ot_token_${user.id}_${Date.now()}`;
+    const { passwordHash, ...safeUserData } = user;
+
+    res.json({
+      success: true,
+      message: 'Autentikasi biometrik berhasil.',
+      token,
+      user: safeUserData,
+    });
+  } catch (err) {
+    console.error('[WebAuthn] Login Verify Error:', err);
+    res.status(500).json({ error: 'Gagal memverifikasi biometrik: ' + (err.message || 'Error tidak diketahui') });
+  }
+});
+
+// 2.B.5. Status Biometrik Pengguna
+app.get('/api/auth/biometric/user/:userId', (req, res) => {
+  try {
+    const { userId } = req.params;
+    const creds = getUserBiometricCredentials(userId);
+    res.json({
+      success: true,
+      enrolled: creds.length > 0,
+      count: creds.length,
+      credentials: creds.map(c => ({
+        id: c.id,
+        credentialId: c.credentialId,
+        deviceName: c.deviceName,
+        createdAt: c.createdAt,
+        lastUsedAt: c.lastUsedAt,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal mengambil status biometrik pengguna.' });
+  }
+});
+
+// 2.B.6. Hapus Kredensial Biometrik
+app.delete('/api/auth/biometric/credential/:credentialId', (req, res) => {
+  try {
+    const { credentialId } = req.params;
+    const userId = req.body?.userId || req.query?.userId;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID diperlukan.' });
+    }
+    deleteUserBiometricCredential(credentialId, userId);
+    res.json({ success: true, message: 'Kredensial biometrik berhasil dihapus.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menghapus kredensial biometrik.' });
   }
 });
 
@@ -276,6 +626,20 @@ app.post('/api/auth/register', (req, res) => {
 
     const finalRole = role === 'coordinator' ? 'coordinator' : 'outsourcing';
     const finalGroups = supervisedGroups || (vendorName ? [vendorName] : []);
+    const hardwareFp = req.body.hardwareFingerprint || req.body.hardware_fingerprint || deviceId;
+
+    if (finalRole === 'outsourcing' && hardwareFp) {
+      const conflictUser = checkDeviceBindingConflict(hardwareFp, null);
+      if (conflictUser) {
+        const conflictName = conflictUser.name || 'Pegawai Lain';
+        const conflictNip = conflictUser.nip ? ` (${conflictUser.nip})` : '';
+        return res.status(403).json({
+          error: `Perangkat ini sudah terikat dengan akun pegawai lain [${conflictName}${conflictNip}]. 1 perangkat fisik hanya boleh digunakan oleh 1 akun pegawai demi integritas presensi.`,
+          code: 'DEVICE_BOUND_TO_ANOTHER_USER',
+        });
+      }
+    }
+
     const newUser = createUser({
       nip,
       name,
@@ -289,7 +653,8 @@ app.post('/api/auth/register', (req, res) => {
       vendorName: vendorName || (finalGroups[0] || 'PT. YASMINE BUIH PERSADA'),
       supervisedGroups: finalGroups,
       supervisedVendor: supervisedVendor || finalGroups[0] || vendorName,
-      deviceId,
+      deviceId: deviceId || hardwareFp,
+      hardwareFingerprint: hardwareFp,
       customLocation,
       supervisorId,
       workspaceNote
@@ -333,12 +698,23 @@ app.get('/api/auth/me', (req, res) => {
 // 5. Auth: Bind Device & Biometric
 app.post('/api/auth/device-bind', (req, res) => {
   try {
-    const { userId, deviceId, biometricKey } = req.body;
-    if (!userId || !deviceId) {
+    const { userId, deviceId, biometricKey, hardwareFingerprint } = req.body;
+    const targetFp = hardwareFingerprint || deviceId;
+    if (!userId || !targetFp) {
       return res.status(400).json({ error: 'ID Pengguna dan ID Perangkat diperlukan.' });
     }
 
-    updateUserDevice(userId, deviceId, biometricKey);
+    const conflictUser = checkDeviceBindingConflict(targetFp, userId);
+    if (conflictUser) {
+      const conflictName = conflictUser.name || 'Pegawai Lain';
+      const conflictNip = conflictUser.nip ? ` (${conflictUser.nip})` : '';
+      return res.status(403).json({
+        error: `Perangkat ini sudah terikat dengan akun pegawai lain [${conflictName}${conflictNip}]. 1 perangkat fisik hanya boleh digunakan oleh 1 akun pegawai demi integritas presensi.`,
+        code: 'DEVICE_BOUND_TO_ANOTHER_USER',
+      });
+    }
+
+    updateUserDevice(userId, deviceId || targetFp, biometricKey, targetFp);
     res.json({ success: true, message: 'Perangkat dan biometrik berhasil ditautkan.' });
   } catch (err) {
     res.status(500).json({ error: 'Gagal menautkan perangkat.' });
@@ -518,7 +894,7 @@ app.post('/api/users/change-password', (req, res) => {
 
 app.post('/api/users/:id/reset-device', (req, res) => {
   try {
-    const updated = updateUserProfile(req.params.id, { deviceId: null });
+    const updated = updateUserProfile(req.params.id, { deviceId: null, hardwareFingerprint: null });
     res.json({ success: true, user: updated, message: 'Kunci perangkat pengguna berhasil direset.' });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Gagal mereset kunci perangkat.' });
@@ -585,6 +961,61 @@ app.put('/api/admin/users/:id/reject-supervisor', (req, res) => {
   } catch (err) {
     console.error('[API PUT reject supervisor error]', err);
     res.status(400).json({ success: false, message: err.message || 'Gagal menolak pengajuan atasan.' });
+  }
+});
+
+// 6.E. Pengajuan & Persetujuan Perubahan Divisi, Formasi, Lokasi, dan Vendor
+app.put(['/api/user/request-profile-update', '/api/users/:id/request-profile-update'], (req, res) => {
+  try {
+    const userId = req.params.id || req.body.userId;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'ID pengguna wajib disertakan.' });
+    }
+    const result = requestUserProfileUpdate(userId, req.body);
+    res.json(result);
+  } catch (err) {
+    console.error('[API PUT request-profile-update error]', err);
+    res.status(400).json({ success: false, message: err.message || 'Gagal mengajukan perubahan profil.' });
+  }
+});
+
+app.put(['/api/supervisor/approve-division/:userId', '/api/admin/users/:userId/approve-division'], (req, res) => {
+  try {
+    const updated = approveUserDivisionChange(req.params.userId);
+    res.json({ success: true, user: updated, message: 'Perubahan divisi berhasil disetujui.' });
+  } catch (err) {
+    console.error('[API PUT approve-division error]', err);
+    res.status(400).json({ success: false, message: err.message || 'Gagal menyetujui perubahan divisi.' });
+  }
+});
+
+app.put(['/api/supervisor/reject-division/:userId', '/api/admin/users/:userId/reject-division'], (req, res) => {
+  try {
+    const updated = rejectUserDivisionChange(req.params.userId);
+    res.json({ success: true, user: updated, message: 'Pengajuan perubahan divisi telah ditolak.' });
+  } catch (err) {
+    console.error('[API PUT reject-division error]', err);
+    res.status(400).json({ success: false, message: err.message || 'Gagal menolak perubahan divisi.' });
+  }
+});
+
+app.put(['/api/admin/approve-assignment/:userId', '/api/admin/users/:userId/approve-assignment'], (req, res) => {
+  try {
+    const updated = approveUserAssignmentChange(req.params.userId);
+    res.json({ success: true, user: updated, message: 'Pengajuan penugasan (formasi/lokasi/vendor) berhasil disetujui.' });
+  } catch (err) {
+    console.error('[API PUT approve-assignment error]', err);
+    res.status(400).json({ success: false, message: err.message || 'Gagal menyetujui pengajuan penugasan.' });
+  }
+});
+
+app.put(['/api/admin/reject-assignment/:userId', '/api/admin/users/:userId/reject-assignment'], (req, res) => {
+  try {
+    const updated = rejectUserAssignmentChange(req.params.userId);
+    res.json({ success: true, user: updated, message: 'Pengajuan penugasan (formasi/lokasi/vendor) telah ditolak.' });
+  } catch (err) {
+    console.error('[API PUT reject-assignment error]', err);
+    res.status(400).json({ success: false, message: err.message || 'Gagal menolak pengajuan penugasan.' });
   }
 });
 
@@ -756,8 +1187,22 @@ app.post('/api/attendance', (req, res) => {
     const saved = saveAttendance(req.body);
     res.status(201).json({ success: true, attendance: saved });
   } catch (err) {
+    if (err && (err.statusCode === 403 || err.statusCode === 422 || (err.message && err.message.startsWith('PRESENSI_DITOLAK_')))) {
+      return res.status(err.statusCode || 422).json({ success: false, error: err.message });
+    }
     console.error('[API Error] Save Attendance:', err);
     res.status(500).json({ error: 'Gagal menyimpan data presensi.' });
+  }
+});
+
+// 10.B. Server-Authoritative NTP Clock (Anti-Tamper Jam HP)
+app.get('/api/time', (req, res) => {
+  try {
+    const timeInfo = getServerWitaTime();
+    res.json({ success: true, ...timeInfo });
+  } catch (err) {
+    console.error('[API Error] Get Server Time:', err);
+    res.status(500).json({ error: 'Gagal mengambil waktu resmi server.' });
   }
 });
 
@@ -957,6 +1402,8 @@ app.post('/api/leave/request', (req, res) => {
             ? 'Izin Sakit'
             : created.leaveType === 'CUTI_TAHUNAN'
             ? 'Cuti Tahunan'
+            : created.leaveType === 'TUGAS_LUAR' || created.leaveType === 'DINAS_LUAR'
+            ? 'Tugas Luar / Perjalanan Dinas'
             : 'Izin Keperluan Mendesak';
         createNotification({
           id: `notif-leave-req-${created.id}`,
@@ -1004,6 +1451,8 @@ app.patch('/api/leave/:id/approve', (req, res) => {
             ? 'Izin Sakit'
             : updated.leaveType === 'CUTI_TAHUNAN'
             ? 'Cuti Tahunan'
+            : updated.leaveType === 'TUGAS_LUAR' || updated.leaveType === 'DINAS_LUAR'
+            ? 'Tugas Luar / Perjalanan Dinas'
             : 'Izin Keperluan Mendesak';
         const statusLabel = approved ? 'disetujui' : 'ditolak';
         const notesSuffix = updated.supervisorNotes ? ` Catatan: "${updated.supervisorNotes}"` : '';

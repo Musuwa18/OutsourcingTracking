@@ -1,8 +1,10 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, RefreshCw, X, ShieldCheck, AlertCircle, MapPin, CheckCircle2, Navigation, Briefcase, FileText, Check, Coffee } from 'lucide-react';
+import { Camera, RefreshCw, X, ShieldCheck, AlertCircle, MapPin, CheckCircle2, Navigation, Briefcase, FileText, Check, Coffee, Lock } from 'lucide-react';
 import { OfficeLocation } from '../types';
 import { formatDistance, PRIMARY_OFFICES } from '../utils/geo';
+import { getSyncedDate, getCurrentWitaTimeStr, getHumanDateStr, syncServerTime, isDeviceClockTampered } from '../utils/date';
+import { apiFetchServerTime } from '../services/api';
 import { GeofenceRadarMap } from './GeofenceRadarMap';
 
 interface CameraCaptureModalProps {
@@ -108,25 +110,30 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     } else if (actionType === 'break-out' || actionType === 'break-in') {
       setIsFieldDuty(false);
     }
-    const now = new Date();
-    const timeFormatted = now.toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
-    const dateFormatted = now.toLocaleDateString('id-ID', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-    setServerTime(`${dateFormatted} · ${timeFormatted} WITA`);
+    const updateTimeDisplay = () => {
+      const now = getSyncedDate();
+      const timeFormatted = getCurrentWitaTimeStr(now);
+      const dateFormatted = getHumanDateStr(now);
+      setServerTime(`${dateFormatted} · ${timeFormatted} WITA`);
+    };
+
+    updateTimeDisplay();
+    apiFetchServerTime()
+      .then((info) => {
+        syncServerTime(info.timestamp);
+        updateTimeDisplay();
+      })
+      .catch((err) => {
+        console.warn('[CameraSyncTime warn]', err);
+      });
+
+    const timer = setInterval(updateTimeDisplay, 1000);
 
     startCamera();
     detectGeolocation();
 
     return () => {
+      clearInterval(timer);
       stopCamera();
     };
   }, [isOpen]);
@@ -324,7 +331,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         : actionType === 'overtime-finish'
         ? 'SELESAI LEMBUR'
         : 'ISTIRAHAT';
-    ctx.fillText(`PRESENSI RESMI · ${actionLabel}`, 16, canvas.height - 38);
+    ctx.fillText(`PRESENSI RESMI · ${actionLabel} [NTP LOCKED]`, 16, canvas.height - 38);
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '10px "JetBrains Mono", monospace';
     const locText = coords ? `GPS: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)} (±${Math.round(coords.accuracy)}m)` : 'GPS LOCKED';
@@ -482,11 +489,27 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Kamera WebRTC (Anti-Galeri)</span>
                   </div>
+
+                  {/* Server NTP Time Lock Badge */}
+                  <div className="absolute top-3 right-3 bg-slate-900/85 backdrop-blur-xs text-emerald-400 text-[10px] font-semibold px-2.5 py-1 rounded-lg border border-emerald-700/60 flex items-center gap-1.5 shadow-sm">
+                    <Lock className="w-3 h-3 text-emerald-400" />
+                    <span>Waktu Server WITA</span>
+                  </div>
                 </>
               )}
 
               <canvas ref={canvasRef} className="hidden" />
             </div>
+
+            {/* Anti-Tamper Clock Drift Alert */}
+            {isDeviceClockTampered() && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-400/50 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <span className="font-bold">Jam HP Anda Tidak Sinkron:</span> Waktu presensi secara otomatis diselaraskan dan dikunci ke waktu Server NTP resmi Disdik HST ({serverTime}).
+                </div>
+              </div>
+            )}
 
             {/* Pintasan Cepat ke Peta Radar */}
             <div className="flex items-center justify-between text-xs px-1 text-slate-600 dark:text-slate-400">
@@ -693,18 +716,21 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               </div>
             </div>
           ) : isLocationDisallowed ? (
-            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-[11px] text-rose-800 dark:text-rose-200 flex items-start gap-2.5">
+            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/80 text-[11px] text-rose-800 dark:text-rose-200 flex items-start gap-2.5 shadow-sm">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div className="leading-relaxed">
-                <strong>Peringatan Pelanggaran Geofence:</strong> Anda berada di luar radius resmi tugas ({formatDistance(coords?.distance || 0)} dari batas {targetRadius}m).{' '}
+                <strong className="text-rose-950 dark:text-rose-100 font-bold block mb-0.5">
+                  Presensi Ditolak (Luar Radius Geofence):
+                </strong>
+                Anda terdeteksi berjarak <strong>{formatDistance(coords?.distance || 0)}</strong> dari kantor <strong>{targetName}</strong> (batas aman resmi: {targetRadius}m). Presensi di luar perimeter tidak dapat dikirim.{' '}
                 {isBreakAction ? (
-                  <span className="font-semibold text-rose-300 block mt-0.5">
-                    Presensi istirahat wajib dilakukan di dalam radius kantor tempat Anda bekerja ({targetName}).
+                  <span className="font-semibold text-rose-400 block mt-1">
+                    Presensi sesi istirahat wajib dilakukan di dalam radius kantor tempat Anda bekerja.
                   </span>
                 ) : (
-                  <>
-                    Jika Anda sedang tugas luar, aktifkan tombol <strong>&quot;Tugas Lapangan / Dinas Luar&quot;</strong> di atas.
-                  </>
+                  <span className="block mt-1 text-slate-700 dark:text-slate-300">
+                    Silakan mendekat ke area kantor dinas atau aktifkan sakelar <strong>&quot;Tugas Lapangan / Dinas Luar&quot;</strong> di atas apabila Anda memiliki surat perintah tugas kedinasan yang sah.
+                  </span>
                 )}
               </div>
             </div>
@@ -746,21 +772,21 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               <button
                 type="button"
                 onClick={handleConfirm}
-                disabled={!capturedImage || !coords || !!gpsError || (isBreakAction && !coords.withinRadius)}
-                className={`w-2/3 py-3 px-4 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.99] ${
-                  isFieldDuty
-                    ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
-                    : isBreakAction && !coords?.withinRadius
-                    ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-60'
+                disabled={!capturedImage || !coords || !!gpsError || isLocationDisallowed}
+                className={`w-2/3 py-3 px-4 text-xs sm:text-sm font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all ${
+                  isLocationDisallowed
+                    ? 'bg-slate-800 text-rose-300 border border-rose-500/40 cursor-not-allowed opacity-75 shadow-none'
+                    : isFieldDuty
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-500/20 cursor-pointer active:scale-[0.99]'
                     : coords?.withinRadius
-                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
-                    : 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20 cursor-pointer active:scale-[0.99]'
+                    : 'bg-slate-800 text-slate-400 cursor-not-allowed opacity-60 shadow-none'
                 }`}
               >
-                {isBreakAction && !coords?.withinRadius ? (
+                {isLocationDisallowed ? (
                   <>
-                    <AlertCircle className="w-4 h-4" />
-                    <span>Luar Radius Kantor (Dilarang)</span>
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span className="truncate">Luar Radius ({formatDistance(coords?.distance || 0)}) · Ditolak</span>
                   </>
                 ) : isFieldDuty ? (
                   <>
@@ -775,7 +801,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 ) : (
                   <>
                     <AlertCircle className="w-4 h-4" />
-                    <span>Kirim (Alert Luar Radius)</span>
+                    <span>Presensi Ditolak</span>
                   </>
                 )}
               </button>

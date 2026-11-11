@@ -64,22 +64,56 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
 
   const dayNamesShort = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
+  // Helper fungsi pencocokan kategori kebal variasi teks
+  const matchCategory = (st: StaffProfile, category: 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang'): boolean => {
+    if (category === 'ALL') return true;
+    const v = ((st.vendorName || '') + ' ' + (st.roleTitle || '') + ' ' + ((st as any).employmentCategory || '')).trim().toLowerCase();
+    if (category === 'pppk_paruh_waktu') {
+      return v.includes('pppk') || v.includes('paruh waktu');
+    }
+    if (category === 'magang') {
+      return v.includes('magang') || v.includes('siswa') || v.includes('mahasiswa');
+    }
+    if (category === 'vendor') {
+      return !v.includes('pppk') && !v.includes('paruh waktu') && !v.includes('magang') && !v.includes('siswa') && !v.includes('mahasiswa');
+    }
+    return true;
+  };
+
+  // Jumlah Staf per Kategori untuk Label Dropdown
+  const categoryCounts = useMemo(() => {
+    let vendor = 0;
+    let pppk = 0;
+    let magang = 0;
+    staffList.forEach((st) => {
+      const v = ((st.vendorName || '') + ' ' + (st.roleTitle || '')).toLowerCase();
+      if (v.includes('pppk') || v.includes('paruh waktu')) {
+        pppk++;
+      } else if (v.includes('magang') || v.includes('siswa') || v.includes('mahasiswa')) {
+        magang++;
+      } else {
+        vendor++;
+      }
+    });
+    return { all: staffList.length, vendor, pppk, magang };
+  }, [staffList]);
+
   // Filter Staf berdasarkan Kategori dan Search Query
   const filteredStaffList = useMemo(() => {
     return staffList.filter((st) => {
       // Filter Kategori
-      if (selectedCategory !== 'ALL') {
-        const cat = st.employmentCategory || (st.vendorName ? 'vendor' : 'vendor');
-        if (cat !== selectedCategory) return false;
+      if (!matchCategory(st, selectedCategory)) {
+        return false;
       }
       // Filter Search
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchName = st.name.toLowerCase().includes(q);
+        const q = searchQuery.toLowerCase().trim();
+        const matchName = (st.name || '').toLowerCase().includes(q);
         const matchNip = (st.nip || '').toLowerCase().includes(q);
         const matchRole = (st.roleTitle || '').toLowerCase().includes(q);
         const matchDiv = (st.division || '').toLowerCase().includes(q);
-        if (!matchName && !matchNip && !matchRole && !matchDiv) return false;
+        const matchVendor = (st.vendorName || '').toLowerCase().includes(q);
+        if (!matchName && !matchNip && !matchRole && !matchDiv && !matchVendor) return false;
       }
       return true;
     });
@@ -244,18 +278,12 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
 
   const categoryLabel =
     selectedCategory === 'vendor'
-      ? 'Vendor Swasta (PT. YASMINE BUIH PERSADA)'
+      ? `Vendor Swasta (${filteredStaffList.length} Personel)`
       : selectedCategory === 'pppk_paruh_waktu'
-      ? 'PPPK Paruh Waktu Disdik HST'
+      ? `PPPK Paruh Waktu Disdik HST (${filteredStaffList.length} Personel)`
       : selectedCategory === 'magang'
-      ? 'Siswa / Mahasiswa Magang'
+      ? `Siswa / Mahasiswa Magang (${filteredStaffList.length} Personel)`
       : `Seluruh Kelompok (${staffList.length} Personel)`;
-
-  const todayFormatted = new Intl.DateTimeFormat('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date());
 
   return (
     <div className="space-y-6 print:bg-white print:p-0">
@@ -378,10 +406,10 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
               onChange={(e) => setSelectedCategory(e.target.value as 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang')}
               className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer transition-all"
             >
-              <option value="ALL">Semua Kelompok ({staffList.length})</option>
-              <option value="vendor">🏢 Vendor Swasta (PT. YASMINE)</option>
-              <option value="pppk_paruh_waktu">🏛️ PPPK Paruh Waktu Disdik</option>
-              <option value="magang">🎓 Siswa / Mahasiswa Magang</option>
+              <option value="ALL">Semua Kelompok ({categoryCounts.all})</option>
+              <option value="vendor">🏢 Vendor Swasta ({categoryCounts.vendor})</option>
+              <option value="pppk_paruh_waktu">🏛️ PPPK Paruh Waktu Disdik ({categoryCounts.pppk})</option>
+              <option value="magang">🎓 Siswa / Mahasiswa Magang ({categoryCounts.magang})</option>
             </select>
           </div>
 
@@ -638,8 +666,8 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
           </table>
         </div>
 
-        {/* Tanda Tangan & Keterangan (Muncul di layar & di cetak) */}
-        <div className="p-4 sm:p-6 bg-slate-50/60 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800 print:bg-white print:p-0 print:border-none signature-block page-break-inside-avoid">
+        {/* Keterangan Status / Legenda Kode (Muncul di layar & di cetak) */}
+        <div className="p-4 sm:p-5 bg-slate-50/60 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800 print:bg-white print:p-2 print:border-none page-break-inside-avoid">
           {/* Legenda Kode */}
           <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 print:border-black print:bg-transparent text-[11px] print:text-[7pt] text-slate-700 dark:text-slate-300 print:text-black flex flex-wrap gap-x-6 gap-y-1 items-center">
             <span className="font-bold text-slate-900 dark:text-white print:text-black">Keterangan Status:</span>
@@ -649,31 +677,6 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
             <span><strong className="text-amber-600 dark:text-amber-400 print:text-black">C</strong> = Hak Cuti Sah</span>
             <span><strong className="text-red-600 dark:text-red-400 print:text-black">A</strong> = Alpa</span>
             <span><strong className="text-slate-600 dark:text-slate-400 print:text-black">OFF</strong> = Libur Rutin</span>
-          </div>
-
-          {/* Blok Tanda Tangan Resmi Dua Pihak (Hanya Print & Pratinjau Bawah) */}
-          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 print:border-black grid grid-cols-2 gap-8 text-xs print:text-[8pt] text-center text-slate-800 dark:text-slate-200 print:text-black">
-            <div className="space-y-12">
-              <div>
-                <p className="text-slate-500 dark:text-slate-400 print:text-black">Dibuat Oleh (Vendor / Pengawas Lapangan):</p>
-                <p className="font-bold text-slate-900 dark:text-white print:text-black mt-0.5">PT. YASMINE BUIH PERSADA</p>
-              </div>
-              <div>
-                <p className="font-bold underline text-slate-900 dark:text-white print:text-black">( .................................................... )</p>
-                <p className="text-[10px] print:text-[7pt] text-slate-500 dark:text-slate-400 print:text-black mt-0.5">Supervisor / Pengawas Lapangan</p>
-              </div>
-            </div>
-
-            <div className="space-y-12">
-              <div>
-                <p className="text-slate-500 dark:text-slate-400 print:text-black">{institutionSettings.kotaSurat || 'Barabai'}, {todayFormatted}</p>
-                <p className="font-bold text-slate-900 dark:text-white print:text-black mt-0.5">{institutionSettings.pejabatJabatan || 'Sekretaris Dinas Pendidikan'}</p>
-              </div>
-              <div>
-                <p className="font-bold underline text-slate-900 dark:text-white print:text-black">{institutionSettings.pejabatNama || 'Salihin, S.Pd.SD'}</p>
-                <p className="text-[10px] print:text-[7pt] font-mono text-slate-500 dark:text-slate-400 print:text-black mt-0.5">NIP. {institutionSettings.pejabatNip || '19780502 200604 1 017'}</p>
-              </div>
-            </div>
           </div>
         </div>
       </div>

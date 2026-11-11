@@ -850,6 +850,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           return {
             ...u,
             deviceId: null,
+            hardwareFingerprint: null,
             deviceBinding: null,
           };
         }
@@ -2204,11 +2205,11 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                             <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'Aktif' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                             {u.status || 'Aktif'}
                           </button>
-                          {(u.deviceId || u.deviceBinding?.registered) ? (
+                          {(u.deviceId || u.hardwareFingerprint || u.deviceBinding?.registered) ? (
                             <div className="text-[9px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
                               <Smartphone className="w-3 h-3 text-emerald-500 shrink-0" />
-                              <span className="truncate max-w-[110px]" title={u.deviceBinding?.deviceModel || u.deviceId || 'Terkunci'}>
-                                {u.deviceBinding?.deviceModel || u.deviceId}
+                              <span className="truncate max-w-[110px]" title={u.deviceBinding?.deviceModel || u.hardwareFingerprint || u.deviceId || 'Terkunci'}>
+                                {u.deviceBinding?.deviceModel || u.hardwareFingerprint || u.deviceId}
                               </span>
                             </div>
                           ) : (
@@ -2247,7 +2248,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                             <KeyRound className="w-3.5 h-3.5" />
                           </button>
 
-                          {(u.deviceId || u.deviceBinding?.registered) && (
+                          {(u.deviceId || u.hardwareFingerprint || u.deviceBinding?.registered) && (
                             <button
                               type="button"
                               onClick={() => handleResetDeviceBinding(u)}

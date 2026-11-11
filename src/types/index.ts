@@ -43,6 +43,7 @@ export interface AuthUser {
   avatarColor?: string;
   initials?: string;
   deviceId?: string | null;
+  hardwareFingerprint?: string | null;
   biometricKey?: string | null;
   customLocation?: OfficeLocation | null;
   assignedLocation?: OfficeLocation;
@@ -51,6 +52,14 @@ export interface AuthUser {
   pendingSupervisorId?: string | null;
   supervisorChangeCount?: number;
   supervisorRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  pendingDivision?: string | null;
+  pendingDivisionName?: string | null;
+  pendingJobRole?: string | null;
+  pendingLocationId?: string | null;
+  pendingLocationName?: string | null;
+  pendingVendor?: string | null;
+  divisionRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  adminRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
   supervisedGroups?: string[];
   supervisedVendor?: string;
 }
@@ -80,6 +89,14 @@ export interface StaffProfile {
   pendingSupervisorId?: string | null;
   supervisorChangeCount?: number;
   supervisorRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  pendingDivision?: string | null;
+  pendingDivisionName?: string | null;
+  pendingJobRole?: string | null;
+  pendingLocationId?: string | null;
+  pendingLocationName?: string | null;
+  pendingVendor?: string | null;
+  divisionRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  adminRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
   avatarColor: string;
   initials: string;
   joinDate: string;
@@ -130,6 +147,8 @@ export interface AttendanceRecord {
   autoClosed?: boolean;
   notes?: string;
   verifiedBy?: string;
+  deviceFingerprint?: string;
+  hardwareFingerprint?: string;
 }
 
 export interface FieldCheckinRecord {
@@ -259,6 +278,8 @@ export interface NotificationItem {
   read: boolean;
   staffId?: string;
   userId?: string;
+  staffName?: string;
+  divisionName?: string;
   distanceExceededMeters?: number;
   locationName?: string;
   severity?: 'warning' | 'critical' | 'info';
@@ -289,8 +310,17 @@ export interface UserAccount {
   pendingSupervisorId?: string | null;
   supervisorChangeCount?: number;
   supervisorRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  pendingDivision?: string | null;
+  pendingDivisionName?: string | null;
+  pendingJobRole?: string | null;
+  pendingLocationId?: string | null;
+  pendingLocationName?: string | null;
+  pendingVendor?: string | null;
+  divisionRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  adminRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
   phone?: string;
   deviceId?: string | null;
+  hardwareFingerprint?: string | null;
   deviceBinding: {
     registered: boolean;
     deviceModel: string;
@@ -612,6 +642,8 @@ export interface OvertimeRecord {
 }
 
 export type LeaveType = 
+  | 'TUGAS_LUAR'
+  | 'DINAS_LUAR'
   | 'SAKIT'
   | 'CUTI_TAHUNAN'
   | 'CUTI_ALASAN_PENTING'

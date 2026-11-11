@@ -22,8 +22,17 @@ import {
 } from 'lucide-react';
 import { AuthUser, UserRole, Division, Vendor, OfficeLocation, OUTSOURCING_JOB_ROLES } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
-import { apiLogin, apiRegister, apiBindDevice, apiFetchOffices } from '../services/api';
-import { getDeviceFingerprint } from '../utils/fingerprint';
+import {
+  apiLogin,
+  apiRegister,
+  apiBindDevice,
+  apiFetchOffices,
+  apiBiometricLoginOptions,
+  apiBiometricLoginVerify,
+} from '../services/api';
+import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
+import { usePwa } from '../context/PwaContext';
+import { getHardwareDeviceFingerprint, getDeviceFingerprint } from '../lib/deviceFingerprint';
 
 const DEFAULT_DIVISIONS: Division[] = [
   {
@@ -168,6 +177,12 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
   const [regRole, setRegRole] = useState<'outsourcing' | 'coordinator'>('outsourcing');
   const [activeTab, setActiveTab] = useState<'login' | 'register-os'>('login');
+  const { retriggerBanner, isInstalled } = usePwa();
+  React.useEffect(() => {
+    if (!isInstalled) {
+      retriggerBanner();
+    }
+  }, [activeTab]);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -185,22 +200,23 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [showOsPassword, setShowOsPassword] = useState(false);
   const [showOsConfirmPassword, setShowOsConfirmPassword] = useState(false);
   const [osPhone, setOsPhone] = useState('');
-  const [osDivisionId, setOsDivisionId] = useState(activeDivisions[0]?.id || 'div-it');
-  const [osLocationId, setOsLocationId] = useState(activeLocations[0]?.id || 'loc-disdik-hst');
-  const [osRoleTitle, setOsRoleTitle] = useState<string>(OUTSOURCING_JOB_ROLES[0]);
-  const [osVendor, setOsVendor] = useState<string>(availableVendors[0] || 'PT. YASMINE BUIH PERSADA');
+  const [osDivisionId, setOsDivisionId] = useState('');
+  const [osLocationId, setOsLocationId] = useState('');
+  const [osRoleTitle, setOsRoleTitle] = useState<string>('');
+  const [osVendor, setOsVendor] = useState<string>('');
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
-  // Pastikan ID lokasi sinkron saat master lokasi diperbarui
+  // Sinkronisasi jika lokasi yang dipilih sebelumnya terhapus dari master
   React.useEffect(() => {
-    if (activeLocations.length > 0 && !activeLocations.some((l) => l.id === osLocationId)) {
-      setOsLocationId(activeLocations[0].id);
+    if (osLocationId && activeLocations.length > 0 && !activeLocations.some((l) => l.id === osLocationId)) {
+      setOsLocationId('');
     }
   }, [activeLocations]);
 
-  // Sync vendor default when availableVendors loads
+  // Sinkronisasi jika vendor yang dipilih sebelumnya terhapus dari master
   React.useEffect(() => {
-    if (availableVendors.length > 0 && (!osVendor || !availableVendors.includes(osVendor))) {
-      setOsVendor(availableVendors[0]);
+    if (osVendor && availableVendors.length > 0 && !availableVendors.includes(osVendor)) {
+      setOsVendor('');
     }
   }, [vendors]);
 
@@ -216,14 +232,20 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     try {
       setLoading(true);
-      const deviceId = localStorage.getItem('ot_device_id') || getDeviceFingerprint();
-      localStorage.setItem('ot_device_id', deviceId);
+      const hardwareFp = await getHardwareDeviceFingerprint();
 
       const result = await apiLogin({
         usernameOrEmail: loginIdentifier.trim(),
         password: loginPassword,
-        deviceId,
+        deviceId: hardwareFp,
+        hardwareFingerprint: hardwareFp,
       });
+
+      // Simpan identifier agar tombol biometrik langsung mengenali akun terakhir
+      localStorage.setItem('ot_last_identifier', loginIdentifier.trim());
+      if (result.user.email) {
+        localStorage.setItem('ot_last_email', result.user.email);
+      }
 
       onShowToast(`Selamat datang, ${result.user.name}! Sesi berhasil diverifikasi.`, 'success');
       onLoginSuccess(result.user, result.token);
@@ -234,33 +256,49 @@ export const AuthView: React.FC<AuthViewProps> = ({
     }
   };
 
-  // 3. Handle Biometric WebAuthn Login
+  // 3. Handle Biometric WebAuthn Login (Hardware Sensor HP / Face ID)
   const handleBiometricLogin = async () => {
-    if (!window.PublicKeyCredential) {
+    if (!browserSupportsWebAuthn()) {
       onShowToast('Perangkat atau browser ini belum mendukung sensor biometrik WebAuthn.', 'warning');
       return;
     }
 
+    setErrorMessage('');
     try {
       setLoading(true);
-      // Simulasi autentikasi biometrik lokal bawaan smartphone
-      const savedBioKey = localStorage.getItem('ot_bio_key');
-      const savedEmail = localStorage.getItem('ot_last_email');
+      const hardwareFp = await getHardwareDeviceFingerprint();
 
-      if (!savedEmail) {
-        onShowToast('Harap login pertama kali menggunakan kata sandi untuk mendaftarkan biometrik perangkat ini.', 'info');
-        return;
+      // Prioritas identifikasi: input form saat ini, atau email/NIP sesi login terakhir di HP ini
+      const targetIdentifier = loginIdentifier.trim() || localStorage.getItem('ot_last_identifier') || localStorage.getItem('ot_last_email') || undefined;
+
+      // 1. Ambil opsi challenge otentikasi dari server
+      const { options, challengeKey } = await apiBiometricLoginOptions(targetIdentifier);
+
+      onShowToast('Sentuh sensor sidik jari atau verifikasi biometrik pada HP Anda...', 'info');
+
+      // 2. Memicu dialog native sensor smartphone (Android BiometricPrompt / iOS Face ID)
+      const authResp = await startAuthentication({ optionsJSON: options });
+
+      // 3. Kirim tanda tangan kriptografi sensor ke server untuk verifikasi
+      const result = await apiBiometricLoginVerify(authResp, challengeKey, hardwareFp, hardwareFp);
+
+      // Simpan riwayat identifier untuk mempermudah login berikutnya
+      if (result.user.email) {
+        localStorage.setItem('ot_last_identifier', result.user.email);
+        localStorage.setItem('ot_last_email', result.user.email);
       }
 
-      const result = await apiLogin({
-        usernameOrEmail: savedEmail,
-        password: 'Password123!',
-      });
-
-      onShowToast('Verifikasi biometrik berhasil!', 'success');
+      onShowToast(`Autentikasi biometrik berhasil! Selamat datang, ${result.user.name}.`, 'success');
       onLoginSuccess(result.user, result.token);
     } catch (err: any) {
-      setErrorMessage('Verifikasi biometrik dibatalkan atau gagal.');
+      console.warn('[WebAuthn] Biometric Login Failed / Cancelled:', err);
+      if (err.name === 'NotAllowedError' || err.message?.includes('cancel') || err.message?.includes('abort')) {
+        onShowToast('Autentikasi biometrik dibatalkan oleh pengguna.', 'info');
+      } else {
+        const errorMsg = err.message || 'Verifikasi biometrik tidak berhasil. Pastikan sidik jari sudah didaftarkan di menu Profil.';
+        setErrorMessage(errorMsg);
+        onShowToast(errorMsg, 'warning');
+      }
     } finally {
       setLoading(false);
     }
@@ -270,8 +308,18 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const handleRegisterOsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+    setHasAttemptedSubmit(true);
+
     if (!osName || !osNip || !osEmail || !osPassword || !osConfirmPassword) {
       setErrorMessage('Harap lengkapi seluruh kolom bertanda bintang (*).');
+      return;
+    }
+
+    // Validasi Wajib Pilih seluruh dropdown (Divisi, Formasi, Lokasi, Vendor)
+    if (!osDivisionId || !osLocationId || !osVendor || (regRole === 'outsourcing' && !osRoleTitle)) {
+      const warningMsg = 'Harap pilih Sub Bagian, Formasi Tugas, Lokasi Kerja, dan Mitra Vendor Anda dengan benar!';
+      setErrorMessage(warningMsg);
+      onShowToast(warningMsg, 'warning');
       return;
     }
 
@@ -288,9 +336,16 @@ export const AuthView: React.FC<AuthViewProps> = ({
     try {
       setLoading(true);
       const selectedDiv = activeDivisions.find((d) => d.id === osDivisionId);
-      const selectedLoc = activeLocations.find((l) => l.id === osLocationId) || activeLocations[0];
-      const deviceId = localStorage.getItem('ot_device_id') || getDeviceFingerprint();
-      localStorage.setItem('ot_device_id', deviceId);
+      const selectedLoc = activeLocations.find((l) => l.id === osLocationId);
+
+      if (!selectedDiv || !selectedLoc) {
+        const warningMsg = 'Harap pilih Sub Bagian, Formasi Tugas, Lokasi Kerja, dan Mitra Vendor Anda dengan benar!';
+        setErrorMessage(warningMsg);
+        onShowToast(warningMsg, 'warning');
+        return;
+      }
+
+      const hardwareFp = await getHardwareDeviceFingerprint();
 
       const result = await apiRegister({
         name: osName.trim(),
@@ -299,13 +354,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
         password: osPassword,
         role: regRole,
         divisionId: osDivisionId,
-        divisionName: selectedDiv?.name || (regRole === 'coordinator' ? 'Pengawas Mitra Lapangan' : 'Sub Bagian Dinas'),
+        divisionName: selectedDiv.name,
         roleTitle: regRole === 'coordinator' ? 'Pengawas Lapangan Mitra' : (osRoleTitle.trim() || 'Administrasi Perkantoran'),
         phone: osPhone.trim(),
         vendorName: osVendor.trim(),
         supervisedGroups: [osVendor.trim()],
         supervisedVendor: osVendor.trim(),
-        deviceId,
+        deviceId: hardwareFp,
+        hardwareFingerprint: hardwareFp,
         customLocation: selectedLoc,
         workspaceNote: `Penugasan Resmi: ${selectedLoc.name}`,
       });
@@ -358,7 +414,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
           <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100/90 dark:bg-slate-800/80 text-xs font-semibold">
             <button
               type="button"
-              onClick={() => { setActiveTab('login'); setErrorMessage(''); }}
+              onClick={() => { setActiveTab('login'); setErrorMessage(''); setHasAttemptedSubmit(false); }}
               className={`py-2 px-1.5 rounded-xl transition-all cursor-pointer text-center truncate ${
                 activeTab === 'login'
                   ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-cyan-400 font-bold shadow-xs'
@@ -369,7 +425,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => { setActiveTab('register-os'); setErrorMessage(''); }}
+              onClick={() => { setActiveTab('register-os'); setErrorMessage(''); setHasAttemptedSubmit(false); }}
               className={`py-2 px-1.5 rounded-xl transition-all cursor-pointer text-center truncate ${
                 activeTab === 'register-os'
                   ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-cyan-400 font-bold shadow-xs'
@@ -446,8 +502,9 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   <button
                     type="button"
                     onClick={handleBiometricLogin}
-                    title="Masuk Cepat dengan Sidik Jari / Face ID"
-                    className="p-3 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-cyan-400 transition-colors cursor-pointer"
+                    disabled={loading}
+                    title="Masuk Instan dengan Sensor Sidik Jari / Face ID (WebAuthn)"
+                    className="p-3 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 hover:border-indigo-400 dark:hover:border-cyan-500 text-indigo-700 dark:text-cyan-400 transition-all cursor-pointer active:scale-95 shadow-sm flex items-center justify-center shrink-0 disabled:opacity-50"
                   >
                     <Fingerprint className="w-5 h-5" />
                   </button>
@@ -525,9 +582,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 <select
                   value={osDivisionId}
                   onChange={(e) => setOsDivisionId(e.target.value)}
-                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                  className={`w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium cursor-pointer transition-colors ${
+                    hasAttemptedSubmit && !osDivisionId ? 'border-red-500 ring-1 ring-red-500' : ''
+                  }`}
                   required
                 >
+                  <option value="" disabled selected className="text-slate-400 bg-white dark:bg-slate-900">
+                    -- Pilih Sub Bagian / Divisi Penempatan --
+                  </option>
                   {activeDivisions.map((d) => (
                     <option key={d.id} value={d.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       {d.name} ({d.code})
@@ -544,9 +606,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   <select
                     value={osRoleTitle}
                     onChange={(e) => setOsRoleTitle(e.target.value)}
-                    className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                    className={`w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium cursor-pointer transition-colors ${
+                      hasAttemptedSubmit && !osRoleTitle ? 'border-red-500 ring-1 ring-red-500' : ''
+                    }`}
                     required
                   >
+                    <option value="" disabled selected className="text-slate-400 bg-white dark:bg-slate-900">
+                      -- Pilih Jenis Pekerjaan / Formasi Tugas --
+                    </option>
                     {OUTSOURCING_JOB_ROLES.map((job) => (
                       <option key={job} value={job} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                         {job}
@@ -582,9 +649,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 <select
                   value={osLocationId}
                   onChange={(e) => setOsLocationId(e.target.value)}
-                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium"
+                  className={`w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium cursor-pointer transition-colors ${
+                    hasAttemptedSubmit && !osLocationId ? 'border-red-500 ring-1 ring-red-500' : ''
+                  }`}
                   required
                 >
+                  <option value="" disabled selected className="text-slate-400 bg-white dark:bg-slate-900">
+                    -- Pilih Lokasi Tempat Bekerja / Titik Tugas --
+                  </option>
                   {activeLocations.map((loc) => (
                     <option key={loc.id} value={loc.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       {loc.name} (Radius Absen: {loc.radiusMeters} meter)
@@ -667,9 +739,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 <select
                   value={osVendor}
                   onChange={(e) => setOsVendor(e.target.value)}
-                  className="w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium cursor-pointer"
+                  className={`w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium cursor-pointer transition-colors ${
+                    hasAttemptedSubmit && !osVendor ? 'border-red-500 ring-1 ring-red-500' : ''
+                  }`}
                   required
                 >
+                  <option value="" disabled selected className="text-slate-400 bg-white dark:bg-slate-900">
+                    -- Pilih Mitra Vendor / Kelompok Penugasan --
+                  </option>
                   {vendorRekanan.length > 0 && (
                     <optgroup label="🏢 Perusahaan Vendor Rekanan">
                       {vendorRekanan.map((v) => (

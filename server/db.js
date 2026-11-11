@@ -65,6 +65,7 @@ if (isNodeSqlite && dbEngine) {
       avatar_color TEXT,
       initials TEXT,
       device_id TEXT,
+      hardware_fingerprint TEXT,
       biometric_key TEXT,
       custom_location_json TEXT,
       supervisor_id TEXT,
@@ -73,6 +74,12 @@ if (isNodeSqlite && dbEngine) {
       supervisor_request_status TEXT DEFAULT 'NONE',
       workspace_note TEXT,
       supervised_groups TEXT,
+      pending_division TEXT,
+      pending_job_role TEXT,
+      pending_location_id TEXT,
+      pending_vendor TEXT,
+      division_request_status TEXT DEFAULT 'NONE',
+      admin_request_status TEXT DEFAULT 'NONE',
       created_at TEXT NOT NULL
     );
 
@@ -271,6 +278,9 @@ if (isNodeSqlite && dbEngine) {
 
   // Migrasi aman untuk kolom baru users jika database sudah ada sebelumnya
   try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN hardware_fingerprint TEXT;`);
+  } catch (e) {}
+  try {
     dbEngine.exec(`ALTER TABLE users ADD COLUMN custom_location_json TEXT;`);
   } catch (e) {}
   try {
@@ -293,6 +303,24 @@ if (isNodeSqlite && dbEngine) {
   } catch (e) {}
   try {
     dbEngine.exec(`ALTER TABLE users ADD COLUMN supervised_groups TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN pending_division TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN pending_job_role TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN pending_location_id TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN pending_vendor TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN division_request_status TEXT DEFAULT 'NONE';`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE users ADD COLUMN admin_request_status TEXT DEFAULT 'NONE';`);
   } catch (e) {}
   try {
     dbEngine.exec(`ALTER TABLE vendors ADD COLUMN category TEXT DEFAULT 'vendor';`);
@@ -1079,6 +1107,7 @@ function mapUserRow(row) {
     avatarColor: row.avatar_color,
     initials: row.initials,
     deviceId: row.device_id,
+    hardwareFingerprint: row.hardware_fingerprint || row.device_id || null,
     deviceBinding,
     status: row.status || 'Aktif',
     biometricKey: row.biometric_key,
@@ -1090,7 +1119,13 @@ function mapUserRow(row) {
     supervisorRequestStatus: row.supervisor_request_status || 'NONE',
     workspaceNote: row.workspace_note,
     supervisedGroups,
-    supervisedVendor
+    supervisedVendor,
+    pendingDivision: row.pending_division || null,
+    pendingJobRole: row.pending_job_role || null,
+    pendingLocationId: row.pending_location_id || null,
+    pendingVendor: row.pending_vendor || null,
+    divisionRequestStatus: row.division_request_status || 'NONE',
+    adminRequestStatus: row.admin_request_status || 'NONE'
   };
 }
 
@@ -1137,13 +1172,16 @@ export function createUser(userData) {
 
   const customLocationJson = userData.customLocation ? JSON.stringify(userData.customLocation) : null;
 
+  const hardwareFingerprint = userData.hardwareFingerprint || userData.deviceId || null;
+  userObj.hardwareFingerprint = hardwareFingerprint;
+
   if (isNodeSqlite && dbEngine) {
     dbEngine.prepare(
       `INSERT INTO users (
         id, nip, name, email, password_hash, role, division_id, division_name,
-        role_title, phone, vendor_name, avatar_color, initials, device_id, biometric_key,
+        role_title, phone, vendor_name, avatar_color, initials, device_id, hardware_fingerprint, biometric_key,
         custom_location_json, supervisor_id, workspace_note, supervised_groups, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       userObj.id,
       userObj.nip,
@@ -1159,6 +1197,7 @@ export function createUser(userData) {
       userObj.avatarColor ?? null,
       userObj.initials ?? null,
       userObj.deviceId ?? null,
+      hardwareFingerprint,
       userObj.biometricKey ?? null,
       customLocationJson ?? null,
       userObj.supervisorId ?? null,
@@ -1175,18 +1214,48 @@ export function createUser(userData) {
   return userObj;
 }
 
-export function updateUserDevice(userId, deviceId, biometricKey = null) {
+export function updateUserDevice(userId, deviceId, biometricKey = null, hardwareFingerprint = null) {
+  const hwFp = hardwareFingerprint || deviceId || null;
   if (isNodeSqlite && dbEngine) {
-    dbEngine.prepare('UPDATE users SET device_id = ?, biometric_key = COALESCE(?, biometric_key) WHERE id = ?').run(
-      deviceId, biometricKey, userId
+    dbEngine.prepare('UPDATE users SET device_id = ?, hardware_fingerprint = ?, biometric_key = COALESCE(?, biometric_key) WHERE id = ?').run(
+      deviceId, hwFp, biometricKey, userId
     );
   } else {
     const user = fallbackStore.users.find((u) => u.id === userId);
     if (user) {
       user.deviceId = deviceId;
+      user.hardwareFingerprint = hwFp;
       if (biometricKey) user.biometricKey = biometricKey;
       persistFallback();
     }
+  }
+}
+
+export function checkDeviceBindingConflict(hardwareFingerprint, userId = null) {
+  if (!hardwareFingerprint) return null;
+  const fp = String(hardwareFingerprint).trim();
+  if (!fp || fp.length < 5) return null;
+
+  if (isNodeSqlite && dbEngine) {
+    let sql = `
+      SELECT id, name, nip, role, vendor_name, hardware_fingerprint, device_id 
+      FROM users 
+      WHERE (hardware_fingerprint = ? OR device_id = ?) 
+      AND role = 'outsourcing'
+    `;
+    const params = [fp, fp];
+    if (userId) {
+      sql += ' AND id != ?';
+      params.push(userId);
+    }
+    const conflict = dbEngine.prepare(sql).get(...params);
+    return conflict || null;
+  } else {
+    return fallbackStore.users.find(
+      (u) => (u.hardwareFingerprint === fp || u.deviceId === fp) &&
+             u.role === 'outsourcing' &&
+             (!userId || u.id !== userId)
+    ) || null;
   }
 }
 
@@ -1485,6 +1554,255 @@ export function rejectSupervisorChange(userId) {
     if (u) {
       u.pendingSupervisorId = null;
       u.supervisorRequestStatus = 'REJECTED';
+      persistFallback();
+    }
+  }
+  return getUserById(userId);
+}
+
+export function requestUserProfileUpdate(userId, { phone, divisionId, jobRole, locationId, vendor }) {
+  const user = getUserById(userId);
+  if (!user) {
+    throw new Error('Pengguna tidak ditemukan.');
+  }
+
+  let phoneUpdated = false;
+  if (phone !== undefined && phone !== null && phone.trim() !== (user.phone || '')) {
+    if (isNodeSqlite && dbEngine) {
+      dbEngine.prepare('UPDATE users SET phone = ? WHERE id = ?').run(phone.trim(), userId);
+    } else {
+      const u = fallbackStore.users.find((x) => x.id === userId);
+      if (u) {
+        u.phone = phone.trim();
+        persistFallback();
+      }
+    }
+    phoneUpdated = true;
+  }
+
+  // 1. Periksa perubahan Divisi (Memerlukan persetujuan Atasan Langsung / Supervisor Divisi)
+  let divisionRequested = false;
+  if (divisionId && divisionId !== user.divisionId) {
+    if (isNodeSqlite && dbEngine) {
+      dbEngine.prepare(
+        `UPDATE users SET pending_division = ?, division_request_status = 'PENDING' WHERE id = ?`
+      ).run(divisionId, userId);
+    } else {
+      const u = fallbackStore.users.find((x) => x.id === userId);
+      if (u) {
+        u.pendingDivision = divisionId;
+        u.divisionRequestStatus = 'PENDING';
+        persistFallback();
+      }
+    }
+    divisionRequested = true;
+  }
+
+  // 2. Periksa perubahan Formasi, Lokasi, dan Vendor (Memerlukan persetujuan Superadmin)
+  const currentLocId = user.assignedLocation?.id || user.customLocation?.id || 'loc-disdik-hst';
+  const jobRoleChanged = Boolean(jobRole && jobRole !== user.roleTitle);
+  const locationChanged = Boolean(locationId && locationId !== currentLocId);
+  const vendorChanged = Boolean(vendor && vendor !== user.vendorName);
+
+  let adminRequested = false;
+  if (jobRoleChanged || locationChanged || vendorChanged) {
+    const pendingJobRole = jobRoleChanged ? jobRole : (user.pendingJobRole || null);
+    const pendingLocId = locationChanged ? locationId : (user.pendingLocationId || null);
+    const pendingVen = vendorChanged ? vendor : (user.pendingVendor || null);
+
+    if (isNodeSqlite && dbEngine) {
+      dbEngine.prepare(
+        `UPDATE users SET 
+          pending_job_role = ?, 
+          pending_location_id = ?, 
+          pending_vendor = ?, 
+          admin_request_status = 'PENDING' 
+        WHERE id = ?`
+      ).run(pendingJobRole, pendingLocId, pendingVen, userId);
+    } else {
+      const u = fallbackStore.users.find((x) => x.id === userId);
+      if (u) {
+        u.pendingJobRole = pendingJobRole;
+        u.pendingLocationId = pendingLocId;
+        u.pendingVendor = pendingVen;
+        u.adminRequestStatus = 'PENDING';
+        persistFallback();
+      }
+    }
+    adminRequested = true;
+  }
+
+  const updated = getUserById(userId);
+  let message = 'Informasi akun berhasil disimpan.';
+  if (divisionRequested && adminRequested) {
+    message = 'Pengajuan pindah divisi dan penugasan telah dikirim untuk verifikasi atasan serta Superadmin.';
+  } else if (divisionRequested) {
+    message = 'Pengajuan pindah divisi telah dikirim dan menunggu persetujuan atasan langsung.';
+  } else if (adminRequested) {
+    message = 'Pengajuan penugasan (formasi/lokasi/vendor) telah dikirim dan menunggu persetujuan Superadmin.';
+  } else if (phoneUpdated) {
+    message = 'Nomor kontak WhatsApp berhasil diperbarui.';
+  }
+
+  return {
+    success: true,
+    user: updated,
+    divisionRequested,
+    adminRequested,
+    message,
+  };
+}
+
+export function approveUserDivisionChange(userId) {
+  const user = getUserById(userId);
+  if (!user) throw new Error('Pengguna tidak ditemukan.');
+  if (!user.pendingDivision) throw new Error('Tidak ada pengajuan perubahan divisi yang tertunda untuk pengguna ini.');
+
+  let divisionName = user.pendingDivision;
+  if (isNodeSqlite && dbEngine) {
+    const row = dbEngine.prepare('SELECT name FROM divisions WHERE id = ?').get(user.pendingDivision);
+    if (row && row.name) divisionName = row.name;
+  } else {
+    const d = fallbackStore.divisions.find((x) => x.id === user.pendingDivision);
+    if (d && d.name) divisionName = d.name;
+  }
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `UPDATE users SET 
+        division_id = ?, 
+        division_name = ?, 
+        pending_division = NULL, 
+        division_request_status = 'APPROVED' 
+      WHERE id = ?`
+    ).run(user.pendingDivision, divisionName, userId);
+  } else {
+    const u = fallbackStore.users.find((x) => x.id === userId);
+    if (u) {
+      u.divisionId = user.pendingDivision;
+      u.divisionName = divisionName;
+      u.pendingDivision = null;
+      u.divisionRequestStatus = 'APPROVED';
+      persistFallback();
+    }
+  }
+  return getUserById(userId);
+}
+
+export function rejectUserDivisionChange(userId) {
+  const user = getUserById(userId);
+  if (!user) throw new Error('Pengguna tidak ditemukan.');
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `UPDATE users SET 
+        pending_division = NULL, 
+        division_request_status = 'REJECTED' 
+      WHERE id = ?`
+    ).run(userId);
+  } else {
+    const u = fallbackStore.users.find((x) => x.id === userId);
+    if (u) {
+      u.pendingDivision = null;
+      u.divisionRequestStatus = 'REJECTED';
+      persistFallback();
+    }
+  }
+  return getUserById(userId);
+}
+
+export function approveUserAssignmentChange(userId) {
+  const user = getUserById(userId);
+  if (!user) throw new Error('Pengguna tidak ditemukan.');
+  if (!user.pendingJobRole && !user.pendingLocationId && !user.pendingVendor) {
+    throw new Error('Tidak ada pengajuan penugasan yang tertunda untuk pengguna ini.');
+  }
+
+  const updates = [];
+  const values = [];
+
+  if (user.pendingJobRole) {
+    updates.push('role_title = ?');
+    values.push(user.pendingJobRole);
+  }
+  if (user.pendingVendor) {
+    updates.push('vendor_name = ?');
+    values.push(user.pendingVendor);
+  }
+  if (user.pendingLocationId) {
+    let locData = null;
+    if (isNodeSqlite && dbEngine) {
+      const row = dbEngine.prepare('SELECT * FROM locations WHERE id = ?').get(user.pendingLocationId);
+      if (row) {
+        locData = {
+          id: row.id,
+          name: row.name,
+          address: row.address,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          radiusMeters: row.radius_meters,
+        };
+      }
+    }
+    if (!locData) {
+      locData = DEFAULT_OFFICES.find((l) => l.id === user.pendingLocationId) || null;
+    }
+    if (locData) {
+      updates.push('custom_location_json = ?');
+      values.push(JSON.stringify(locData));
+    }
+  }
+
+  updates.push('pending_job_role = NULL');
+  updates.push('pending_location_id = NULL');
+  updates.push('pending_vendor = NULL');
+  updates.push("admin_request_status = 'APPROVED'");
+  values.push(userId);
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+  } else {
+    const u = fallbackStore.users.find((x) => x.id === userId);
+    if (u) {
+      if (user.pendingJobRole) u.roleTitle = user.pendingJobRole;
+      if (user.pendingVendor) u.vendorName = user.pendingVendor;
+      if (user.pendingLocationId) {
+        const loc = DEFAULT_OFFICES.find((l) => l.id === user.pendingLocationId);
+        if (loc) {
+          u.customLocation = loc;
+          u.assignedLocation = loc;
+        }
+      }
+      u.pendingJobRole = null;
+      u.pendingLocationId = null;
+      u.pendingVendor = null;
+      u.adminRequestStatus = 'APPROVED';
+      persistFallback();
+    }
+  }
+  return getUserById(userId);
+}
+
+export function rejectUserAssignmentChange(userId) {
+  const user = getUserById(userId);
+  if (!user) throw new Error('Pengguna tidak ditemukan.');
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `UPDATE users SET 
+        pending_job_role = NULL, 
+        pending_location_id = NULL, 
+        pending_vendor = NULL, 
+        admin_request_status = 'REJECTED' 
+      WHERE id = ?`
+    ).run(userId);
+  } else {
+    const u = fallbackStore.users.find((x) => x.id === userId);
+    if (u) {
+      u.pendingJobRole = null;
+      u.pendingLocationId = null;
+      u.pendingVendor = null;
+      u.adminRequestStatus = 'REJECTED';
       persistFallback();
     }
   }
@@ -1812,6 +2130,13 @@ export function updateUserProfile(userId, profileData) {
     if (profileData.deviceId !== undefined) {
       updates.push('device_id = ?');
       values.push(profileData.deviceId);
+      if (profileData.deviceId === null) {
+        updates.push('hardware_fingerprint = NULL');
+      }
+    }
+    if (profileData.hardwareFingerprint !== undefined) {
+      updates.push('hardware_fingerprint = ?');
+      values.push(profileData.hardwareFingerprint);
     }
     if (profileData.email) {
       updates.push('email = ?');
@@ -1951,6 +2276,36 @@ export function saveAttendance(attData) {
     throw error;
   }
 
+  // Strict Hardware Device Binding & Anti-Multi User Enforcement
+  const clientFp = attData.hardwareFingerprint || attData.hardware_fingerprint || attData.deviceFingerprint || attData.deviceId || null;
+  if (!autoClosed && user && user.role === 'outsourcing') {
+    // 1. Cek apakah perangkat HP fisik ini sudah terikat pada AKUN PEGAWAI LAIN
+    if (clientFp) {
+      const conflict = checkDeviceBindingConflict(clientFp, user.id);
+      if (conflict) {
+        const conflictLabel = conflict.nip ? `${conflict.name} (${conflict.nip})` : conflict.name;
+        const error = new Error(`PRESENSI_DITOLAK_DEVICE_CONFLICT: Perangkat ini sudah terikat dengan akun pegawai lain [${conflictLabel}]. 1 perangkat fisik hanya boleh digunakan oleh 1 akun pegawai demi integritas presensi.`);
+        error.statusCode = 403;
+        throw error;
+      }
+    }
+
+    // 2. Cek apakah akun staf ini sudah terikat pada HP berbeda
+    const userBoundFp = user.hardwareFingerprint || user.deviceId;
+    if (userBoundFp) {
+      if (!clientFp || (clientFp !== userBoundFp && clientFp !== user.deviceId && clientFp !== user.hardwareFingerprint)) {
+        const error = new Error('PRESENSI_DITOLAK_PERANGKAT_BERBEDA: Presensi ditolak karena perangkat yang Anda gunakan tidak cocok dengan HP resmi yang terikat pada akun Anda. Dilarang berganti perangkat tanpa izin admin.');
+        error.statusCode = 403;
+        throw error;
+      }
+    } else if (clientFp) {
+      // Ikat perangkat pertama kali jika akun belum memiliki device terikat
+      updateUserDevice(user.id, clientFp, null, clientFp);
+      user.deviceId = clientFp;
+      user.hardwareFingerprint = clientFp;
+    }
+  }
+
   if (isNodeSqlite && dbEngine) {
     // Periksa record presensi (prioritas ID, tanggal hari ini, atau shift malam kemarin)
     let existing = null;
@@ -2029,7 +2384,7 @@ export function saveAttendance(attData) {
         isClockOutAction ? 1 : 0, locName ?? null,
         isGeoValid ?? 1,
         dist ?? 0,
-        attData.deviceFingerprint || null,
+        clientFp || attData.deviceFingerprint || null,
         isFieldDuty ?? 0,
         fieldDutyNotes ?? null,
         autoClosed ?? 0,
@@ -2103,7 +2458,7 @@ export function saveAttendance(attData) {
         locName ?? 'Lokasi Terdaftar',
         isGeoValid ?? 1,
         dist ?? 0,
-        attData.deviceFingerprint || '',
+        clientFp || attData.deviceFingerprint || '',
         isFieldDuty ?? 0,
         fieldDutyNotes ?? null,
         autoClosed ?? 0,

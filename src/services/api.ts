@@ -17,17 +17,25 @@ function getAuthHeaders(userId?: string): HeadersInit {
   return headers;
 }
 
+import { getHardwareDeviceFingerprint, getDeviceFingerprint } from '../lib/deviceFingerprint';
+
 // 1. Auth: Login
 export async function apiLogin(credentials: {
   usernameOrEmail: string;
   password?: string;
   deviceId?: string;
+  hardwareFingerprint?: string;
   biometricKey?: string;
 }): Promise<{ token: string; user: AuthUser }> {
+  const hwFp = credentials.hardwareFingerprint || credentials.deviceId || getDeviceFingerprint();
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify(credentials),
+    body: JSON.stringify({
+      ...credentials,
+      deviceId: credentials.deviceId || hwFp,
+      hardwareFingerprint: hwFp,
+    }),
   });
 
   const data = await res.json();
@@ -53,14 +61,20 @@ export async function apiRegister(userData: {
   supervisedGroups?: string[];
   supervisedVendor?: string;
   deviceId?: string;
+  hardwareFingerprint?: string;
   customLocation?: OfficeLocation | null;
   supervisorId?: string;
   workspaceNote?: string;
 }): Promise<{ token: string; user: AuthUser }> {
+  const hwFp = userData.hardwareFingerprint || userData.deviceId || getDeviceFingerprint();
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify(userData),
+    body: JSON.stringify({
+      ...userData,
+      deviceId: userData.deviceId || hwFp,
+      hardwareFingerprint: hwFp,
+    }),
   });
 
   const data = await res.json();
@@ -72,11 +86,12 @@ export async function apiRegister(userData: {
 }
 
 // 3. Auth: Bind Device & Biometric
-export async function apiBindDevice(userId: string, deviceId: string, biometricKey?: string): Promise<void> {
+export async function apiBindDevice(userId: string, deviceId: string, biometricKey?: string, hardwareFingerprint?: string): Promise<void> {
+  const hwFp = hardwareFingerprint || deviceId || getDeviceFingerprint();
   await fetch(`${API_BASE}/auth/device-bind`, {
     method: 'POST',
     headers: getAuthHeaders(userId),
-    body: JSON.stringify({ userId, deviceId, biometricKey }),
+    body: JSON.stringify({ userId, deviceId: deviceId || hwFp, hardwareFingerprint: hwFp, biometricKey }),
   });
 }
 
@@ -352,11 +367,38 @@ export async function apiFetchAttendance(filters: {
   return [];
 }
 
+export interface ServerTimeInfo {
+  success: boolean;
+  timestamp: number;
+  iso: string;
+  date: string;
+  time: string;
+  timezone: string;
+  timezoneLabel: string;
+  ntpLocked: boolean;
+}
+
+export async function apiFetchServerTime(): Promise<ServerTimeInfo> {
+  const res = await fetch(`${API_BASE}/time`);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Gagal mengambil waktu server.');
+  }
+  return data as ServerTimeInfo;
+}
+
 export async function apiSubmitAttendance(attData: any): Promise<any> {
+  const hwFp = attData.hardwareFingerprint || attData.deviceFingerprint || attData.deviceId || getDeviceFingerprint();
+  const payload = {
+    ...attData,
+    hardwareFingerprint: hwFp,
+    deviceFingerprint: hwFp,
+    deviceId: attData.deviceId || hwFp,
+  };
   const res = await fetch(`${API_BASE}/attendance`, {
     method: 'POST',
     headers: getAuthHeaders(attData.staffId),
-    body: JSON.stringify(attData),
+    body: JSON.stringify(payload),
   });
 
   const data = await res.json();
@@ -587,6 +629,84 @@ export async function apiRejectSupervisorChange(userId: string): Promise<{ user:
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.message || 'Gagal menolak pengajuan atasan.');
+  }
+  return data;
+}
+
+export interface ProfileChangeRequestPayload {
+  userId: string;
+  phone?: string;
+  divisionId?: string;
+  jobRole?: string;
+  locationId?: string;
+  vendor?: string;
+}
+
+export async function apiSubmitProfileChangeRequest(
+  payload: ProfileChangeRequestPayload
+): Promise<{
+  success: boolean;
+  user: AuthUser;
+  message: string;
+  divisionRequested?: boolean;
+  adminRequested?: boolean;
+}> {
+  const res = await fetch(`${API_BASE}/user/request-profile-update`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Gagal mengajukan perubahan profil.');
+  }
+  return data;
+}
+
+export async function apiApproveDivisionChange(userId: string): Promise<{ user: AuthUser; message: string }> {
+  const res = await fetch(`${API_BASE}/supervisor/approve-division/${userId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Gagal menyetujui perubahan divisi.');
+  }
+  return data;
+}
+
+export async function apiRejectDivisionChange(userId: string): Promise<{ user: AuthUser; message: string }> {
+  const res = await fetch(`${API_BASE}/supervisor/reject-division/${userId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Gagal menolak perubahan divisi.');
+  }
+  return data;
+}
+
+export async function apiApproveAssignmentChange(userId: string): Promise<{ user: AuthUser; message: string }> {
+  const res = await fetch(`${API_BASE}/admin/approve-assignment/${userId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Gagal menyetujui pengajuan penugasan.');
+  }
+  return data;
+}
+
+export async function apiRejectAssignmentChange(userId: string): Promise<{ user: AuthUser; message: string }> {
+  const res = await fetch(`${API_BASE}/admin/reject-assignment/${userId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Gagal menolak pengajuan penugasan.');
   }
   return data;
 }
@@ -933,4 +1053,89 @@ export async function apiMarkAllNotificationsRead(userId?: string): Promise<void
   } catch (err: unknown) {
     console.warn('apiMarkAllNotificationsRead warning:', err);
   }
+}
+
+// ==============================================================================
+// 15. WEBAUTHN / FIDO2 BIOMETRIC AUTHENTICATION SERVICES
+// ==============================================================================
+
+export interface BiometricStatusInfo {
+  success: boolean;
+  enrolled: boolean;
+  count: number;
+  credentials: Array<{
+    id: string;
+    credentialId: string;
+    deviceName: string;
+    createdAt: string;
+    lastUsedAt?: string;
+  }>;
+}
+
+export async function apiBiometricRegisterOptions(userId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/auth/biometric/register-options`, {
+    method: 'POST',
+    headers: getAuthHeaders(userId),
+    body: JSON.stringify({ userId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal menyiapkan pendaftaran biometrik.');
+  return data.options;
+}
+
+export async function apiBiometricRegisterVerify(
+  userId: string,
+  response: any,
+  deviceName?: string
+): Promise<{ success: boolean; message: string; credential: any }> {
+  const res = await fetch(`${API_BASE}/auth/biometric/register-verify`, {
+    method: 'POST',
+    headers: getAuthHeaders(userId),
+    body: JSON.stringify({ userId, response, deviceName }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal memverifikasi pendaftaran biometrik.');
+  return data;
+}
+
+export async function apiBiometricLoginOptions(usernameOrEmail?: string): Promise<{ options: any; challengeKey: string }> {
+  const res = await fetch(`${API_BASE}/auth/biometric/login-options`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usernameOrEmail }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal menyiapkan autentikasi biometrik.');
+  return { options: data.options, challengeKey: data.challengeKey };
+}
+
+export async function apiBiometricLoginVerify(response: any, challengeKey?: string, deviceId?: string, hardwareFingerprint?: string): Promise<AuthResponse> {
+  const hwFp = hardwareFingerprint || deviceId || getDeviceFingerprint();
+  const res = await fetch(`${API_BASE}/auth/biometric/login-verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ response, challengeKey, deviceId: deviceId || hwFp, hardwareFingerprint: hwFp }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Verifikasi biometrik tidak berhasil.');
+  return data;
+}
+
+export async function apiGetBiometricStatus(userId: string): Promise<BiometricStatusInfo> {
+  const res = await fetch(`${API_BASE}/auth/biometric/user/${encodeURIComponent(userId)}`, {
+    headers: getAuthHeaders(userId),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal memeriksa status biometrik.');
+  return data;
+}
+
+export async function apiDeleteBiometricCredential(credentialId: string, userId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/auth/biometric/credential/${encodeURIComponent(credentialId)}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(userId),
+    body: JSON.stringify({ userId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal menghapus kunci biometrik.');
 }

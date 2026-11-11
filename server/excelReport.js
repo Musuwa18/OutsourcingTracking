@@ -36,10 +36,10 @@ export function generateRekapPresensiWorkbook({ monthStr = '2026-10', targetStaf
   let allUsers = listAllUsers().filter((u) => u.role === 'outsourcing');
   if (categoryFilter && categoryFilter !== 'ALL') {
     allUsers = allUsers.filter((u) => {
-      const v = (u.vendorName || '').toUpperCase();
-      if (categoryFilter === 'pppk_paruh_waktu') return v.includes('PPPK');
-      if (categoryFilter === 'magang') return v.includes('MAGANG');
-      return !v.includes('PPPK') && !v.includes('MAGANG');
+      const v = (((u.vendorName || u.vendor_name || '') + ' ' + (u.roleTitle || u.role_title || ''))).toUpperCase();
+      if (categoryFilter === 'pppk_paruh_waktu') return v.includes('PPPK') || v.includes('PARUH WAKTU');
+      if (categoryFilter === 'magang') return v.includes('MAGANG') || v.includes('SISWA') || v.includes('MAHASISWA');
+      return !v.includes('PPPK') && !v.includes('PARUH WAKTU') && !v.includes('MAGANG') && !v.includes('SISWA') && !v.includes('MAHASISWA');
     });
   } else if (vendorFilter && vendorFilter !== 'ALL') {
     allUsers = allUsers.filter((u) => u.vendorName === vendorFilter);

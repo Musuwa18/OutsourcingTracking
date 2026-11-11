@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Bell, CheckCircle2, Clock, Star, ShieldAlert, AlertTriangle, MapPin } from 'lucide-react';
+import { X, Bell, CheckCircle2, Clock, Star, ShieldAlert, AlertTriangle, MapPin, User, Building2 } from 'lucide-react';
 import { NotificationItem, UserRole } from '../types';
 
 interface NotificationDrawerProps {
@@ -7,6 +7,7 @@ interface NotificationDrawerProps {
   onClose: () => void;
   notifications: NotificationItem[];
   userRole?: UserRole;
+  currentUserId?: string;
   onMarkAsRead: (id: string) => void;
   onMarkAllAsRead: () => void;
   onSimulatePushNotification: () => void;
@@ -17,6 +18,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
   onClose,
   notifications,
   userRole,
+  currentUserId,
   onMarkAsRead,
   onMarkAllAsRead,
   onSimulatePushNotification,
@@ -38,6 +40,23 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
       default:
         return <ShieldAlert className="w-4 h-4 text-blue-500" />;
     }
+  };
+
+  // Helper agar Admin/Supervisor melihat nama staf di isi pesan (bukan 'Clock In Anda')
+  const formatNotificationMessage = (item: NotificationItem) => {
+    const isManager = userRole === 'admin' || userRole === 'supervisor';
+    const isSelf = currentUserId && (item.userId === currentUserId || item.staffId === currentUserId);
+
+    if (isManager && !isSelf) {
+      const displayName = item.staffName || 'Staf';
+      if (item.message.includes('Clock In Anda')) {
+        return item.message.replace('Clock In Anda', `${displayName} Clock In`);
+      }
+      if (item.message.includes('Clock Out tercatat')) {
+        return item.message.replace('Clock Out tercatat', `${displayName} Clock Out tercatat`);
+      }
+    }
+    return item.message;
   };
 
   return (
@@ -127,12 +146,29 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
                     {item.timestamp}
                   </span>
                 </div>
+
+                {/* Badge Identitas Staf & Divisi Pengirim (Opsi A) */}
+                {item.staffName && (
+                  <div className="pl-6 pt-0.5 flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100/90 dark:bg-indigo-950/70 text-indigo-700 dark:text-cyan-300 border border-indigo-200/60 dark:border-indigo-800/50">
+                      <User className="w-3 h-3 shrink-0" />
+                      <span>{item.staffName}</span>
+                    </span>
+                    {item.divisionName && (
+                      <span className="inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50 max-w-[200px] truncate">
+                        <Building2 className="w-2.5 h-2.5 shrink-0" />
+                        <span>{item.divisionName}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <p className={`text-xs leading-relaxed pl-6 ${
                   item.type === 'geofence_alert'
                     ? 'text-rose-800 dark:text-rose-300 font-medium'
                     : 'text-slate-600 dark:text-slate-300'
                 }`}>
-                  {item.message}
+                  {formatNotificationMessage(item)}
                 </p>
                 {item.type === 'geofence_alert' && (
                   <div className="pl-6 pt-1 flex items-center gap-2">
