@@ -944,7 +944,7 @@ app.put('/api/user/supervisor', (req, res) => {
   }
 });
 
-app.put('/api/admin/users/:id/approve-supervisor', (req, res) => {
+app.put(['/api/admin/users/:id/approve-supervisor', '/api/supervisor/users/:id/approve-supervisor', '/api/supervisor/approve-supervisor/:id'], (req, res) => {
   try {
     const updated = approveSupervisorChange(req.params.id);
     res.json({ success: true, user: updated, message: 'Pengajuan atasan langsung berhasil disetujui.' });
@@ -954,7 +954,7 @@ app.put('/api/admin/users/:id/approve-supervisor', (req, res) => {
   }
 });
 
-app.put('/api/admin/users/:id/reject-supervisor', (req, res) => {
+app.put(['/api/admin/users/:id/reject-supervisor', '/api/supervisor/users/:id/reject-supervisor', '/api/supervisor/reject-supervisor/:id'], (req, res) => {
   try {
     const updated = rejectSupervisorChange(req.params.id);
     res.json({ success: true, user: updated, message: 'Pengajuan atasan langsung berhasil ditolak.' });

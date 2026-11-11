@@ -1444,59 +1444,29 @@ export function requestSupervisorChange(userId, newSupervisorId) {
 
   const targetSupervisor = getUserById(newSupervisorId);
   const targetName = targetSupervisor ? targetSupervisor.name : 'Atasan Baru';
-  const currentCount = Number(user.supervisorChangeCount) || 0;
 
-  if (currentCount === 0) {
-    // Pilihan pertama kali: Berlaku instan (DIRECT APPROVAL)
-    if (isNodeSqlite && dbEngine) {
-      dbEngine.prepare(
-        `UPDATE users SET 
-          supervisor_id = ?, 
-          pending_supervisor_id = NULL, 
-          supervisor_change_count = 1, 
-          supervisor_request_status = 'APPROVED' 
-        WHERE id = ?`
-      ).run(newSupervisorId, userId);
-    } else {
-      const u = fallbackStore.users.find((x) => x.id === userId);
-      if (u) {
-        u.supervisorId = newSupervisorId;
-        u.pendingSupervisorId = null;
-        u.supervisorChangeCount = 1;
-        u.supervisorRequestStatus = 'APPROVED';
-        persistFallback();
-      }
-    }
-    const updated = getUserById(userId);
-    return {
-      mode: 'DIRECT',
-      user: updated,
-      message: `Atasan langsung berhasil dipilih (${targetName}) dan langsung aktif.`
-    };
+  // S & K: Perubahan / pemilihan atasan selalu memerlukan persetujuan atasan bersangkutan atau Superadmin (PENDING)
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(
+      `UPDATE users SET 
+        pending_supervisor_id = ?, 
+        supervisor_request_status = 'PENDING' 
+      WHERE id = ?`
+    ).run(newSupervisorId, userId);
   } else {
-    // Pilihan ke-2 dan seterusnya: Menunggu persetujuan Super Admin (PENDING)
-    if (isNodeSqlite && dbEngine) {
-      dbEngine.prepare(
-        `UPDATE users SET 
-          pending_supervisor_id = ?, 
-          supervisor_request_status = 'PENDING' 
-        WHERE id = ?`
-      ).run(newSupervisorId, userId);
-    } else {
-      const u = fallbackStore.users.find((x) => x.id === userId);
-      if (u) {
-        u.pendingSupervisorId = newSupervisorId;
-        u.supervisorRequestStatus = 'PENDING';
-        persistFallback();
-      }
+    const u = fallbackStore.users.find((x) => x.id === userId);
+    if (u) {
+      u.pendingSupervisorId = newSupervisorId;
+      u.supervisorRequestStatus = 'PENDING';
+      persistFallback();
     }
-    const updated = getUserById(userId);
-    return {
-      mode: 'PENDING',
-      user: updated,
-      message: `Pengajuan pergantian atasan ke ${targetName} telah dikirim dan menunggu persetujuan Super Admin.`
-    };
   }
+  const updated = getUserById(userId);
+  return {
+    mode: 'PENDING',
+    user: updated,
+    message: `Pengajuan atasan langsung ke ${targetName} telah dikirim dan menunggu persetujuan atasan yang bersangkutan atau Superadmin.`
+  };
 }
 
 export function approveSupervisorChange(userId) {

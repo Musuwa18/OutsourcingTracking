@@ -276,6 +276,8 @@ export default function App() {
             customLocation: customLoc,
             workspaceNote: u.workspaceNote || '',
             supervisorId: u.supervisorId || undefined,
+            pendingSupervisorId: u.pendingSupervisorId || undefined,
+            supervisorRequestStatus: u.supervisorRequestStatus || 'NONE',
             avatarColor: u.avatarColor || '#4f46e5',
             initials: u.initials || u.name.slice(0, 2).toUpperCase(),
             joinDate: '2026-01-02',
