@@ -27,6 +27,7 @@ import {
   OvertimeRecord,
   LeaveRequest,
   CompetencyRatings,
+  AttendanceGlobalSettings,
 } from '../types';
 import DocumentPublishBanner from './DocumentPublishBanner';
 import { RadarChart } from './RadarChart';
@@ -51,6 +52,7 @@ interface PrintReportModalProps {
   initialStaffId?: string;
   users?: UserAccount[];
   onOpenMatrixView?: () => void;
+  attendanceSettings?: AttendanceGlobalSettings;
 }
 
 // Komponen Kop Surat Resmi Kedinasan
@@ -121,6 +123,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   initialStaffId,
   users = [],
   onOpenMatrixView,
+  attendanceSettings,
 }) => {
   if (!isOpen) return null;
 
@@ -274,6 +277,17 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
     return map;
   }, [leaveRecords, selectedMonth]);
 
+  const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+  const isConfiguredDayOff = (dayOfWeek: number, isNightWorker: boolean = false): boolean => {
+    if (isNightWorker) return false;
+    const dayKey = DAY_KEYS[dayOfWeek];
+    if (attendanceSettings?.workSchedule && attendanceSettings.workSchedule[dayKey] !== undefined) {
+      return !attendanceSettings.workSchedule[dayKey].enabled;
+    }
+    return dayOfWeek === 0 || dayOfWeek === 6;
+  };
+
   // Data Matriks Bulanan (Sheet 1)
   const matrixStaffData = useMemo(() => {
     return displayedStaffList.map((st, idx) => {
@@ -286,6 +300,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
         const isNightWorker = Boolean(
           st.roleTitle?.toLowerCase().includes('wakar') || st.roleTitle?.toLowerCase().includes('jaga malam')
         );
+        const isDayOff = isConfiguredDayOff(dayOfWeek, isNightWorker);
 
         const att = attLookup.get(`${st.id}_${dateStr}`) || attLookup.get(`${st.nip}_${dateStr}`);
         const leave = leaveLookup.get(`${st.id}_${dateStr}`) || leaveLookup.get(`${st.nip}_${dateStr}`);
@@ -317,7 +332,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
             dailyCodes.push('I');
             izin++;
           }
-        } else if (dayOfWeek === 0 && !isNightWorker) {
+        } else if (isDayOff) {
           dailyCodes.push('OFF');
           libur++;
         } else {
@@ -348,7 +363,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
         pct,
       };
     });
-  }, [displayedStaffList, totalDaysInMonth, selectedMonth, attLookup, otLookup, leaveLookup]);
+  }, [displayedStaffList, totalDaysInMonth, selectedMonth, attLookup, otLookup, leaveLookup, attendanceSettings]);
 
   const dailyHadirTotals = useMemo(() => {
     const totals: number[] = [];
@@ -963,12 +978,12 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                       {Array.from({ length: totalDaysInMonth }).map((_, dIdx) => {
                         const dNum = dIdx + 1;
                         const dateObj = new Date(yearNum, monthNum - 1, dNum);
-                        const isSunday = dateObj.getDay() === 0;
+                        const isDayOff = isConfiguredDayOff(dateObj.getDay(), false);
                         return (
                           <th
                             key={dNum}
                             className={`py-0.5 px-0.5 border border-black font-mono ${
-                              isSunday ? 'bg-rose-100 print:bg-slate-300 font-bold' : ''
+                              isDayOff ? 'bg-rose-100 print:bg-slate-300 font-bold' : ''
                             }`}
                             style={{ width: `${(46.5 / totalDaysInMonth).toFixed(2)}%` }}
                           >
@@ -995,8 +1010,6 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                           {row.staff.roleTitle || 'Tenaga Outsourcing'}
                         </td>
                         {row.dailyCodes.map((code, dIdx) => {
-                          const dateObj = new Date(yearNum, monthNum - 1, dIdx + 1);
-                          const isSunday = dateObj.getDay() === 0;
                           return (
                             <td
                               key={dIdx}
@@ -1011,7 +1024,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                                   ? 'text-amber-800 bg-amber-50/50 print:text-black print:bg-transparent'
                                   : code === 'A'
                                   ? 'text-red-800 bg-red-100 print:text-black print:bg-transparent'
-                                  : isSunday
+                                  : code === 'OFF'
                                   ? 'text-slate-600 bg-slate-100 print:text-black print:bg-slate-200'
                                   : 'text-slate-400 print:text-black'
                               }`}

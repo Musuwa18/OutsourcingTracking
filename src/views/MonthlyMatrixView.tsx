@@ -21,6 +21,7 @@ import {
   LeaveRequest,
   InstitutionSettings,
   AuthUser,
+  AttendanceGlobalSettings,
 } from '../types';
 
 interface MonthlyMatrixViewProps {
@@ -32,6 +33,7 @@ interface MonthlyMatrixViewProps {
   institutionSettings: InstitutionSettings;
   currentUser: AuthUser | null;
   onSelectStaff?: (staff: StaffProfile) => void;
+  attendanceSettings?: AttendanceGlobalSettings;
 }
 
 export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
@@ -43,6 +45,7 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
   institutionSettings,
   currentUser,
   onSelectStaff,
+  attendanceSettings,
 }) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-10');
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang'>('ALL');
@@ -126,6 +129,18 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
     return map;
   }, [leaveRecords, selectedMonth]);
 
+  const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+  const isConfiguredDayOff = (dayOfWeek: number, isNightWorker: boolean = false): boolean => {
+    if (isNightWorker) return false;
+    const dayKey = DAY_KEYS[dayOfWeek];
+    if (attendanceSettings?.workSchedule && attendanceSettings.workSchedule[dayKey] !== undefined) {
+      return !attendanceSettings.workSchedule[dayKey].enabled;
+    }
+    // Fallback default jadwal Disdik HST: Sabtu & Minggu libur rutin
+    return dayOfWeek === 0 || dayOfWeek === 6;
+  };
+
   // Kompilasi Data Matriks Staf 1 - 31
   const matrixData = useMemo(() => {
     return filteredStaffList.map((st, idx) => {
@@ -138,6 +153,7 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
         const isNightWorker = Boolean(
           st.roleTitle?.toLowerCase().includes('wakar') || st.roleTitle?.toLowerCase().includes('jaga malam')
         );
+        const isDayOff = isConfiguredDayOff(dayOfWeek, isNightWorker);
 
         const att = attLookup.get(`${st.id}_${dateStr}`) || attLookup.get(`${st.nip}_${dateStr}`);
         const leave = leaveLookup.get(`${st.id}_${dateStr}`) || leaveLookup.get(`${st.nip}_${dateStr}`);
@@ -173,7 +189,7 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
             dailyCodes.push('I');
             izin++;
           }
-        } else if (dayOfWeek === 0 && !isNightWorker) {
+        } else if (isDayOff) {
           dailyCodes.push('OFF');
           libur++;
         } else {
@@ -204,7 +220,7 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
         pct,
       };
     });
-  }, [filteredStaffList, totalDaysInMonth, selectedMonth, attLookup, otLookup, leaveLookup]);
+  }, [filteredStaffList, totalDaysInMonth, selectedMonth, attLookup, otLookup, leaveLookup, attendanceSettings]);
 
   // Total Kehadiran Harian (H) per Tanggal
   const dailyHadirTotals = useMemo(() => {
@@ -502,12 +518,12 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
                 {Array.from({ length: totalDaysInMonth }).map((_, dIdx) => {
                   const dNum = dIdx + 1;
                   const dateObj = new Date(yearNum, monthNum - 1, dNum);
-                  const isSunday = dateObj.getDay() === 0;
+                  const isDayOff = isConfiguredDayOff(dateObj.getDay(), false);
                   return (
                     <th
                       key={dNum}
                       className={`py-1 px-0.5 border-r border-slate-300 dark:border-slate-700 print:border-black text-center align-middle min-w-[24px] print:min-w-0 font-mono ${
-                        isSunday
+                        isDayOff
                           ? 'bg-rose-100/80 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 print:bg-slate-300 print:text-black font-extrabold'
                           : ''
                       }`}
@@ -547,8 +563,6 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
 
                   {/* 31 Hari Presensi */}
                   {row.dailyCodes.map((code, dIdx) => {
-                    const dateObj = new Date(yearNum, monthNum - 1, dIdx + 1);
-                    const isSunday = dateObj.getDay() === 0;
                     return (
                       <td
                         key={dIdx}
@@ -563,7 +577,7 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
                             ? 'text-amber-700 dark:text-amber-400 bg-amber-50/60 dark:bg-amber-950/30 print:text-black print:bg-transparent'
                             : code === 'A'
                             ? 'text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-950/50 print:text-black print:bg-transparent'
-                            : isSunday
+                            : code === 'OFF'
                             ? 'text-slate-400 dark:text-slate-500 bg-slate-100/60 dark:bg-slate-800/40 print:text-black print:bg-slate-200'
                             : 'text-slate-300 dark:text-slate-600 print:text-black'
                         }`}

@@ -27,6 +27,7 @@ import {
   ExternalLink,
   Printer,
   FileSpreadsheet,
+  Lock,
 } from 'lucide-react';
 import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, DayWorkSchedule, FieldCheckinRecord, OvertimeRecord, LeaveRequest, LeaveQuota, LeaveType } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
@@ -168,6 +169,24 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
       }
     : regularSchedule;
 
+  const [currentWitaTime, setCurrentWitaTime] = useState<string>(getCurrentWitaTimeStr());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentWitaTime(getCurrentWitaTimeStr());
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isRestrictedEarlyWorker = Boolean(
+    staff?.roleTitle?.toLowerCase().includes('administrasi perkantoran') ||
+    staff?.roleTitle?.toLowerCase().includes('driver') ||
+    staff?.roleTitle?.toLowerCase().includes('pengemudi') ||
+    staff?.roleTitle?.toLowerCase().includes('supir')
+  );
+
+  const isTooEarlyToClockIn = isRestrictedEarlyWorker && currentWitaTime < '07:30:00';
+
   // Report modal state
   const [watermarkModalOpen, setWatermarkModalOpen] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
@@ -262,8 +281,14 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return 1;
     let count = 0;
     const cur = new Date(start);
+    const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
     while (cur <= end) {
-      if (cur.getDay() !== 0) {
+      const dayOfWeek = cur.getDay();
+      const dayKey = dayKeys[dayOfWeek];
+      const isDayOff = attendanceSettings?.workSchedule && attendanceSettings.workSchedule[dayKey] !== undefined
+        ? !attendanceSettings.workSchedule[dayKey].enabled
+        : (dayOfWeek === 0 || dayOfWeek === 6);
+      if (!isDayOff) {
         count++;
       }
       cur.setDate(cur.getDate() + 1);
@@ -292,7 +317,11 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   const handleCreateLeaveRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leaveReason.trim()) {
-      alert('Harap isi alasan permohonan izin/cuti.');
+      alert('Harap isi alasan permohonan izin/cuti/tugas luar.');
+      return;
+    }
+    if (leaveType === 'TUGAS_LUAR' && !leaveAttachmentUrl) {
+      alert('Permohonan Tugas Luar / Perjalanan Dinas wajib melampirkan foto/scan Surat Tugas atau SPPD resmi kedinasan.');
       return;
     }
     if (leaveType === 'SAKIT' && !leaveAttachmentUrl) {
@@ -480,12 +509,27 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   };
 
   const handleOpenAttendance = (type: 'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin') => {
+    if (type === 'clock-in' && isTooEarlyToClockIn) {
+      alert('Presensi Masuk Belum Dibuka: Presensi masuk untuk posisi Administrasi Perkantoran dan Driver / Pengemudi baru dibuka mulai pukul 07:30 WITA. Silakan tunggu jam operasional kantor.');
+      return;
+    }
     setActionType(type);
     setCameraModalOpen(true);
   };
 
   const handleAttendanceCapture = (selfieBase64: string, locationData: any) => {
+    // Penegakan Geofence Ketat (Strict Geofence Enforcement):
+    // Presensi di luar perimeter kantor wajib ditolak kecuali mode tugas dinas lapangan resmi aktif
+    if (!locationData.isFieldDuty && locationData.withinRadius === false) {
+      alert(`Presensi Ditolak: Anda terdeteksi berada di luar batas radius aman kantor (${locationData.distanceMeters || 0}m dari kantor penugasan). Presensi hanya dapat dilakukan di dalam kantor atau dengan mengaktifkan mode Tugas Lapangan jika memiliki surat tugas resmi.`);
+      return;
+    }
+
     if (actionType === 'clock-in') {
+      if (isTooEarlyToClockIn) {
+        alert('Presensi Masuk Belum Dibuka: Presensi masuk untuk posisi Administrasi Perkantoran dan Driver / Pengemudi baru dibuka mulai pukul 07:30 WITA. Silakan tunggu jam operasional kantor.');
+        return;
+      }
       onClockIn(selfieBase64, locationData);
     } else if (actionType === 'field-checkin') {
       if (onFieldCheckin) onFieldCheckin(selfieBase64, locationData);
@@ -668,9 +712,16 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 : `Hari Jumat: Masuk ${todaySchedule.clockInStart} - ${todaySchedule.clockInEnd} WITA · Pulang pukul ${todaySchedule.clockOutStart} WITA (Langsung pulang tanpa sesi istirahat siang).`}
             </p>
             {!hasClockedIn && (
-              <p className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold pt-0.5">
-                👉 Anda belum Clock In masuk hari ini. Silakan lakukan selfie WebRTC di lokasi penugasan.
-              </p>
+              isTooEarlyToClockIn ? (
+                <p className="text-[11px] text-rose-700 dark:text-rose-400 font-bold pt-0.5 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 shrink-0" />
+                  Presensi Masuk khusus posisi Administrasi Perkantoran & Driver baru dibuka mulai pukul 07:30 WITA.
+                </p>
+              ) : (
+                <p className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold pt-0.5">
+                  👉 Anda belum Clock In masuk hari ini. Silakan lakukan selfie WebRTC di lokasi penugasan.
+                </p>
+              )
             )}
           </div>
         </div>
@@ -811,25 +862,37 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           <button
             type="button"
             onClick={() => handleOpenAttendance('clock-in')}
-            disabled={hasClockedIn}
+            disabled={hasClockedIn || isTooEarlyToClockIn}
             className={`p-3.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
               hasClockedIn
                 ? 'bg-emerald-100/80 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300 font-bold backdrop-blur-md'
+                : isTooEarlyToClockIn
+                ? 'bg-slate-100/80 dark:bg-slate-800/40 border-slate-300 dark:border-slate-700/60 text-slate-500 dark:text-slate-400 cursor-not-allowed opacity-75'
                 : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white border-indigo-700/50 shadow-lg shadow-indigo-500/25 active:scale-[0.98]'
             }`}
           >
             <div className="flex items-center gap-1.5">
-              <Camera className="w-4 h-4" />
+              {isTooEarlyToClockIn && !hasClockedIn ? (
+                <Lock className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+              ) : (
+                <Camera className="w-4 h-4" />
+              )}
               <span className="text-xs font-bold">
                 {hasClockedIn
                   ? isOvernightShift
                     ? 'Piket Malam Aktif'
                     : 'Sudah Clock In'
+                  : isTooEarlyToClockIn
+                  ? 'Buka Jam 07:30 WITA'
                   : 'Clock In Masuk'}
               </span>
             </div>
             <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
-              {hasClockedIn ? `${todayAttendance?.clockInTime} WITA` : 'Live Selfie + GPS'}
+              {hasClockedIn
+                ? `${todayAttendance?.clockInTime} WITA`
+                : isTooEarlyToClockIn
+                ? 'Terkunci (Khusus Admin & Supir)'
+                : 'Live Selfie + GPS'}
             </span>
           </button>
 
@@ -1716,6 +1779,8 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 const isRejected = l.status === 'REJECTED';
 
                 const leaveTypeLabel: Record<string, string> = {
+                  TUGAS_LUAR: 'Tugas Luar / Perjalanan Dinas',
+                  DINAS_LUAR: 'Tugas Luar / Perjalanan Dinas',
                   SAKIT: 'Izin Sakit',
                   CUTI_TAHUNAN: 'Cuti Tahunan',
                   CUTI_ALASAN_PENTING: 'Cuti Alasan Penting',
@@ -1724,6 +1789,8 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 };
 
                 const leaveTypeColor: Record<string, string> = {
+                  TUGAS_LUAR: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900',
+                  DINAS_LUAR: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900',
                   SAKIT: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-900',
                   CUTI_TAHUNAN: 'bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 border-teal-200 dark:border-teal-900',
                   CUTI_ALASAN_PENTING: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-900',
@@ -1782,7 +1849,11 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                       <div className="pt-2 flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs">
                         <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
                           <Paperclip className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                          <span className="text-[11px] font-medium">Lampiran Dokumen / Surat Dokter</span>
+                          <span className="text-[11px] font-medium">
+                            {l.leaveType === 'TUGAS_LUAR' || l.leaveType === 'DINAS_LUAR'
+                              ? 'Lampiran Surat Tugas / SPPD Resmi'
+                              : 'Lampiran Dokumen / Surat Dokter'}
+                          </span>
                         </div>
                         <button
                           type="button"
@@ -2084,6 +2155,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
+                    { id: 'TUGAS_LUAR', label: 'Tugas Luar / Perjalanan Dinas', desc: 'Disertai Surat Tugas / SPPD resmi kedinasan' },
                     { id: 'SAKIT', label: 'Izin Sakit', desc: 'Disertai Surat Keterangan Dokter (SKD)' },
                     { id: 'CUTI_TAHUNAN', label: 'Cuti Tahunan', desc: `Mengurangi kuota tahunan (Sisa: ${activeAnnualRemaining} hr)` },
                     { id: 'CUTI_ALASAN_PENTING', label: 'Cuti Alasan Penting', desc: 'Keluarga sakit/duka/pernikahan/darurat' },
@@ -2156,7 +2228,11 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 <textarea
                   required
                   rows={3}
-                  placeholder="Jelaskan kondisi sakit (gejala/diagnosa faskes), keperluan cuti dinas, atau kepentingan darurat keluarga..."
+                  placeholder={
+                    leaveType === 'TUGAS_LUAR'
+                      ? 'Jelaskan rincian agenda tugas luar, lokasi tujuan, dasar surat tugas, atau nomor surat tugas kedinasan...'
+                      : 'Jelaskan kondisi sakit (gejala/diagnosa faskes), keperluan cuti dinas, atau kepentingan darurat keluarga...'
+                  }
                   value={leaveReason}
                   onChange={(e) => setLeaveReason(e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white leading-relaxed placeholder:text-slate-400"
@@ -2167,11 +2243,17 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-slate-700 dark:text-slate-300 block">
-                    Lampiran Surat Dokter (SKD) / Bukti:
+                    {leaveType === 'TUGAS_LUAR'
+                      ? 'Lampiran Surat Tugas / SPPD / Bukti:'
+                      : leaveType === 'SAKIT'
+                      ? 'Lampiran Surat Dokter (SKD) / Bukti:'
+                      : 'Lampiran Dokumen / Berkas Bukti:'}
                   </label>
-                  {leaveType === 'SAKIT' && (
+                  {leaveType === 'TUGAS_LUAR' ? (
+                    <span className="text-[10px] text-rose-500 font-semibold">*Wajib melampirkan foto/scan Surat Tugas resmi kedinasan</span>
+                  ) : leaveType === 'SAKIT' ? (
                     <span className="text-[10px] text-rose-500 font-semibold">*Disarankan untuk izin sakit</span>
-                  )}
+                  ) : null}
                 </div>
 
                 {leaveAttachmentUrl ? (

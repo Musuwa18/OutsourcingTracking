@@ -2368,6 +2368,7 @@ export default function App() {
                   leaveRecords={leaveRecords}
                   institutionSettings={institutionSettings}
                   currentUser={currentUser}
+                  attendanceSettings={attendanceSettings}
                   onSelectStaff={(staff) => {
                     setSelectedStaffForModal(staff);
                     setIsStaffModalOpen(true);
@@ -2511,6 +2512,7 @@ export default function App() {
         initialPrintMode={printModalMode}
         initialStaffId={printModalStaffId}
         users={users}
+        attendanceSettings={attendanceSettings}
         onOpenMatrixView={() => {
           setPrintModalOpen(false);
           setAdminTab('matriks-presensi');

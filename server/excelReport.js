@@ -1,5 +1,5 @@
 import XLSX from 'xlsx';
-import { listAllUsers, listAttendance, listOvertimeRequests, listLeaveRequests, getInstitutionSettings } from './db.js';
+import { listAllUsers, listAttendance, listOvertimeRequests, listLeaveRequests, getInstitutionSettings, getAttendanceSettings } from './db.js';
 
 export function generateRekapPresensiWorkbook({ monthStr = '2026-10', targetStaffId = null, vendorFilter = null, categoryFilter = null } = {}) {
   const [yearNum, monthNum] = monthStr.split('-').map(Number);
@@ -11,6 +11,17 @@ export function generateRekapPresensiWorkbook({ monthStr = '2026-10', targetStaf
   const dayNamesShort = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
   const dayNamesLong = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   const monthName = monthNames[monthNum - 1];
+
+  const attSettings = getAttendanceSettings();
+  const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const isConfiguredDayOff = (dayOfWeek, isNightWorker = false) => {
+    if (isNightWorker) return false;
+    const dayKey = dayKeys[dayOfWeek];
+    if (attSettings && attSettings.workSchedule && attSettings.workSchedule[dayKey] !== undefined) {
+      return !attSettings.workSchedule[dayKey].enabled;
+    }
+    return dayOfWeek === 0 || dayOfWeek === 6;
+  };
 
   const inst = getInstitutionSettings() || {
     namaPemda: 'PEMERINTAH KABUPATEN HULU SUNGAI TENGAH',
@@ -139,7 +150,7 @@ export function generateRekapPresensiWorkbook({ monthStr = '2026-10', targetStaf
         } else {
           r.push('I');
         }
-      } else if (dayOfWeek === 0 && !isNightWorker) {
+      } else if (isConfiguredDayOff(dayOfWeek, isNightWorker)) {
         r.push('OFF');
       } else {
         const todayStr = new Date().toISOString().slice(0, 10);
@@ -257,7 +268,7 @@ export function generateRekapPresensiWorkbook({ monthStr = '2026-10', targetStaf
       schedIn = '19:30';
       schedOut = '06:00';
       shiftName = 'Piket Malam';
-    } else if (dayOfWeek === 0) {
+    } else if (isConfiguredDayOff(dayOfWeek, isNightWorker)) {
       schedIn = '-';
       schedOut = '-';
       shiftName = 'OFF';

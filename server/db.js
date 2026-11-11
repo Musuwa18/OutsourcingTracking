@@ -252,6 +252,21 @@ if (isNodeSqlite && dbEngine) {
       timestamp TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS user_biometrics (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      credential_id TEXT NOT NULL UNIQUE,
+      public_key TEXT NOT NULL,
+      counter INTEGER DEFAULT 0,
+      device_name TEXT,
+      transports TEXT,
+      created_at TEXT NOT NULL,
+      last_used_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_biometrics_user_id ON user_biometrics(user_id);
+    CREATE INDEX IF NOT EXISTS idx_biometrics_credential_id ON user_biometrics(credential_id);
   `);
 
   // Migrasi aman untuk kolom baru users jika database sudah ada sebelumnya
@@ -323,6 +338,14 @@ if (isNodeSqlite && dbEngine) {
   try {
     dbEngine.exec(`ALTER TABLE attendance ADD COLUMN verified_by TEXT;`);
   } catch (e) {}
+
+  // Migrasi aman untuk kolom identitas staf pada notifikasi
+  try {
+    dbEngine.exec(`ALTER TABLE notifications ADD COLUMN staff_name TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE notifications ADD COLUMN division_name TEXT;`);
+  } catch (e) {}
 }
 
 // Fallback JSON in-memory store jika sqlite bawaan tidak aktif
@@ -334,7 +357,8 @@ let fallbackStore = {
   daily_reports: [],
   evaluations: [],
   leave_requests: [],
-  notifications: []
+  notifications: [],
+  user_biometrics: []
 };
 
 if (!isNodeSqlite && fs.existsSync(FALLBACK_FILE)) {
@@ -1166,6 +1190,130 @@ export function updateUserDevice(userId, deviceId, biometricKey = null) {
   }
 }
 
+// ==============================================================================
+// 10.C. WEBAUTHN FIDO2 BIOMETRIC CREDENTIALS STORAGE
+// ==============================================================================
+export function saveUserBiometricCredential({ userId, credentialId, publicKey, counter = 0, deviceName = 'Smartphone Biometrik', transports = '[]' }) {
+  const id = `bio-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+  const transportsStr = typeof transports === 'string' ? transports : JSON.stringify(transports || []);
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      INSERT OR REPLACE INTO user_biometrics (
+        id, user_id, credential_id, public_key, counter, device_name, transports, created_at, last_used_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, userId, credentialId, publicKey, counter, deviceName, transportsStr, now, now);
+
+    // Tandai akun pengguna bahwa biometrik aktif
+    dbEngine.prepare(`UPDATE users SET biometric_key = 'ENROLLED' WHERE id = ?`).run(userId);
+  } else {
+    if (!fallbackStore.user_biometrics) fallbackStore.user_biometrics = [];
+    const existingIdx = fallbackStore.user_biometrics.findIndex(b => b.credentialId === credentialId);
+    const record = { id, userId, credentialId, publicKey, counter, deviceName, transports: transportsStr, createdAt: now, lastUsedAt: now };
+    if (existingIdx >= 0) {
+      fallbackStore.user_biometrics[existingIdx] = record;
+    } else {
+      fallbackStore.user_biometrics.push(record);
+    }
+    const user = fallbackStore.users.find(u => u.id === userId);
+    if (user) user.biometricKey = 'ENROLLED';
+    persistFallback();
+  }
+
+  return { id, userId, credentialId, publicKey, counter, deviceName, transports: transportsStr, createdAt: now, lastUsedAt: now };
+}
+
+export function getUserBiometricCredentials(userId) {
+  if (isNodeSqlite && dbEngine) {
+    const rows = dbEngine.prepare('SELECT * FROM user_biometrics WHERE user_id = ? ORDER BY created_at DESC').all(userId);
+    return rows.map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      credentialId: r.credential_id,
+      publicKey: r.public_key,
+      counter: Number(r.counter) || 0,
+      deviceName: r.device_name || 'Smartphone Biometrik',
+      transports: r.transports ? JSON.parse(r.transports) : [],
+      createdAt: r.created_at,
+      lastUsedAt: r.last_used_at,
+    }));
+  } else {
+    if (!fallbackStore.user_biometrics) fallbackStore.user_biometrics = [];
+    return fallbackStore.user_biometrics
+      .filter(b => b.userId === userId)
+      .map(b => ({
+        ...b,
+        transports: typeof b.transports === 'string' ? JSON.parse(b.transports) : b.transports,
+      }));
+  }
+}
+
+export function getBiometricCredentialById(credentialId) {
+  if (isNodeSqlite && dbEngine) {
+    const row = dbEngine.prepare('SELECT * FROM user_biometrics WHERE credential_id = ?').get(credentialId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      userId: row.user_id,
+      credentialId: row.credential_id,
+      publicKey: row.public_key,
+      counter: Number(row.counter) || 0,
+      deviceName: row.device_name || 'Smartphone Biometrik',
+      transports: row.transports ? JSON.parse(row.transports) : [],
+      createdAt: row.created_at,
+      lastUsedAt: row.last_used_at,
+    };
+  } else {
+    if (!fallbackStore.user_biometrics) fallbackStore.user_biometrics = [];
+    const b = fallbackStore.user_biometrics.find(x => x.credentialId === credentialId);
+    if (!b) return null;
+    return {
+      ...b,
+      transports: typeof b.transports === 'string' ? JSON.parse(b.transports) : b.transports,
+    };
+  }
+}
+
+export function updateBiometricCounter(credentialId, newCounter) {
+  const now = new Date().toISOString();
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare('UPDATE user_biometrics SET counter = ?, last_used_at = ? WHERE credential_id = ?').run(
+      newCounter, now, credentialId
+    );
+  } else {
+    if (!fallbackStore.user_biometrics) return;
+    const b = fallbackStore.user_biometrics.find(x => x.credentialId === credentialId);
+    if (b) {
+      b.counter = newCounter;
+      b.lastUsedAt = now;
+      persistFallback();
+    }
+  }
+}
+
+export function deleteUserBiometricCredential(credentialId, userId) {
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare('DELETE FROM user_biometrics WHERE credential_id = ? AND user_id = ?').run(credentialId, userId);
+    const remaining = dbEngine.prepare('SELECT COUNT(*) as count FROM user_biometrics WHERE user_id = ?').get(userId);
+    if (!remaining || remaining.count === 0) {
+      dbEngine.prepare('UPDATE users SET biometric_key = NULL WHERE id = ?').run(userId);
+    }
+  } else {
+    if (!fallbackStore.user_biometrics) return;
+    fallbackStore.user_biometrics = fallbackStore.user_biometrics.filter(
+      b => !(b.credentialId === credentialId && b.userId === userId)
+    );
+    const hasRemaining = fallbackStore.user_biometrics.some(b => b.userId === userId);
+    if (!hasRemaining) {
+      const user = fallbackStore.users.find(u => u.id === userId);
+      if (user) user.biometricKey = null;
+    }
+    persistFallback();
+  }
+  return true;
+}
+
 export function updateUserLocation(userId, customLocation, workspaceNote) {
   const customLocationJson = customLocation ? JSON.stringify(customLocation) : null;
   const note = workspaceNote !== undefined ? workspaceNote : null;
@@ -1724,9 +1872,42 @@ export function deleteUser(userId) {
   return true;
 }
 
+// ==============================================================================
+// SERVER-AUTHORITATIVE NTP CLOCK HELPER (WITA - ASIA/MAKASSAR)
+// Anti-Manipulasi Jam HP: Jam presensi selalu dikunci langsung oleh Server NTP
+// ==============================================================================
+export function getServerWitaTime() {
+  const now = new Date();
+  const dateStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Makassar',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  const timeStr = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Makassar',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(now).replace(/\./g, ':');
+  return {
+    timestamp: now.getTime(),
+    iso: now.toISOString(),
+    date: dateStr,
+    time: timeStr,
+    timezone: 'Asia/Makassar',
+    timezoneLabel: 'WITA (UTC+8)',
+    ntpLocked: true,
+  };
+}
+
 // ATTENDANCE
 export function saveAttendance(attData) {
-  const recordDate = attData.date || new Date().toISOString().slice(0, 10);
+  const serverWita = getServerWitaTime();
+  const autoClosed = attData.autoClosed ? 1 : 0;
+  // Otoritas Server: untuk presensi live staf, tanggal dan jam selalu mengacu ke waktu server WITA
+  const recordDate = autoClosed ? (attData.date || serverWita.date) : serverWita.date;
   const staffId = attData.staffId || null;
   const id = attData.id || `att-${staffId || 'staff'}-${recordDate}`;
   const now = new Date().toISOString();
@@ -1734,13 +1915,22 @@ export function saveAttendance(attData) {
 
   let staffName = attData.staffName;
   let divisionId = attData.divisionId;
+  let user = null;
+  if (attData.staffId) {
+    user = getUserById(attData.staffId);
+  }
   if (!staffName || !divisionId) {
-    const user = getUserById(attData.staffId);
     if (user) {
       staffName = staffName || user.name;
       divisionId = divisionId || user.divisionId;
     }
   }
+
+  const roleTitleLower = (user?.role_title || user?.roleTitle || '').toLowerCase();
+  const isRestrictedEarlyWorker = roleTitleLower.includes('administrasi perkantoran') ||
+    roleTitleLower.includes('driver') ||
+    roleTitleLower.includes('pengemudi') ||
+    roleTitleLower.includes('supir');
 
   const lat = attData.locationCoords?.latitude ?? attData.latitude ?? null;
   const lon = attData.locationCoords?.longitude ?? attData.longitude ?? null;
@@ -1753,32 +1943,47 @@ export function saveAttendance(attData) {
   const dist = attData.locationCoords?.distanceMeters ?? attData.distanceMeters ?? 0;
   const breakOut = attData.breakOutTime || attData.break_out_time || null;
   const breakIn = attData.breakInTime || attData.break_in_time || null;
-  const autoClosed = attData.autoClosed ? 1 : 0;
+
+  // Strict Geofence Enforcement: Tolak presensi di luar radius tanpa penugasan lapangan resmi
+  if (!autoClosed && !isFieldDuty && isGeoValid === 0) {
+    const error = new Error(`PRESENSI_DITOLAK_LUAR_RADIUS: Presensi ditolak karena posisi GPS berjarak ${dist}m (di luar radius aman kantor) tanpa izin dinas luar.`);
+    error.statusCode = 422;
+    throw error;
+  }
 
   if (isNodeSqlite && dbEngine) {
     // Periksa record presensi (prioritas ID, tanggal hari ini, atau shift malam kemarin)
     let existing = null;
     if (attData.id) {
-      existing = dbEngine.prepare('SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url FROM attendance WHERE id = ?').get(attData.id);
+      existing = dbEngine.prepare('SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url, status FROM attendance WHERE id = ?').get(attData.id);
     }
     if (!existing && staffId) {
-      existing = dbEngine.prepare('SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url FROM attendance WHERE staff_id = ? AND date = ?').get(staffId, recordDate);
+      existing = dbEngine.prepare('SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url, status FROM attendance WHERE staff_id = ? AND date = ?').get(staffId, recordDate);
     }
     // Jika presensi pulang (clock-out) tapi belum ada record tanggal ini, kaitkan ke shift malam kemarin
     if (!existing && staffId && attData.clockOutTime && !attData.clockInTime) {
       existing = dbEngine.prepare(
-        "SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url FROM attendance WHERE staff_id = ? AND date = date(?, '-1 day') AND clock_in_time >= '18:00'"
+        "SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url, status FROM attendance WHERE staff_id = ? AND date = date(?, '-1 day') AND clock_in_time >= '18:00'"
       ).get(staffId, recordDate);
     }
+
+    // Pembatasan Jam Presensi Masuk: Khusus Administrasi Perkantoran & Driver baru dibuka mulai pukul 07:30 WITA
+    if (!existing && !autoClosed && isRestrictedEarlyWorker && serverWita.time < '07:30:00') {
+      const error = new Error('PRESENSI_DITOLAK_BELUM_WAKTUNYA: Presensi masuk untuk posisi Administrasi Perkantoran dan Driver / Pengemudi baru dibuka mulai pukul 07:30 WITA.');
+      error.statusCode = 422;
+      throw error;
+    }
+
     if (existing) {
       // Update record presensi yang sudah ada (dukung snapshot mandiri untuk Clock Out)
       const isClockOutAction = Boolean(attData.clockOutTime && (!attData.clockInTime || attData.clockInTime === existing.clock_in_time));
       const clockOutSelfie = isClockOutAction ? (selfieUrl || existing.clock_out_selfie_url) : (attData.clockOutSelfieUrl ? saveBase64Image(attData.clockOutSelfieUrl, 'attendance') : existing.clock_out_selfie_url);
 
-      const finalClockIn = attData.clockInTime || existing.clock_in_time;
-      const finalBreakOut = breakOut || existing.break_out_time;
-      const finalBreakIn = breakIn || existing.break_in_time;
-      const finalClockOut = attData.clockOutTime || existing.clock_out_time;
+      // Kunci jam ke waktu Server WITA resmi
+      const finalClockIn = existing.clock_in_time || serverWita.time;
+      const finalBreakOut = breakOut ? (existing.break_out_time || serverWita.time) : existing.break_out_time;
+      const finalBreakIn = breakIn ? (existing.break_in_time || serverWita.time) : existing.break_in_time;
+      const finalClockOut = isClockOutAction ? (autoClosed ? (attData.clockOutTime || serverWita.time) : serverWita.time) : existing.clock_out_time;
       // Foto selfie Clock In tidak tertimpa saat Clock Out dilakukan
       const finalSelfie = isClockOutAction ? existing.selfie_url : (selfieUrl || existing.selfie_url);
 
@@ -1807,33 +2012,34 @@ export function saveAttendance(attData) {
           auto_closed = COALESCE(?, auto_closed)
         WHERE id = ?`
       ).run(
-        finalClockIn,
-        finalBreakOut,
-        finalBreakIn,
-        finalClockOut,
-        attData.status || 'Hadir',
-        finalSelfie,
-        clockOutSelfie,
-        isClockOutAction ? 1 : 0, lat,
-        isClockOutAction ? 1 : 0, lon,
-        isClockOutAction ? 1 : 0, acc,
-        isClockOutAction ? 1 : 0, locName,
-        isClockOutAction ? 1 : 0, lat,
-        isClockOutAction ? 1 : 0, lon,
-        isClockOutAction ? 1 : 0, acc,
-        isClockOutAction ? 1 : 0, locName,
-        isGeoValid,
-        dist,
+        finalClockIn ?? null,
+        finalBreakOut ?? null,
+        finalBreakIn ?? null,
+        finalClockOut ?? null,
+        (existing.status || attData.status || 'Hadir') ?? null,
+        finalSelfie ?? null,
+        clockOutSelfie ?? null,
+        isClockOutAction ? 1 : 0, lat ?? null,
+        isClockOutAction ? 1 : 0, lon ?? null,
+        isClockOutAction ? 1 : 0, acc ?? null,
+        isClockOutAction ? 1 : 0, locName ?? null,
+        isClockOutAction ? 1 : 0, lat ?? null,
+        isClockOutAction ? 1 : 0, lon ?? null,
+        isClockOutAction ? 1 : 0, acc ?? null,
+        isClockOutAction ? 1 : 0, locName ?? null,
+        isGeoValid ?? 1,
+        dist ?? 0,
         attData.deviceFingerprint || null,
-        isFieldDuty,
-        fieldDutyNotes,
-        autoClosed,
+        isFieldDuty ?? 0,
+        fieldDutyNotes ?? null,
+        autoClosed ?? 0,
         existing.id
       );
 
       return {
         ...attData,
         id: existing.id,
+        date: recordDate,
         selfieUrl: finalSelfie,
         staffName,
         divisionId,
@@ -1846,9 +2052,33 @@ export function saveAttendance(attData) {
         isFieldDuty: Boolean(isFieldDuty),
         fieldDutyNotes: fieldDutyNotes || '',
         autoClosed: Boolean(autoClosed),
+        serverTimeLocked: true,
       };
     } else {
       // Buat entri presensi baru
+      // Otoritas Server: Jam Clock-In dikunci langsung ke waktu Server WITA!
+      const finalClockIn = autoClosed ? (attData.clockInTime || serverWita.time) : serverWita.time;
+      const finalClockOut = autoClosed ? (attData.clockOutTime || null) : null;
+
+      // Hitung status Hadir vs Terlambat secara otomatis berdasarkan jam server WITA dan jadwal instansi
+      let finalStatus = attData.status || 'Hadir';
+      if (finalStatus === 'Hadir' && !isFieldDuty && !autoClosed) {
+        try {
+          const settings = getAttendanceSettings();
+          const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+          const dayKey = dayKeys[new Date(serverWita.iso).getDay()];
+          const schedule = settings?.workSchedule?.[dayKey];
+          if (schedule && schedule.enabled && schedule.clockInEnd) {
+            const clockInEndSeconds = schedule.clockInEnd.length === 5 ? `${schedule.clockInEnd}:00` : schedule.clockInEnd;
+            if (finalClockIn > clockInEndSeconds) {
+              finalStatus = 'Terlambat';
+            }
+          }
+        } catch (e) {
+          if (finalClockIn > '08:30:00') finalStatus = 'Terlambat';
+        }
+      }
+
       dbEngine.prepare(
         `INSERT INTO attendance (
           id, staff_id, staff_name, division_id, date, clock_in_time, break_out_time, break_in_time, clock_out_time, status,
@@ -1857,26 +2087,26 @@ export function saveAttendance(attData) {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         id,
-        staffId,
+        staffId ?? null,
         staffName || 'Tenaga Outsourcing',
         divisionId || 'div-umpeg',
         recordDate,
-        attData.clockInTime || null,
-        breakOut,
-        breakIn,
-        attData.clockOutTime || null,
-        attData.status || 'Hadir',
+        finalClockIn,
+        breakOut ?? null,
+        breakIn ?? null,
+        finalClockOut,
+        finalStatus,
         selfieUrl || null,
-        lat,
-        lon,
-        acc,
-        locName,
-        isGeoValid,
-        dist,
+        lat ?? null,
+        lon ?? null,
+        acc ?? null,
+        locName ?? 'Lokasi Terdaftar',
+        isGeoValid ?? 1,
+        dist ?? 0,
         attData.deviceFingerprint || '',
-        isFieldDuty,
-        fieldDutyNotes,
-        autoClosed,
+        isFieldDuty ?? 0,
+        fieldDutyNotes ?? null,
+        autoClosed ?? 0,
         now
       );
 
@@ -1887,6 +2117,9 @@ export function saveAttendance(attData) {
         staffName,
         divisionId,
         date: recordDate,
+        clockInTime: finalClockIn,
+        clockOutTime: finalClockOut,
+        status: finalStatus,
         selfieUrl,
         breakOutTime: breakOut,
         break_out_time: breakOut,
@@ -1895,12 +2128,18 @@ export function saveAttendance(attData) {
         isFieldDuty: Boolean(isFieldDuty),
         fieldDutyNotes: fieldDutyNotes || '',
         autoClosed: Boolean(autoClosed),
+        serverTimeLocked: true,
       };
     }
   } else {
     const existingIdx = fallbackStore.attendance.findIndex(
       (r) => r.staffId === staffId && r.date === recordDate
     );
+    if (existingIdx < 0 && !autoClosed && isRestrictedEarlyWorker && serverWita.time < '07:30:00') {
+      const error = new Error('PRESENSI_DITOLAK_BELUM_WAKTUNYA: Presensi masuk untuk posisi Administrasi Perkantoran dan Driver / Pengemudi baru dibuka mulai pukul 07:30 WITA.');
+      error.statusCode = 422;
+      throw error;
+    }
     if (existingIdx >= 0) {
       fallbackStore.attendance[existingIdx] = {
         ...fallbackStore.attendance[existingIdx],
@@ -2021,9 +2260,10 @@ export function listAttendance(filters = {}) {
 // TUGAS LAPANGAN / FIELD CHECK-INS (MULTI-TITIK PER HARI)
 // ==========================================================
 export function saveFieldCheckin(data) {
+  const serverWita = getServerWitaTime();
   const now = new Date().toISOString();
-  const date = data.date || now.slice(0, 10);
-  const time = data.time || now.slice(11, 19);
+  const date = serverWita.date;
+  const time = serverWita.time;
   const id = data.id || `fld-${data.staffId || 'staff'}-${Date.now()}`;
   const selfieUrl = saveBase64Image(data.selfieUrl, 'attendance');
 
@@ -2287,7 +2527,9 @@ export function approveOvertimeRequest(id, { approved, supervisorNotes }) {
 }
 
 export function startOvertime(id, { clockInTime, selfieUrl, coords }) {
+  const serverWita = getServerWitaTime();
   const now = new Date().toISOString();
+  const actualTime = serverWita.time;
   const savedSelfie = saveBase64Image(selfieUrl, 'attendance');
   const coordsJson = coords ? JSON.stringify(coords) : null;
 
@@ -2300,12 +2542,12 @@ export function startOvertime(id, { clockInTime, selfieUrl, coords }) {
           clock_in_coords = ?,
           updated_at = ?
       WHERE id = ?
-    `).run(clockInTime, savedSelfie, coordsJson, now, id);
+    `).run(actualTime, savedSelfie, coordsJson, now, id);
   } else {
     const req = (fallbackStore.overtime_requests || []).find((o) => o.id === id);
     if (req) {
       req.status = 'IN_PROGRESS';
-      req.clockInTime = clockInTime;
+      req.clockInTime = actualTime;
       req.clockInSelfieUrl = savedSelfie;
       req.clockInCoords = coords;
       req.updatedAt = now;
@@ -2316,7 +2558,9 @@ export function startOvertime(id, { clockInTime, selfieUrl, coords }) {
 }
 
 export function finishOvertime(id, { clockOutTime, selfieUrl, coords, workSummary, durationMinutes }) {
+  const serverWita = getServerWitaTime();
   const now = new Date().toISOString();
+  const actualTime = serverWita.time;
   const savedSelfie = saveBase64Image(selfieUrl, 'reports');
   const coordsJson = coords ? JSON.stringify(coords) : null;
   const duration = Number(durationMinutes) || 60;
@@ -2332,12 +2576,12 @@ export function finishOvertime(id, { clockOutTime, selfieUrl, coords, workSummar
           actual_duration_minutes = ?,
           updated_at = ?
       WHERE id = ?
-    `).run(clockOutTime, savedSelfie, coordsJson, workSummary || '', duration, now, id);
+    `).run(actualTime, savedSelfie, coordsJson, workSummary || '', duration, now, id);
   } else {
     const req = (fallbackStore.overtime_requests || []).find((o) => o.id === id);
     if (req) {
       req.status = 'COMPLETED';
-      req.clockOutTime = clockOutTime;
+      req.clockOutTime = actualTime;
       req.clockOutSelfieUrl = savedSelfie;
       req.clockOutCoords = coords;
       req.workSummary = workSummary || '';
@@ -2476,22 +2720,35 @@ function autoPopulateLeaveAttendance(leave) {
   const now = new Date().toISOString();
   const cur = new Date(leave.startDate);
   const end = new Date(leave.endDate);
-  const statusStr = leave.leaveType === 'SAKIT' ? 'Sakit' : 'Izin';
+  const isDinas = leave.leaveType === 'TUGAS_LUAR' || leave.leaveType === 'DINAS_LUAR';
+  const statusStr = leave.leaveType === 'SAKIT' ? 'Sakit' : isDinas ? 'Dinas Luar' : 'Izin';
+  const locationNameStr = isDinas ? 'Lokasi Penugasan Luar / SPPD Resmi Kedinasan' : 'Lokasi Tempat Tinggal / Faskes (Izin Kedinasan Sah)';
   const labelMap = {
     'SAKIT': 'Izin Sakit (SKD Terverifikasi)',
     'CUTI_TAHUNAN': 'Cuti Tahunan Sah',
     'CUTI_ALASAN_PENTING': 'Cuti Alasan Penting',
     'CUTI_BERSALIN': 'Cuti Melahirkan/Bersalin',
-    'IZIN_KEPERLUAN': 'Izin Keperluan Mendesak'
+    'IZIN_KEPERLUAN': 'Izin Keperluan Mendesak',
+    'TUGAS_LUAR': 'Tugas Luar / Perjalanan Dinas',
+    'DINAS_LUAR': 'Tugas Luar / Perjalanan Dinas'
   };
   const noteText = `[${labelMap[leave.leaveType] || leave.leaveType}] ${leave.reason}`;
+  const attSettings = getAttendanceSettings();
+  const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const isConfiguredDayOff = (dayOfWeek) => {
+    const dayKey = dayKeys[dayOfWeek];
+    if (attSettings && attSettings.workSchedule && attSettings.workSchedule[dayKey] !== undefined) {
+      return !attSettings.workSchedule[dayKey].enabled;
+    }
+    return dayOfWeek === 0 || dayOfWeek === 6;
+  };
 
   while (cur <= end) {
     const dayOfWeek = cur.getDay(); // 0 is Sunday
     const dateStr = cur.toISOString().slice(0, 10);
     
-    // Lewatkan hari Minggu (hari libur umum)
-    if (dayOfWeek !== 0) {
+    // Lewatkan hari libur mingguan (Sabtu / Minggu sesuai pengaturan jadwal kerja)
+    if (!isConfiguredDayOff(dayOfWeek)) {
       if (isNodeSqlite && dbEngine) {
         const existing = dbEngine.prepare('SELECT id, selfie_url FROM attendance WHERE staff_id = ? AND date = ?').get(leave.staffId, dateStr);
         if (existing) {
@@ -2511,7 +2768,7 @@ function autoPopulateLeaveAttendance(leave) {
           `).run(
             attId, leave.staffId, leave.staffName, leave.divisionId, dateStr,
             '08:00:00', '16:30:00', statusStr, leave.attachmentUrl || '',
-            -2.5911226, 115.3789452, 10, 'Lokasi Tempat Tinggal / Faskes (Izin Kedinasan Sah)',
+            -2.5911226, 115.3789452, 10, locationNameStr,
             1, 0, noteText, leave.supervisorName || 'Atasan Langsung', now
           );
         }
@@ -2542,7 +2799,7 @@ function autoPopulateLeaveAttendance(leave) {
               accuracy: 10,
               distanceMeters: 0,
               withinRadius: true,
-              locationName: 'Lokasi Tempat Tinggal / Faskes (Izin Kedinasan Sah)',
+              locationName: locationNameStr,
             },
             notes: noteText,
             verifiedBy: leave.supervisorName || 'Atasan Langsung',
@@ -2643,14 +2900,17 @@ export function createNotification(data) {
   const timestamp = data.timestamp || (now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB');
   const createdAt = data.createdAt || now.toISOString();
   const isRead = data.read ? 1 : 0;
+  const staffName = data.staffName || null;
+  const divisionName = data.divisionName || null;
 
   if (isNodeSqlite && dbEngine) {
     dbEngine.prepare(`
       INSERT INTO notifications (
-        id, user_id, staff_id, title, message, type, is_read, timestamp, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, user_id, staff_id, staff_name, division_name, title, message, type, is_read, timestamp, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, data.userId || null, data.staffId || null,
+      staffName, divisionName,
       data.title, data.message, data.type || 'system',
       isRead, timestamp, createdAt
     );
@@ -2658,6 +2918,7 @@ export function createNotification(data) {
     if (!fallbackStore.notifications) fallbackStore.notifications = [];
     fallbackStore.notifications.unshift({
       id, userId: data.userId || null, staffId: data.staffId || null,
+      staffName, divisionName,
       title: data.title, message: data.message, type: data.type || 'system',
       read: Boolean(data.read), timestamp, createdAt
     });
@@ -2668,6 +2929,8 @@ export function createNotification(data) {
     id,
     userId: data.userId || null,
     staffId: data.staffId || null,
+    staffName,
+    divisionName,
     title: data.title,
     message: data.message,
     type: data.type || 'system',
@@ -2681,30 +2944,40 @@ export function listNotifications(filters = {}) {
   const { userId, role, staffId } = filters;
 
   if (isNodeSqlite && dbEngine) {
-    let query = 'SELECT * FROM notifications WHERE 1=1';
+    let query = `
+      SELECT n.*,
+        COALESCE(n.staff_name, u.name) AS resolved_staff_name,
+        COALESCE(n.division_name, d.name) AS resolved_division_name
+      FROM notifications n
+      LEFT JOIN users u ON (n.staff_id = u.id OR (n.staff_id IS NULL AND n.user_id = u.id))
+      LEFT JOIN divisions d ON u.division_id = d.id
+      WHERE 1=1
+    `;
     const params = [];
 
     if (role === 'admin') {
       // Admin dapat melihat seluruh notifikasi sistem
     } else if (role === 'supervisor') {
       // Supervisor: melihat notifikasi yang ditujukan kepadanya (userId) atau alert persetujuan/geofence
-      query += ' AND (user_id = ? OR user_id IS NULL OR type IN (\'geofence_alert\', \'approval\', \'attendance\'))';
+      query += ' AND (n.user_id = ? OR n.user_id IS NULL OR n.type IN (\'geofence_alert\', \'approval\', \'attendance\'))';
       params.push(userId);
     } else if (role === 'outsourcing') {
       // Staf: melihat notifikasi pribadi miliknya (userId atau staffId)
-      query += ' AND (user_id = ? OR staff_id = ? OR user_id IS NULL)';
+      query += ' AND (n.user_id = ? OR n.staff_id = ? OR n.user_id IS NULL)';
       params.push(userId, staffId || userId);
     } else if (userId) {
-      query += ' AND (user_id = ? OR user_id IS NULL)';
+      query += ' AND (n.user_id = ? OR n.user_id IS NULL)';
       params.push(userId);
     }
 
-    query += ' ORDER BY created_at DESC LIMIT 60';
+    query += ' ORDER BY n.created_at DESC LIMIT 60';
     const rows = dbEngine.prepare(query).all(...params);
     return rows.map((r) => ({
       id: r.id,
       userId: r.user_id,
       staffId: r.staff_id,
+      staffName: r.resolved_staff_name || r.staff_name || null,
+      divisionName: r.resolved_division_name || r.division_name || null,
       title: r.title,
       message: r.message,
       type: r.type,
