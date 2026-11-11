@@ -99,12 +99,14 @@ import {
   apiCreateNotification,
   apiMarkNotificationRead,
   apiMarkAllNotificationsRead,
+  apiFetchServerTime,
 } from './services/api';
 import { playNotificationSound } from './utils/audioNotification';
-import { getTodayDateStr, getCurrentWitaTimeStr, getYesterdayWitaDateStr, getWitaHour } from './utils/date';
+import { getTodayDateStr, getCurrentWitaTimeStr, getYesterdayWitaDateStr, getWitaHour, syncServerTime } from './utils/date';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import { SessionTimeoutModal } from './components/SessionTimeoutModal';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { usePwa } from './context/PwaContext';
 import { ProfileModal } from './components/ProfileModal';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 
@@ -463,6 +465,11 @@ export default function App() {
       }
     });
 
+    // Sinkronisasi Waktu Server NTP (Anti-Tamper Jam HP)
+    apiFetchServerTime()
+      .then((info) => syncServerTime(info.timestamp))
+      .catch((err) => console.warn('[ServerTimeSync warn]', err));
+
     // Poller Notifikasi Real-Time dari Server setiap 12 detik
     const activeUserId = currentUser.id;
     const activeUserRole = currentUser.role;
@@ -559,6 +566,14 @@ export default function App() {
       }
     }
   }, [currentRole, adminTab]);
+
+  // Retrigger PWA install modal di tengah setiap kali user berpindah halaman/tab
+  const { retriggerBanner, isInstalled } = usePwa();
+  useEffect(() => {
+    if (!isInstalled) {
+      retriggerBanner();
+    }
+  }, [mobileTab, adminTab, settingsSubTab, supervisorSubTab]);
 
   // Modals state
   const [printModalOpen, setPrintModalOpen] = useState(false);
@@ -1177,9 +1192,17 @@ export default function App() {
         currentUser?.name || data.staffName,
         currentUser?.roleTitle || 'Tenaga Outsourcing'
       );
+      const leaveLabel =
+        data.leaveType === 'SAKIT'
+          ? 'Izin Sakit'
+          : data.leaveType === 'TUGAS_LUAR' || data.leaveType === 'DINAS_LUAR'
+          ? 'Tugas Luar / Perjalanan Dinas'
+          : data.leaveType === 'CUTI_TAHUNAN'
+          ? 'Cuti Tahunan'
+          : 'Izin / Cuti';
       addNotification(
         'Pengajuan Izin / Cuti Baru',
-        `${data.staffName || 'Staf'} mengajukan ${data.leaveType === 'SAKIT' ? 'Izin Sakit' : 'Izin/Cuti'} (${data.startDate} s/d ${data.endDate}): "${data.reason}".`,
+        `${data.staffName || 'Staf'} mengajukan ${leaveLabel} (${data.startDate} s/d ${data.endDate}): "${data.reason}".`,
         'approval',
         { staffId: data.staffId, userId: data.supervisorId }
       );
@@ -1483,8 +1506,7 @@ export default function App() {
     setAuditLogs((prev) => [newLog, ...prev]);
   };
 
-  // Add notification helper
-  // Add notification helper with Web Audio chime and SQLite sync
+  // Add notification helper with Web Audio chime, staff metadata, and SQLite sync
   const addNotification = (
     title: string,
     message: string,
@@ -1493,6 +1515,9 @@ export default function App() {
   ) => {
     const now = new Date();
     const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+    const targetStaff = meta?.staffId ? staffList.find((u) => u.id === meta.staffId) : currentStaff;
+    const resolvedDivisionName = meta?.divisionName || targetStaff?.division || undefined;
+
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
       timestamp: timeFormatted,
@@ -1500,6 +1525,8 @@ export default function App() {
       message,
       type,
       read: false,
+      staffName: meta?.staffName || targetStaff?.name,
+      divisionName: resolvedDivisionName,
       ...meta,
     };
     setNotifications((prev) => [newNotif, ...prev.filter((n) => n.id !== newNotif.id)]);
@@ -1518,6 +1545,24 @@ export default function App() {
 
     const isFieldDuty = Boolean(locationData.isFieldDuty);
     const fieldDutyNotes = locationData.fieldDutyNotes || undefined;
+
+    // Strict Geofence Enforcement: Tolak presensi di luar radius tanpa surat tugas dinas luar
+    if (!isFieldDuty && locationData.withinRadius === false) {
+      showToast(`Presensi Clock-In Ditolak: Lokasi Anda (${locationData.distanceMeters || 0}m) di luar batas radius aman kantor penugasan.`, 'warning');
+      return;
+    }
+
+    // Jam Masuk Terkunci: Administrasi Perkantoran & Driver baru bisa presensi mulai pukul 07:30 WITA
+    const roleTitleLower = (currentStaff?.roleTitle || '').toLowerCase();
+    const isRestrictedEarlyWorker = roleTitleLower.includes('administrasi perkantoran') ||
+      roleTitleLower.includes('driver') ||
+      roleTitleLower.includes('pengemudi') ||
+      roleTitleLower.includes('supir');
+
+    if (isRestrictedEarlyWorker && timeStr < '07:30:00') {
+      showToast('Presensi Masuk Ditolak: Presensi masuk untuk posisi Administrasi Perkantoran dan Driver baru dibuka mulai pukul 07:30 WITA.', 'warning');
+      return;
+    }
 
     const newRecord: AttendanceRecord = {
       id: `att-${targetStaffId}-${todayDateStr}`,
@@ -1720,6 +1765,12 @@ export default function App() {
     }
   };
   const handleClockOut = (selfieBase64: string, locationData: Partial<AttendanceRecord['locationCoords']>) => {
+    const isFieldDuty = Boolean(locationData?.isFieldDuty);
+    if (!isFieldDuty && locationData && locationData.withinRadius === false) {
+      showToast(`Presensi Clock-Out Ditolak: Lokasi Anda (${locationData.distanceMeters || 0}m) di luar batas radius aman kantor penugasan.`, 'warning');
+      return;
+    }
+
     const timeStr = getCurrentWitaTimeStr();
     const targetStaffId = currentStaff?.id || 'usr-os-default';
     const targetRecord = staffTodayAttendance;
@@ -1896,18 +1947,24 @@ export default function App() {
 
   // Handle Approve Report (Supervisor)
   const handleApproveReport = (reportId: string, notes?: string) => {
-    setDailyReports((prev) =>
-      prev.map((r) => {
-        if (r.id === reportId) {
-          return {
-            ...r,
-            supervisorApproval: 'Disetujui',
-            supervisorNotes: notes,
-          };
-        }
-        return r;
-      })
-    );
+    const updated = dailyReports.map((r) => {
+      if (r.id === reportId) {
+        return {
+          ...r,
+          supervisorApproval: 'Disetujui' as const,
+          supervisorNotes: notes,
+        };
+      }
+      return r;
+    });
+    setDailyReports(updated);
+    try {
+      localStorage.setItem('ot_daily_reports', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to save dailyReports to localStorage:', e);
+    }
+
+    showToast('Laporan staf berhasil diverifikasi dan disetujui.', 'success');
 
     // Background sync to SQLite server
     apiApproveReport(reportId, 'Disetujui', notes).catch((err) =>
@@ -1933,18 +1990,24 @@ export default function App() {
 
   // Handle Request Revision (Supervisor)
   const handleRequestRevisionReport = (reportId: string, notes: string) => {
-    setDailyReports((prev) =>
-      prev.map((r) => {
-        if (r.id === reportId) {
-          return {
-            ...r,
-            supervisorApproval: 'Revisi',
-            supervisorNotes: notes,
-          };
-        }
-        return r;
-      })
-    );
+    const updated = dailyReports.map((r) => {
+      if (r.id === reportId) {
+        return {
+          ...r,
+          supervisorApproval: 'Revisi' as const,
+          supervisorNotes: notes,
+        };
+      }
+      return r;
+    });
+    setDailyReports(updated);
+    try {
+      localStorage.setItem('ot_daily_reports', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to save dailyReports to localStorage:', e);
+    }
+
+    showToast('Permintaan revisi berhasil dikirim ke staf.', 'info');
 
     // Background sync to SQLite server
     apiApproveReport(reportId, 'Revisi', notes).catch((err) =>
@@ -2124,6 +2187,11 @@ export default function App() {
               if ((currentRole === 'supervisor' || currentRole === 'coordinator') && (tab === 'pengaturan-keamanan' || tab === 'audit-log')) {
                 return;
               }
+              if (tab === 'persetujuan-laporan') {
+                setSupervisorSubTab('report-feed');
+              } else if (tab === 'evaluasi-mingguan') {
+                setSupervisorSubTab('eval-form');
+              }
               setAdminTab(tab);
             }}
             currentRole={currentRole}
@@ -2284,6 +2352,10 @@ export default function App() {
                     setSupervisorSubTab('leave-feed');
                     setAdminTab('persetujuan-laporan');
                   }}
+                  onNavigateToReports={() => {
+                    setSupervisorSubTab('report-feed');
+                    setAdminTab('persetujuan-laporan');
+                  }}
                 />
               )}
 
@@ -2407,6 +2479,11 @@ export default function App() {
             if ((currentRole === 'supervisor' || currentRole === 'coordinator') && (tab === 'pengaturan-keamanan' || tab === 'audit-log')) {
               return;
             }
+            if (tab === 'persetujuan-laporan') {
+              setSupervisorSubTab('report-feed');
+            } else if (tab === 'evaluasi-mingguan') {
+              setSupervisorSubTab('eval-form');
+            }
             setAdminTab(tab);
           }
         }}
@@ -2465,6 +2542,7 @@ export default function App() {
         onClose={() => setNotificationDrawerOpen(false)}
         notifications={userNotifications}
         userRole={currentUser?.role}
+        currentUserId={currentUser?.id}
         onMarkAsRead={(id) => {
           setNotifications((prev) =>
             prev.map((n) => (n.id === id ? { ...n, read: true } : n))

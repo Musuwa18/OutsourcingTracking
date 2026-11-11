@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   Search,
   Filter,
@@ -21,7 +21,6 @@ import { AttendanceRecord, StaffProfile, DailyWorkReport, FieldCheckinRecord, Le
 import { exportAttendanceToCSV } from '../utils/export';
 import { getTodayDateStr } from '../utils/date';
 import { DetailRiwayatModal } from '../components/DetailRiwayatModal';
-import { GeofenceBreachAlertBanner } from '../components/GeofenceBreachAlertBanner';
 
 interface AdminAttendanceViewProps {
   currentUser?: AuthUser | null;
@@ -36,6 +35,7 @@ interface AdminAttendanceViewProps {
   onOpenAiChat?: () => void;
   leaveRecords?: LeaveRequest[];
   onNavigateToLeaves?: () => void;
+  onNavigateToReports?: () => void;
 }
 export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   currentUser,
@@ -50,7 +50,9 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   onOpenAiChat,
   leaveRecords = [],
   onNavigateToLeaves,
+  onNavigateToReports,
 }) => {
+  const tableRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDivision, setSelectedDivision] = useState('ALL');
   const [selectedVendorGroup, setSelectedVendorGroup] = useState('ALL');
@@ -112,9 +114,7 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
     if (!staff) return false;
     if (selectedDivision !== 'ALL' && staff.division !== selectedDivision) return false;
     if (selectedVendorGroup !== 'ALL' && staff.vendorName !== selectedVendorGroup) return false;
-    if (selectedStatus === 'BREACH') {
-      if (rec.locationCoords.withinRadius || rec.isFieldDuty) return false;
-    } else if (selectedStatus !== 'ALL' && rec.status !== selectedStatus) {
+    if (selectedStatus !== 'ALL' && rec.status !== selectedStatus) {
       return false;
     }
 
@@ -135,7 +135,6 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   const terlambatCount = dayLogs.filter((r) => r.status === 'Terlambat').length;
   const izinCount = dayLogs.filter((r) => r.status === 'Izin').length;
   const dayReports = dailyReports.filter((r) => r.date === selectedDate && staffMap.has(r.staffId));
-  const dayBreaches = dayLogs.filter((r) => !r.locationCoords.withinRadius && !r.isFieldDuty);
   const handleRowClick = (rec: AttendanceRecord) => {
     const staff = staffMap.get(rec.staffId) || null;
     setSelectedRecord(rec);
@@ -145,6 +144,31 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
   const handleExportCSV = () => {
     const relevantRecords = attendanceRecords.filter((r) => staffMap.has(r.staffId));
     exportAttendanceToCSV(relevantRecords, staffMap);
+  };
+
+  const handleFilterHadir = () => {
+    setSelectedStatus((prev) => (prev === 'Hadir' ? 'ALL' : 'Hadir'));
+    tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleFilterTerlambat = () => {
+    setSelectedStatus((prev) => (prev === 'Terlambat' ? 'ALL' : 'Terlambat'));
+    tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleNavigateIzin = () => {
+    if (onNavigateToLeaves) {
+      onNavigateToLeaves();
+    } else {
+      setSelectedStatus((prev) => (prev === 'Izin' ? 'ALL' : 'Izin'));
+      tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleNavigateReports = () => {
+    if (onNavigateToReports) {
+      onNavigateToReports();
+    }
   };
 
   return (
@@ -206,13 +230,6 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
         </div>
       </div>
 
-      {/* Geofence Breach Alert Banner (Auto-Notification for Supervisor/Admin) */}
-      <GeofenceBreachAlertBanner
-        breachRecords={dayBreaches}
-        staffMap={staffMap}
-        onInspectRecord={handleRowClick}
-      />
-
       {/* Pending Leave Requests Alert Banner for Supervisor/Admin */}
       {pendingLeavesForStaff.length > 0 && (
         <div className="p-4 rounded-2xl bg-teal-500/10 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
@@ -263,58 +280,107 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
         </div>
       )}
 
-      {/* Metric Counters Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-        <div className="p-4 glass-card">
-          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Hadir Tepat Waktu</div>
+      {/* Metric Counters Strip (4 Kolom Interaktif) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div
+          onClick={handleFilterHadir}
+          className={`p-4 glass-card cursor-pointer transition-all duration-200 hover:shadow-md hover:border-emerald-400/60 dark:hover:border-emerald-500/60 group relative overflow-hidden ${
+            selectedStatus === 'Hadir'
+              ? 'ring-2 ring-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'
+              : ''
+          }`}
+          title="Klik untuk memfilter daftar hadir tepat waktu"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+              Hadir Tepat Waktu
+            </span>
+            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 opacity-70 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+              <span>{selectedStatus === 'Hadir' ? 'Reset' : 'Filter'}</span>
+              <span>↓</span>
+            </span>
+          </div>
           <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums">
             {hadirCount} <span className="text-xs font-normal text-slate-400">personel</span>
           </div>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 font-medium">
+            <span>{selectedStatus === 'Hadir' ? '✓ Memfilter tabel hadir' : 'Klik untuk rincian data'}</span>
+          </div>
         </div>
 
-        <div className="p-4 glass-card">
-          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Terlambat Masuk</div>
+        <div
+          onClick={handleFilterTerlambat}
+          className={`p-4 glass-card cursor-pointer transition-all duration-200 hover:shadow-md hover:border-amber-400/60 dark:hover:border-amber-500/60 group relative overflow-hidden ${
+            selectedStatus === 'Terlambat'
+              ? 'ring-2 ring-amber-500 bg-amber-50/40 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'
+              : ''
+          }`}
+          title="Klik untuk memfilter daftar terlambat masuk"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+              Terlambat Masuk
+            </span>
+            <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 opacity-70 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+              <span>{selectedStatus === 'Terlambat' ? 'Reset' : 'Filter'}</span>
+              <span>↓</span>
+            </span>
+          </div>
           <div className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1 tabular-nums">
             {terlambatCount} <span className="text-xs font-normal text-slate-400">personel</span>
           </div>
-        </div>
-
-        <div className="p-4 glass-card">
-          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Izin / Sakit</div>
-          <div className="text-2xl font-bold font-mono text-slate-700 dark:text-slate-300 mt-1 tabular-nums">
-            {izinCount} <span className="text-xs font-normal text-slate-400">personel</span>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 font-medium">
+            <span>{selectedStatus === 'Terlambat' ? '✓ Memfilter tabel terlambat' : 'Klik untuk rincian data'}</span>
           </div>
         </div>
 
-        <div className="p-4 glass-card">
-          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Laporan Tugas Hari Ini</div>
+        <div
+          onClick={handleNavigateIzin}
+          className="p-4 glass-card cursor-pointer transition-all duration-200 hover:shadow-md hover:border-teal-400/60 dark:hover:border-teal-500/60 group relative overflow-hidden"
+          title="Klik untuk membuka verifikasi izin & cuti staf"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+              Izin / Sakit
+            </span>
+            <span className="text-[10px] font-semibold text-teal-600 dark:text-teal-400 opacity-70 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+              <span>Buka Tiket</span>
+              <span>→</span>
+            </span>
+          </div>
+          <div className="text-2xl font-bold font-mono text-teal-600 dark:text-teal-400 mt-1 tabular-nums">
+            {izinCount} <span className="text-xs font-normal text-slate-400">personel</span>
+          </div>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 font-medium">
+            <span>Buka tiket & berkas izin</span>
+          </div>
+        </div>
+
+        <div
+          onClick={handleNavigateReports}
+          className="p-4 glass-card cursor-pointer transition-all duration-200 hover:shadow-md hover:border-indigo-400/60 dark:hover:border-indigo-500/60 group relative overflow-hidden"
+          title="Klik untuk mereview feed laporan tugas harian"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-cyan-400 transition-colors">
+              Laporan Tugas Hari Ini
+            </span>
+            <span className="text-[10px] font-semibold text-indigo-600 dark:text-cyan-400 opacity-70 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+              <span>Review Feed</span>
+              <span>→</span>
+            </span>
+          </div>
           <div className="text-2xl font-bold font-mono text-indigo-600 dark:text-cyan-400 mt-1 tabular-nums">
             {dayReports.length} <span className="text-xs font-normal text-slate-400">terkumpul</span>
           </div>
-        </div>
-
-        {/* Visual Geofence Alert Metric Card */}
-        <div className={`p-4 glass-card transition-colors ${
-          dayBreaches.length > 0
-            ? 'bg-rose-500/10 dark:bg-rose-950/30 border-rose-300 dark:border-rose-900/60'
-            : ''
-        }`}>
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Alert Geofence</span>
-            {dayBreaches.length > 0 && (
-              <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 animate-pulse" />
-            )}
-          </div>
-          <div className={`text-2xl font-bold font-mono mt-1 tabular-nums ${
-            dayBreaches.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'
-          }`}>
-            {dayBreaches.length} <span className="text-xs font-normal opacity-80">di luar radius</span>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 font-medium">
+            <span>Periksa bukti & uraian kerja</span>
           </div>
         </div>
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="p-4 glass-card space-y-3">
+      <div ref={tableRef} className="p-4 glass-card space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           {/* Search Input */}
           <div className="relative">
@@ -371,7 +437,6 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
               className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             >
               <option value="ALL">Semua Status Kehadiran</option>
-              <option value="BREACH">⚠️ Hanya Pelanggaran Geofence (Luar Radius)</option>
               <option value="Hadir">Hadir</option>
               <option value="Terlambat">Terlambat</option>
               <option value="Izin">Izin</option>
