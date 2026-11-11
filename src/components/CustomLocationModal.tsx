@@ -12,6 +12,7 @@ import {
 import { OfficeLocation, StaffProfile } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
 import { apiUpdateStaffLocation } from '../services/api';
+import { parseGoogleMapsCoords } from './VisualMapPicker';
 
 interface CustomLocationModalProps {
   isOpen: boolean;
@@ -237,6 +238,43 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
                   placeholder="Jl. Murakata No. 12, Barabai, HST"
                   className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Titik Koordinat Google Maps (Latitude, Longitude):
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Tempel dari Google Maps, contoh: -2.591159, 115.373525"
+                    onChange={(e) => {
+                      const parsed = parseGoogleMapsCoords(e.target.value);
+                      if (parsed) {
+                        setCustomLat(parsed.lat);
+                        setCustomLng(parsed.lng);
+                      }
+                    }}
+                    className="flex-1 font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const txt = await navigator.clipboard.readText();
+                        const parsed = parseGoogleMapsCoords(txt);
+                        if (parsed) {
+                          setCustomLat(parsed.lat);
+                          setCustomLng(parsed.lng);
+                          onShowToast('Koordinat berhasil ditempel dari clipboard.', 'success');
+                        }
+                      } catch (err) {}
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 cursor-pointer"
+                  >
+                    Tempel
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

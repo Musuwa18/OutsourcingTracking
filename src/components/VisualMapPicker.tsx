@@ -1,5 +1,17 @@
-import React, { useState, useRef } from 'react';
-import { MapPin, Crosshair, ZoomIn, ZoomOut, Compass } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import L from 'leaflet';
+import {
+  MapPin,
+  Crosshair,
+  Copy,
+  ClipboardCheck,
+  ExternalLink,
+  Navigation,
+  Compass,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
+} from 'lucide-react';
 
 interface VisualMapPickerProps {
   latitude: number;
@@ -10,6 +22,33 @@ interface VisualMapPickerProps {
   onChangeRadius: (radius: number) => void;
 }
 
+export function parseGoogleMapsCoords(input: string): { lat: number; lng: number } | null {
+  if (!input || !input.trim()) return null;
+  const clean = input.trim();
+
+  // 1. Check Google Maps URL format: @lat,lng or q=lat,lng
+  const urlMatch =
+    clean.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) ||
+    clean.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (urlMatch) {
+    const lat = parseFloat(urlMatch[1]);
+    const lng = parseFloat(urlMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+  }
+
+  // 2. Standard coordinate string: "-2.591159346853362, 115.37352462956034"
+  // Handles comma, space, semicolon, brackets
+  const matches = clean.match(/(-?\d+(?:\.\d+)?)[,\s;]+(-?\d+(?:\.\d+)?)/);
+  if (matches) {
+    const lat = parseFloat(matches[1]);
+    const lng = parseFloat(matches[2]);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+  return null;
+}
+
 export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
   latitude,
   longitude,
@@ -18,247 +57,374 @@ export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
   onChangeCoordinates,
   onChangeRadius,
 }) => {
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const mapSvgRef = useRef<SVGSVGElement | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const circleRef = useRef<L.Circle | null>(null);
 
-  // Pixel radius mapping based on zoom level and radiusMeters
-  // 1 meter ≈ 0.8 pixels at zoom level 1
-  const circlePixelRadius = Math.max(16, (radiusMeters * 0.75) * zoomLevel);
+  // Unified string coordinate input state
+  const [coordsInput, setCoordsInput] = useState<string>(
+    latitude && longitude ? `${latitude}, ${longitude}` : ''
+  );
+  const [isCopied, setIsCopied] = useState(false);
+  const [isLocatingGps, setIsLocatingGps] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
 
-  const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!mapSvgRef.current) return;
-    const rect = mapSvgRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  // Sync coordsInput when props change externally (e.g. initial load or parent update)
+  useEffect(() => {
+    const parsedCurrent = parseGoogleMapsCoords(coordsInput);
+    if (!parsedCurrent || parsedCurrent.lat !== latitude || parsedCurrent.lng !== longitude) {
+      setCoordsInput(`${latitude}, ${longitude}`);
+    }
+  }, [latitude, longitude]);
 
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
+  // Initialize Leaflet Map
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
 
-    const deltaX = (x - centerX) / (zoomLevel * 3000);
-    const deltaY = (y - centerY) / (zoomLevel * 3000);
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
 
-    // Calculate new lat/lng with sensitive displacement
-    const newLng = Number((longitude + deltaX * 0.005).toFixed(6));
-    const newLat = Number((latitude - deltaY * 0.005).toFixed(6));
+    const initLat = typeof latitude === 'number' && !isNaN(latitude) ? latitude : -2.591159;
+    const initLng = typeof longitude === 'number' && !isNaN(longitude) ? longitude : 115.373525;
 
-    onChangeCoordinates(newLat, newLng);
+    const map = L.map(mapContainerRef.current, {
+      center: [initLat, initLng],
+      zoom: 17,
+      zoomControl: false,
+      attributionControl: false,
+    });
+
+    // High resolution OpenStreetMap layer
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // Geofence Circle
+    const circle = L.circle([initLat, initLng], {
+      radius: radiusMeters,
+      color: '#6366f1',
+      weight: 2,
+      fillColor: '#818cf8',
+      fillOpacity: 0.2,
+      dashArray: '4, 4',
+    }).addTo(map);
+    circleRef.current = circle;
+
+    // Custom Draggable Pin Marker
+    const pinIconHtml = `
+      <div class="relative flex items-center justify-center -translate-x-1/2 -translate-y-full">
+        <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-indigo-700 to-indigo-500 text-white flex items-center justify-center shadow-xl border-2 border-white ring-4 ring-indigo-500/30">
+          <svg class="w-5 h-5 drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+            <circle cx="12" cy="9" r="2.5" fill="white" />
+          </svg>
+        </div>
+        <div class="absolute -bottom-1 w-2.5 h-2.5 bg-indigo-700 rotate-45 border-r border-b border-white"></div>
+      </div>
+    `;
+
+    const customPinIcon = L.divIcon({
+      html: pinIconHtml,
+      className: 'custom-picker-pin',
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
+      popupAnchor: [0, -36],
+    });
+
+    const marker = L.marker([initLat, initLng], {
+      icon: customPinIcon,
+      draggable: true,
+    }).addTo(map);
+
+    marker.bindPopup(
+      `<div class="text-xs p-1 font-sans">
+        <strong class="text-slate-900 block font-bold">${locationName || 'Titik Lokasi'}</strong>
+        <span class="text-indigo-600 block text-[10px] font-mono mt-0.5">Lat: ${initLat.toFixed(6)}, Lng: ${initLng.toFixed(6)}</span>
+        <span class="text-slate-500 block text-[10px]">Radius: ${radiusMeters} meter</span>
+      </div>`
+    );
+
+    // Event: Dragging marker on map
+    marker.on('drag', () => {
+      const pos = marker.getLatLng();
+      circle.setLatLng(pos);
+    });
+
+    marker.on('dragend', () => {
+      const pos = marker.getLatLng();
+      const newLat = Number(pos.lat.toFixed(6));
+      const newLng = Number(pos.lng.toFixed(6));
+      circle.setLatLng([newLat, newLng]);
+      onChangeCoordinates(newLat, newLng);
+      setCoordsInput(`${newLat}, ${newLng}`);
+      setParseError(null);
+    });
+
+    // Event: Click anywhere on map to move marker
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      const newLat = Number(e.latlng.lat.toFixed(6));
+      const newLng = Number(e.latlng.lng.toFixed(6));
+      marker.setLatLng([newLat, newLng]);
+      circle.setLatLng([newLat, newLng]);
+      onChangeCoordinates(newLat, newLng);
+      setCoordsInput(`${newLat}, ${newLng}`);
+      setParseError(null);
+    });
+
+    markerRef.current = marker;
+    mapInstanceRef.current = map;
+
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+
+    return () => {
+      clearTimeout(timer);
+      map.remove();
+      mapInstanceRef.current = null;
+    };
+  }, []);
+
+  // Sync circle radius
+  useEffect(() => {
+    if (circleRef.current) {
+      circleRef.current.setRadius(radiusMeters);
+    }
+  }, [radiusMeters]);
+
+  // Sync map position when coordinates change
+  useEffect(() => {
+    if (mapInstanceRef.current && markerRef.current && circleRef.current) {
+      const currentPos = markerRef.current.getLatLng();
+      if (
+        Math.abs(currentPos.lat - latitude) > 0.000001 ||
+        Math.abs(currentPos.lng - longitude) > 0.000001
+      ) {
+        markerRef.current.setLatLng([latitude, longitude]);
+        circleRef.current.setLatLng([latitude, longitude]);
+        mapInstanceRef.current.flyTo([latitude, longitude], 17, { duration: 0.6 });
+      }
+    }
+  }, [latitude, longitude]);
+
+  // Handle typing or pasting coordinates
+  const handleCoordsInputChange = (val: string) => {
+    setCoordsInput(val);
+    if (!val.trim()) {
+      setParseError('Koordinat belum diisi.');
+      return;
+    }
+    const parsed = parseGoogleMapsCoords(val);
+    if (parsed) {
+      setParseError(null);
+      onChangeCoordinates(parsed.lat, parsed.lng);
+    } else {
+      setParseError('Format koordinat tidak terbaca. Contoh valid: -2.591159, 115.373525');
+    }
   };
 
+  // Paste directly from clipboard
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        handleCoordsInputChange(text);
+      }
+    } catch (err) {
+      // Fallback focus to input for manual paste
+      const inputEl = document.getElementById('unified-coords-input');
+      inputEl?.focus();
+    }
+  };
+
+  // Get current device GPS location
+  const handleUseCurrentGps = () => {
+    if (!navigator.geolocation) {
+      alert('Perangkat Anda tidak mendukung sensor Geolocation.');
+      return;
+    }
+    setIsLocatingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setIsLocatingGps(false);
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        setCoordsInput(`${lat}, ${lng}`);
+        setParseError(null);
+        onChangeCoordinates(lat, lng);
+      },
+      (err) => {
+        setIsLocatingGps(false);
+        alert('Gagal mengambil titik GPS: ' + err.message);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  // Reset to default Kantor Disdik HST
+  const handleResetToDisdik = () => {
+    const lat = -2.591159;
+    const lng = 115.373525;
+    setCoordsInput(`${lat}, ${lng}`);
+    setParseError(null);
+    onChangeCoordinates(lat, lng);
+  };
+
+  const parsedValid = parseGoogleMapsCoords(coordsInput);
+
   return (
-    <div className="space-y-3">
-      {/* Map Canvas Frame */}
-      <div className="relative w-full h-64 bg-slate-950 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-inner select-none">
-        
-        {/* Interactive SVG Vector Map Viewport */}
-        <svg
-          ref={mapSvgRef}
-          onClick={handleSvgClick}
-          className="w-full h-full cursor-crosshair"
-          viewBox="0 0 500 260"
-        >
-          <defs>
-            {/* Base Grid Pattern */}
-            <pattern id="picker-grid" width="28" height="28" patternUnits="userSpaceOnUse">
-              <path d="M 28 0 L 0 0 0 28" fill="none" stroke="#1e293b" strokeWidth="0.8" />
-            </pattern>
-            {/* Diagonal Hatch for geofence safe zone */}
-            <pattern id="geofence-hatch" width="8" height="8" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-              <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(99, 102, 241, 0.4)" strokeWidth="1.5" />
-            </pattern>
-            <radialGradient id="geofence-glow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="rgba(99, 102, 241, 0.28)" />
-              <stop offset="80%" stopColor="rgba(99, 102, 241, 0.12)" />
-              <stop offset="100%" stopColor="rgba(99, 102, 241, 0.02)" />
-            </radialGradient>
-          </defs>
+    <div className="space-y-3.5">
+      {/* 1. UNIFIED GOOGLE MAPS COORDINATE INPUT */}
+      <div className="p-3.5 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/60 space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+          <label
+            htmlFor="unified-coords-input"
+            className="text-[11px] font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 uppercase tracking-wider"
+          >
+            <MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span>Titik Koordinat Google Maps (Latitude, Longitude)</span>
+          </label>
 
-          {/* Background Map Texture */}
-          <rect width="100%" height="100%" fill="#090d16" />
-          <rect width="100%" height="100%" fill="url(#picker-grid)" />
-
-          {/* Simulated Roads & Infrastructure */}
-          <path d="M 0 130 Q 180 110, 500 150" stroke="#1e293b" strokeWidth="18" fill="none" />
-          <path d="M 0 130 Q 180 110, 500 150" stroke="#334155" strokeWidth="8" fill="none" />
-          <path d="M 250 0 L 250 260" stroke="#1e293b" strokeWidth="20" fill="none" />
-          <path d="M 250 0 L 250 260" stroke="#334155" strokeWidth="10" fill="none" />
-
-          {/* Building Blocks */}
-          <rect x="70" y="40" width="80" height="50" rx="4" fill="#141c2e" stroke="#253248" />
-          <rect x="330" y="45" width="90" height="55" rx="4" fill="#141c2e" stroke="#253248" />
-          <rect x="80" y="170" width="75" height="60" rx="4" fill="#141c2e" stroke="#253248" />
-          <rect x="320" y="165" width="110" height="60" rx="4" fill="#141c2e" stroke="#253248" />
-
-          {/* Geofence Transparent Overlay Circle */}
-          <g transform="translate(250, 130)">
-            {/* Glowing fill */}
-            <circle
-              cx="0"
-              cy="0"
-              r={circlePixelRadius}
-              fill="url(#geofence-glow)"
-            />
-            {/* Hatch pattern */}
-            <circle
-              cx="0"
-              cy="0"
-              r={circlePixelRadius}
-              fill="url(#geofence-hatch)"
-            />
-            {/* Perimeter stroke */}
-            <circle
-              cx="0"
-              cy="0"
-              r={circlePixelRadius}
-              fill="none"
-              stroke="#6366f1"
-              strokeWidth="2"
-              strokeDasharray="4 3"
-              className="animate-pulse"
-            />
-            
-            {/* Radius line indicator */}
-            <line
-              x1="0"
-              y1="0"
-              x2={circlePixelRadius}
-              y2="0"
-              stroke="#818cf8"
-              strokeWidth="1.5"
-              strokeDasharray="2 2"
-            />
-            <text
-              x={circlePixelRadius / 2}
-              y="-6"
-              textAnchor="middle"
-              fill="#c7d2fe"
-              fontSize="10"
-              fontFamily="monospace"
-              fontWeight="bold"
+          {/* Quick Action Tools */}
+          <div className="flex items-center gap-1.5 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={handlePasteFromClipboard}
+              className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+              title="Tempel teks koordinat dari clipboard"
             >
-              R: {radiusMeters}m
-            </text>
+              <ClipboardCheck className="w-3 h-3 text-indigo-500" />
+              <span>Tempel (Paste)</span>
+            </button>
 
-            {/* Target Pin Marker (Center) */}
-            <circle cx="0" cy="0" r="14" fill="rgba(99, 102, 241, 0.3)" />
-            <circle cx="0" cy="0" r="5" fill="#4f46e5" stroke="#ffffff" strokeWidth="2" />
-          </g>
-
-          {/* Label Card */}
-          <g transform="translate(250, 100)">
-            <rect
-              x="-90"
-              y="-18"
-              width="180"
-              height="22"
-              rx="6"
-              fill="rgba(15, 23, 42, 0.92)"
-              stroke="#4338ca"
-              strokeWidth="1"
-            />
-            <text
-              x="0"
-              y="-3"
-              textAnchor="middle"
-              fill="#ffffff"
-              fontSize="10"
-              fontFamily="sans-serif"
-              fontWeight="bold"
+            <button
+              type="button"
+              onClick={handleUseCurrentGps}
+              disabled={isLocatingGps}
+              className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-50 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer disabled:opacity-50"
+              title="Ambil titik koordinat GPS saya saat ini"
             >
-              {locationName || 'Titik Tugas Utama'}
-            </text>
-          </g>
-        </svg>
+              <Navigation className={`w-3 h-3 text-emerald-500 ${isLocatingGps ? 'animate-spin' : ''}`} />
+              <span>{isLocatingGps ? 'Mencari...' : 'GPS Saya'}</span>
+            </button>
 
-        {/* Floating Map Controls */}
-        <div className="absolute top-3 right-3 flex flex-col gap-1 bg-slate-900/90 backdrop-blur-xs p-1 rounded-xl border border-slate-700/60 shadow-lg text-slate-300">
-          <button
-            type="button"
-            onClick={() => setZoomLevel((z) => Math.min(2, Number((z + 0.25).toFixed(2))))}
-            className="p-1.5 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-            title="Perbesar Peta"
-            aria-label="Zoom In"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setZoomLevel((z) => Math.max(0.6, Number((z - 0.25).toFixed(2))))}
-            className="p-1.5 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-            title="Perkecil Peta"
-            aria-label="Zoom Out"
-          >
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setZoomLevel(1);
-            }}
-            className="p-1.5 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-            title="Pusatkan Ulang"
-            aria-label="Reset View"
-          >
-            <Crosshair className="w-3.5 h-3.5 text-indigo-400" />
-          </button>
-        </div>
-
-        {/* Floating Instruction Badge */}
-        <div className="absolute bottom-2.5 left-2.5 bg-slate-950/85 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-slate-800 text-[10px] text-slate-300 flex items-center gap-1.5">
-          <Crosshair className="w-3 h-3 text-emerald-400" />
-          <span>Klik di area peta untuk menggeser pin koordinat</span>
-        </div>
-      </div>
-
-      {/* Coordinate & Radius Sliders & Manual Inputs */}
-      <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-3 text-xs">
-        {/* Radius Slider (10 - 200 meters) */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-              <span>Batas Radius Toleransi Geofence:</span>
-              <strong className="font-mono text-indigo-600 dark:text-indigo-400 tabular-nums">
-                {radiusMeters} meter
-              </strong>
-            </label>
-            <span className="text-[10px] text-slate-400">Rentang: 10m - 200m</span>
+            <button
+              type="button"
+              onClick={handleResetToDisdik}
+              className="p-1 text-[10px] rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
+              title="Reset ke Kantor Dinas Pendidikan HST"
+            >
+              <RotateCcw className="w-3 h-3" />
+            </button>
           </div>
+        </div>
+
+        {/* Input box */}
+        <div className="relative">
           <input
-            type="range"
-            min={10}
-            max={200}
-            step={5}
-            value={radiusMeters}
-            onChange={(e) => onChangeRadius(Number(e.target.value))}
-            className="w-full accent-indigo-600 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
+            id="unified-coords-input"
+            type="text"
+            required
+            value={coordsInput}
+            onChange={(e) => handleCoordsInputChange(e.target.value)}
+            placeholder="Tempel dari Google Maps, contoh: -2.591159346853362, 115.37352462956034"
+            className={`w-full px-3.5 py-2 rounded-xl border bg-white dark:bg-slate-900 font-mono text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 shadow-xs transition-colors ${
+              parseError
+                ? 'border-rose-400 focus:ring-rose-500'
+                : 'border-indigo-300 dark:border-indigo-800 focus:ring-indigo-500'
+            }`}
           />
         </div>
 
-        {/* Lat & Long Manual Numeric Inputs */}
-        <div className="grid grid-cols-2 gap-3 pt-1">
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-              Latitude (Garis Lintang)
-            </label>
-            <input
-              type="number"
-              step="0.000001"
-              value={latitude}
-              onChange={(e) => onChangeCoordinates(Number(e.target.value), longitude)}
-              className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono text-slate-900 dark:text-white tabular-nums"
-            />
+        {/* Real-time Status Badge */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] pt-0.5">
+          {parsedValid ? (
+            <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 font-semibold font-mono">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>
+                Lintang (Lat): <strong>{parsedValid.lat}</strong> · Bujur (Lng): <strong>{parsedValid.lng}</strong>
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-medium">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>{parseError || 'Tempelkan titik koordinat Google Maps.'}</span>
+            </div>
+          )}
+
+          {parsedValid && (
+            <a
+              href={`https://www.google.com/maps?q=${parsedValid.lat},${parsedValid.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-semibold text-[10px] shrink-0"
+            >
+              <span>Lihat di Google Maps</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* 2. REAL INTERACTIVE LEAFLET OPENSTREETMAP */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+          <span className="font-semibold flex items-center gap-1.5 text-[11px]">
+            <Compass className="w-3.5 h-3.5 text-indigo-500" />
+            Peta Geofence Nyata (Klik peta atau geser pin untuk atur titik)
+          </span>
+          <span className="text-[10px] text-slate-400">OpenStreetMap Barabai HST</span>
+        </div>
+
+        <div className="relative w-full h-72 rounded-2xl overflow-hidden border border-slate-300 dark:border-slate-700 shadow-inner bg-slate-100 dark:bg-slate-900">
+          <div ref={mapContainerRef} className="w-full h-full z-10" />
+
+          {/* Floating Instructions Pill */}
+          <div className="absolute top-2.5 left-2.5 z-[400] bg-slate-950/85 backdrop-blur-xs px-3 py-1 rounded-xl border border-slate-700/80 text-[10px] text-white flex items-center gap-1.5 shadow-md pointer-events-none">
+            <Crosshair className="w-3 h-3 text-emerald-400 shrink-0" />
+            <span>Klik peta / geser pin untuk sesuaikan titik</span>
           </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-              Longitude (Garis Bujur)
-            </label>
-            <input
-              type="number"
-              step="0.000001"
-              value={longitude}
-              onChange={(e) => onChangeCoordinates(latitude, Number(e.target.value))}
-              className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono text-slate-900 dark:text-white tabular-nums"
-            />
+
+          {/* Radius Badge Overlay */}
+          <div className="absolute bottom-2.5 left-2.5 z-[400] bg-indigo-950/90 backdrop-blur-xs px-3 py-1 rounded-xl border border-indigo-700/80 text-[10px] text-indigo-200 font-mono font-bold shadow-md pointer-events-none">
+            Radius Toleransi: {radiusMeters} meter
           </div>
+        </div>
+      </div>
+
+      {/* 3. GEOFENCE RADIUS SLIDER */}
+      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+        <div className="flex items-center justify-between">
+          <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <span>Batas Radius Toleransi Geofence:</span>
+            <span className="px-2 py-0.5 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-mono font-bold tabular-nums border border-indigo-200 dark:border-indigo-800">
+              {radiusMeters} meter
+            </span>
+          </label>
+          <span className="text-[10px] text-slate-400 font-medium">Rentang: 10m - 200m</span>
+        </div>
+
+        <input
+          type="range"
+          min={10}
+          max={200}
+          step={5}
+          value={radiusMeters}
+          onChange={(e) => onChangeRadius(Number(e.target.value))}
+          className="w-full accent-indigo-600 h-2 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
+        />
+
+        <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+          <span>10m (Sangat Ketat)</span>
+          <span>50m (Standar Kantor)</span>
+          <span>100m (Gedung Luas)</span>
+          <span>200m (Maksimal)</span>
         </div>
       </div>
     </div>

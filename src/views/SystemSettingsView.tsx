@@ -398,9 +398,9 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
   const [locName, setLocName] = useState('');
   const [locAddress, setLocAddress] = useState('');
-  const [locLat, setLocLat] = useState(-6.22384);
-  const [locLng, setLocLng] = useState(106.80892);
-  const [locRadius, setLocRadius] = useState(80);
+  const [locLat, setLocLat] = useState(-2.591159);
+  const [locLng, setLocLng] = useState(115.373525);
+  const [locRadius, setLocRadius] = useState(50);
 
   const [assignmentPolicy, setAssignmentPolicy] = useState(geofenceConfig.assignmentPolicy);
   const [gpsThreshold, setGpsThreshold] = useState(geofenceConfig.gpsAccuracyThreshold);
@@ -750,9 +750,9 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     setEditingLocation(null);
     setLocName('');
     setLocAddress('');
-    setLocLat(-2.5936);
-    setLocLng(115.3812);
-    setLocRadius(80);
+    setLocLat(-2.591159);
+    setLocLng(115.373525);
+    setLocRadius(50);
     setLocModalOpen(true);
   };
 
@@ -1120,7 +1120,19 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   });
 
   const filteredUsers = users.filter((u) => {
-    if (roleFilter !== 'ALL' && u.role !== roleFilter) return false;
+    if (roleFilter !== 'ALL') {
+      const v = (u.vendorName || '').toLowerCase();
+      if (roleFilter === 'cat_pppk') {
+        if (!v.includes('pppk')) return false;
+      } else if (roleFilter === 'cat_magang') {
+        if (!v.includes('magang')) return false;
+      } else if (roleFilter === 'cat_vendor') {
+        if (v.includes('pppk') || v.includes('magang') || v.includes('dinas pendidikan')) return false;
+        if (u.role !== 'outsourcing' && u.role !== 'coordinator') return false;
+      } else {
+        if (u.role !== roleFilter) return false;
+      }
+    }
     if (userSearch.trim()) {
       const q = userSearch.toLowerCase();
       const matchName = u.name.toLowerCase().includes(q);
@@ -1995,13 +2007,20 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-medium text-xs"
               >
-                <option value="ALL">Semua Tingkat Peran</option>
-                <option value="outsourcing">Tenaga Outsourcing</option>
-                <option value="coordinator">Pengawas Lapangan</option>
-                <option value="supervisor">Supervisor Operasional</option>
-                <option value="admin">Super Admin</option>
+                <option value="ALL">🌐 Semua Tingkat Peran & Kategori</option>
+                <optgroup label="📋 Kategori Tenaga Kerja Lapangan">
+                  <option value="cat_vendor">🏢 Tenaga Outsourcing (Vendor Rekanan)</option>
+                  <option value="cat_pppk">🏛️ PPPK Paruh Waktu Disdik HST</option>
+                  <option value="cat_magang">🎓 Siswa / Mahasiswa Magang (PKL)</option>
+                  <option value="outsourcing">👥 Semua Tenaga Kerja (Gabungan)</option>
+                </optgroup>
+                <optgroup label="👔 Manajemen & Pengawasan">
+                  <option value="coordinator">👔 Pengawas Lapangan Mitra</option>
+                  <option value="supervisor">📋 Supervisor Operasional Disdik</option>
+                  <option value="admin">🛡️ Super Administrator Sistem</option>
+                </optgroup>
               </select>
             </div>
           </div>
@@ -2132,11 +2151,41 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                         </div>
                       </td>
 
-                      {/* Vendor Penyedia */}
+                      {/* Vendor Penyedia & Kategori */}
                       <td className="py-3 px-4">
-                        <div className="text-[11px] font-medium text-slate-800 dark:text-slate-200">
-                          {u.vendorName || '-'}
-                        </div>
+                        {u.vendorName?.toLowerCase().includes('pppk') ? (
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-100/80 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800 shadow-2xs">
+                              🏛️ PPPK Paruh Waktu
+                            </span>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                              Disdik HST
+                            </div>
+                          </div>
+                        ) : u.vendorName?.toLowerCase().includes('magang') ? (
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100/80 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-800 shadow-2xs">
+                              🎓 Siswa / Mhs Magang
+                            </span>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                              PKL Disdik HST
+                            </div>
+                          </div>
+                        ) : u.role === 'admin' || u.role === 'supervisor' ? (
+                          <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                            {u.vendorName || 'Dinas Pendidikan Kab. HST'}
+                          </div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                              <span className="text-slate-400">🏢</span>
+                              <span>{u.vendorName || '-'}</span>
+                            </div>
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                              Vendor Rekanan
+                            </span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Status & Device Binding */}
