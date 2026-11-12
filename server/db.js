@@ -107,6 +107,8 @@ if (isNodeSqlite && dbEngine) {
       clock_out_longitude REAL,
       clock_out_accuracy REAL,
       clock_out_location_name TEXT,
+      late_minutes INTEGER DEFAULT 0,
+      early_leave_minutes INTEGER DEFAULT 0,
       created_at TEXT NOT NULL
     );
 
@@ -365,6 +367,52 @@ if (isNodeSqlite && dbEngine) {
   } catch (e) {}
   try {
     dbEngine.exec(`ALTER TABLE attendance ADD COLUMN verified_by TEXT;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN late_minutes INTEGER DEFAULT 0;`);
+  } catch (e) {}
+  try {
+    dbEngine.exec(`ALTER TABLE attendance ADD COLUMN early_leave_minutes INTEGER DEFAULT 0;`);
+  } catch (e) {}
+
+  // Backfill kalkulasi menit terlambat & pulang cepat untuk data presensi yang belum terhitung
+  try {
+    const uncalcLate = dbEngine.prepare(
+      `SELECT id, date, clock_in_time FROM attendance WHERE status = 'Terlambat' AND (late_minutes IS NULL OR late_minutes = 0)`
+    ).all();
+    if (uncalcLate && uncalcLate.length > 0) {
+      const stmtLate = dbEngine.prepare(`UPDATE attendance SET late_minutes = ? WHERE id = ?`);
+      for (const row of uncalcLate) {
+        if (!row.clock_in_time || !row.date) continue;
+        const d = new Date(`${row.date}T12:00:00+08:00`);
+        const isFri = d.getDay() === 5;
+        const deadline = isFri ? '07:30:00' : '08:00:00';
+        const [hIn, mIn] = row.clock_in_time.split(':').map(Number);
+        const [hLim, mLim] = deadline.split(':').map(Number);
+        const diff = (hIn * 60 + mIn) - (hLim * 60 + mLim);
+        if (diff > 0) stmtLate.run(diff, row.id);
+      }
+    }
+  } catch (e) {}
+
+  try {
+    const uncalcEarly = dbEngine.prepare(
+      `SELECT id, date, clock_in_time, clock_out_time FROM attendance WHERE (early_leave_minutes IS NULL OR early_leave_minutes = 0) AND clock_out_time IS NOT NULL AND clock_out_time != '' AND clock_out_time != '-' AND clock_out_time != '23:59:59'`
+    ).all();
+    if (uncalcEarly && uncalcEarly.length > 0) {
+      const stmtEarly = dbEngine.prepare(`UPDATE attendance SET early_leave_minutes = ? WHERE id = ?`);
+      for (const row of uncalcEarly) {
+        if (!row.clock_out_time || !row.date) continue;
+        if (row.clock_in_time && row.clock_in_time >= '18:00') continue;
+        const d = new Date(`${row.date}T12:00:00+08:00`);
+        const isFri = d.getDay() === 5;
+        const officialOut = isFri ? '11:00:00' : '16:30:00';
+        const [hOut, mOut] = row.clock_out_time.split(':').map(Number);
+        const [hExp, mExp] = officialOut.split(':').map(Number);
+        const diff = (hExp * 60 + mExp) - (hOut * 60 + mOut);
+        if (diff > 0) stmtEarly.run(diff, row.id);
+      }
+    }
   } catch (e) {}
 
   // Migrasi aman untuk kolom identitas staf pada notifikasi
@@ -2222,6 +2270,7 @@ export function saveAttendance(attData) {
   }
 
   const roleTitleLower = (user?.role_title || user?.roleTitle || '').toLowerCase();
+  const isNightShiftWorker = roleTitleLower.includes('jaga malam') || roleTitleLower.includes('wakar');
   const isRestrictedEarlyWorker = roleTitleLower.includes('administrasi perkantoran') ||
     roleTitleLower.includes('driver') ||
     roleTitleLower.includes('pengemudi') ||
@@ -2280,21 +2329,27 @@ export function saveAttendance(attData) {
     // Periksa record presensi (prioritas ID, tanggal hari ini, atau shift malam kemarin)
     let existing = null;
     if (attData.id) {
-      existing = dbEngine.prepare('SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url, status FROM attendance WHERE id = ?').get(attData.id);
+      existing = dbEngine.prepare('SELECT id, date, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url, status, late_minutes, early_leave_minutes FROM attendance WHERE id = ?').get(attData.id);
     }
     if (!existing && staffId) {
-      existing = dbEngine.prepare('SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url, status FROM attendance WHERE staff_id = ? AND date = ?').get(staffId, recordDate);
+      existing = dbEngine.prepare('SELECT id, date, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url, status, late_minutes, early_leave_minutes FROM attendance WHERE staff_id = ? AND date = ?').get(staffId, recordDate);
     }
     // Jika presensi pulang (clock-out) tapi belum ada record tanggal ini, kaitkan ke shift malam kemarin
     if (!existing && staffId && attData.clockOutTime && !attData.clockInTime) {
       existing = dbEngine.prepare(
-        "SELECT id, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url, status FROM attendance WHERE staff_id = ? AND date = date(?, '-1 day') AND clock_in_time >= '18:00'"
+        "SELECT id, date, clock_in_time, break_out_time, break_in_time, clock_out_time, selfie_url, status, late_minutes, early_leave_minutes FROM attendance WHERE staff_id = ? AND date = date(?, '-1 day') AND clock_in_time >= '18:00'"
       ).get(staffId, recordDate);
     }
 
-    // Pembatasan Jam Presensi Masuk: Khusus Administrasi Perkantoran & Driver baru dibuka mulai pukul 07:30 WITA
-    if (!existing && !autoClosed && isRestrictedEarlyWorker && serverWita.time < '07:30:00') {
-      const error = new Error('PRESENSI_DITOLAK_BELUM_WAKTUNYA: Presensi masuk untuk posisi Administrasi Perkantoran dan Driver / Pengemudi baru dibuka mulai pukul 07:30 WITA.');
+    // Pembatasan Jam Presensi Masuk PWA:
+    // Jumat buka mulai 07:00 WITA, Senin - Kamis buka mulai 07:30 WITA
+    const dayOfWeekIndex = new Date(`${recordDate}T12:00:00+08:00`).getDay(); // 5 = Friday
+    const isFridayToday = dayOfWeekIndex === 5;
+    const morningOpeningTime = isFridayToday ? '07:00:00' : '07:30:00';
+    const morningOpeningLabel = isFridayToday ? '07:00' : '07:30';
+
+    if (!existing && !autoClosed && !isNightShiftWorker && serverWita.time < morningOpeningTime) {
+      const error = new Error(`PRESENSI_DITOLAK_BELUM_WAKTUNYA: Presensi masuk baru dibuka pukul ${morningOpeningLabel} WITA. Silakan tunggu jam operasional kantor.`);
       error.statusCode = 422;
       throw error;
     }
@@ -2311,6 +2366,47 @@ export function saveAttendance(attData) {
       const finalClockOut = isClockOutAction ? (autoClosed ? (attData.clockOutTime || serverWita.time) : serverWita.time) : existing.clock_out_time;
       // Foto selfie Clock In tidak tertimpa saat Clock Out dilakukan
       const finalSelfie = isClockOutAction ? existing.selfie_url : (selfieUrl || existing.selfie_url);
+
+      // Hitung / pertahankan late_minutes
+      let lateMinutes = existing.late_minutes ?? 0;
+      if (existing.status === 'Terlambat' && lateMinutes === 0 && finalClockIn && !isFieldDuty) {
+        try {
+          const recDateObj = new Date(`${(existing.date || recordDate)}T12:00:00+08:00`);
+          const isFri = recDateObj.getDay() === 5;
+          const deadline = isFri ? '07:30:00' : '08:00:00';
+          const [hIn, mIn] = finalClockIn.split(':').map(Number);
+          const [hLim, mLim] = deadline.split(':').map(Number);
+          const diff = (hIn * 60 + mIn) - (hLim * 60 + mLim);
+          if (diff > 0) lateMinutes = diff;
+        } catch (e) {}
+      }
+
+      // Hitung early_leave_minutes jika aksi Clock Out
+      let earlyLeaveMinutes = existing.early_leave_minutes ?? 0;
+      if (isClockOutAction && !isFieldDuty && !autoClosed && finalClockOut) {
+        try {
+          // Abaikan hitungan jika pekerja piket malam
+          if (!isNightShiftWorker && (!finalClockIn || finalClockIn < '18:00')) {
+            const settings = getAttendanceSettings();
+            const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            const recDateObj = new Date(`${(existing.date || recordDate)}T12:00:00+08:00`);
+            const dayKey = dayKeys[recDateObj.getDay()];
+            const schedule = settings?.workSchedule?.[dayKey];
+            let clockOutStart = schedule?.clockOutStart || (dayKey === 'friday' ? '11:00' : '16:30');
+            const clockOutStartSeconds = clockOutStart.length === 5 ? `${clockOutStart}:00` : clockOutStart;
+            if (finalClockOut < clockOutStartSeconds) {
+              const [hOut, mOut] = finalClockOut.split(':').map(Number);
+              const [hExp, mExp] = clockOutStartSeconds.split(':').map(Number);
+              const diffMins = (hExp * 60 + mExp) - (hOut * 60 + mOut);
+              earlyLeaveMinutes = diffMins > 0 ? diffMins : 0;
+            } else {
+              earlyLeaveMinutes = 0;
+            }
+          }
+        } catch (e) {
+          console.warn('Hitung early_leave_minutes warning:', e);
+        }
+      }
 
       dbEngine.prepare(
         `UPDATE attendance SET
@@ -2334,7 +2430,9 @@ export function saveAttendance(attData) {
           device_fingerprint = COALESCE(?, device_fingerprint),
           is_field_duty = COALESCE(?, is_field_duty),
           field_duty_notes = COALESCE(?, field_duty_notes),
-          auto_closed = COALESCE(?, auto_closed)
+          auto_closed = COALESCE(?, auto_closed),
+          late_minutes = ?,
+          early_leave_minutes = CASE WHEN ? = 1 THEN ? ELSE early_leave_minutes END
         WHERE id = ?`
       ).run(
         finalClockIn ?? null,
@@ -2358,6 +2456,8 @@ export function saveAttendance(attData) {
         isFieldDuty ?? 0,
         fieldDutyNotes ?? null,
         autoClosed ?? 0,
+        lateMinutes ?? 0,
+        isClockOutAction ? 1 : 0, earlyLeaveMinutes ?? 0,
         existing.id
       );
 
@@ -2374,6 +2474,11 @@ export function saveAttendance(attData) {
         breakInTime: finalBreakIn,
         break_in_time: finalBreakIn,
         clockOutTime: finalClockOut,
+        status: existing.status || attData.status || 'Hadir',
+        lateMinutes: lateMinutes ?? 0,
+        late_minutes: lateMinutes ?? 0,
+        earlyLeaveMinutes: earlyLeaveMinutes ?? 0,
+        early_leave_minutes: earlyLeaveMinutes ?? 0,
         isFieldDuty: Boolean(isFieldDuty),
         fieldDutyNotes: fieldDutyNotes || '',
         autoClosed: Boolean(autoClosed),
@@ -2387,20 +2492,33 @@ export function saveAttendance(attData) {
 
       // Hitung status Hadir vs Terlambat secara otomatis berdasarkan jam server WITA dan jadwal instansi
       let finalStatus = attData.status || 'Hadir';
-      if (finalStatus === 'Hadir' && !isFieldDuty && !autoClosed) {
+      let lateMinutes = 0;
+      if (finalStatus === 'Hadir' && !isFieldDuty && !autoClosed && !isNightShiftWorker) {
         try {
           const settings = getAttendanceSettings();
           const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-          const dayKey = dayKeys[new Date(serverWita.iso).getDay()];
+          const recDateObj = new Date(`${recordDate}T12:00:00+08:00`);
+          const dayKey = dayKeys[recDateObj.getDay()];
           const schedule = settings?.workSchedule?.[dayKey];
-          if (schedule && schedule.enabled && schedule.clockInEnd) {
-            const clockInEndSeconds = schedule.clockInEnd.length === 5 ? `${schedule.clockInEnd}:00` : schedule.clockInEnd;
-            if (finalClockIn > clockInEndSeconds) {
-              finalStatus = 'Terlambat';
-            }
+          let clockInEnd = schedule?.clockInEnd || (dayKey === 'friday' ? '07:30' : '08:00');
+          const clockInEndSeconds = clockInEnd.length === 5 ? `${clockInEnd}:00` : clockInEnd;
+          if (finalClockIn > clockInEndSeconds) {
+            finalStatus = 'Terlambat';
+            const [hIn, mIn] = finalClockIn.split(':').map(Number);
+            const [hLim, mLim] = clockInEndSeconds.split(':').map(Number);
+            const diffMins = (hIn * 60 + mIn) - (hLim * 60 + mLim);
+            lateMinutes = diffMins > 0 ? diffMins : 0;
           }
         } catch (e) {
-          if (finalClockIn > '08:30:00') finalStatus = 'Terlambat';
+          const isFri = new Date(`${recordDate}T12:00:00+08:00`).getDay() === 5;
+          const defaultLimit = isFri ? '07:30:00' : '08:00:00';
+          if (finalClockIn > defaultLimit) {
+            finalStatus = 'Terlambat';
+            const [hIn, mIn] = finalClockIn.split(':').map(Number);
+            const [hLim, mLim] = defaultLimit.split(':').map(Number);
+            const diffMins = (hIn * 60 + mIn) - (hLim * 60 + mLim);
+            lateMinutes = diffMins > 0 ? diffMins : 0;
+          }
         }
       }
 
@@ -2408,8 +2526,8 @@ export function saveAttendance(attData) {
         `INSERT INTO attendance (
           id, staff_id, staff_name, division_id, date, clock_in_time, break_out_time, break_in_time, clock_out_time, status,
           selfie_url, latitude, longitude, accuracy, location_name, is_geofence_valid, distance_meters, device_fingerprint,
-          is_field_duty, field_duty_notes, auto_closed, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          is_field_duty, field_duty_notes, auto_closed, late_minutes, early_leave_minutes, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         id,
         staffId ?? null,
@@ -2432,6 +2550,8 @@ export function saveAttendance(attData) {
         isFieldDuty ?? 0,
         fieldDutyNotes ?? null,
         autoClosed ?? 0,
+        lateMinutes,
+        0,
         now
       );
 
@@ -2445,6 +2565,10 @@ export function saveAttendance(attData) {
         clockInTime: finalClockIn,
         clockOutTime: finalClockOut,
         status: finalStatus,
+        lateMinutes,
+        late_minutes: lateMinutes,
+        earlyLeaveMinutes: 0,
+        early_leave_minutes: 0,
         selfieUrl,
         breakOutTime: breakOut,
         break_out_time: breakOut,
@@ -2460,8 +2584,13 @@ export function saveAttendance(attData) {
     const existingIdx = fallbackStore.attendance.findIndex(
       (r) => r.staffId === staffId && r.date === recordDate
     );
-    if (existingIdx < 0 && !autoClosed && isRestrictedEarlyWorker && serverWita.time < '07:30:00') {
-      const error = new Error('PRESENSI_DITOLAK_BELUM_WAKTUNYA: Presensi masuk untuk posisi Administrasi Perkantoran dan Driver / Pengemudi baru dibuka mulai pukul 07:30 WITA.');
+    const dayOfWeekIndex = new Date(`${recordDate}T12:00:00+08:00`).getDay();
+    const isFridayToday = dayOfWeekIndex === 5;
+    const morningOpeningTime = isFridayToday ? '07:00:00' : '07:30:00';
+    const morningOpeningLabel = isFridayToday ? '07:00' : '07:30';
+
+    if (existingIdx < 0 && !autoClosed && !isNightShiftWorker && serverWita.time < morningOpeningTime) {
+      const error = new Error(`PRESENSI_DITOLAK_BELUM_WAKTUNYA: Presensi masuk baru dibuka pukul ${morningOpeningLabel} WITA. Silakan tunggu jam operasional kantor.`);
       error.statusCode = 422;
       throw error;
     }
@@ -2531,6 +2660,10 @@ export function listAttendance(filters = {}) {
       break_in_time: r.break_in_time || null,
       clockOutTime: r.clock_out_time,
       status: r.status,
+      lateMinutes: r.late_minutes ?? 0,
+      late_minutes: r.late_minutes ?? 0,
+      earlyLeaveMinutes: r.early_leave_minutes ?? 0,
+      early_leave_minutes: r.early_leave_minutes ?? 0,
       selfieUrl: r.selfie_url,
       clockOutSelfieUrl: r.clock_out_selfie_url || null,
       clockOutLocationCoords: r.clock_out_latitude ? {
@@ -2573,6 +2706,10 @@ export function listAttendance(filters = {}) {
       })
       .map((r) => ({
         ...r,
+        lateMinutes: r.lateMinutes ?? r.late_minutes ?? 0,
+        late_minutes: r.lateMinutes ?? r.late_minutes ?? 0,
+        earlyLeaveMinutes: r.earlyLeaveMinutes ?? r.early_leave_minutes ?? 0,
+        early_leave_minutes: r.earlyLeaveMinutes ?? r.early_leave_minutes ?? 0,
         breakOutTime: r.breakOutTime || r.break_out_time || null,
         break_out_time: r.break_out_time || r.breakOutTime || null,
         breakInTime: r.breakInTime || r.break_in_time || null,
@@ -3798,8 +3935,8 @@ export const DEFAULT_ATTENDANCE_SETTINGS = {
     monday: {
       enabled: true,
       dayName: 'Senin',
-      clockInStart: '07:00',
-      clockInEnd: '08:30',
+      clockInStart: '07:30',
+      clockInEnd: '08:00',
       clockOutStart: '16:30',
       clockOutEnd: '21:00',
       enableBreak: true,
@@ -3809,8 +3946,8 @@ export const DEFAULT_ATTENDANCE_SETTINGS = {
     tuesday: {
       enabled: true,
       dayName: 'Selasa',
-      clockInStart: '07:00',
-      clockInEnd: '08:30',
+      clockInStart: '07:30',
+      clockInEnd: '08:00',
       clockOutStart: '16:30',
       clockOutEnd: '21:00',
       enableBreak: true,
@@ -3820,8 +3957,8 @@ export const DEFAULT_ATTENDANCE_SETTINGS = {
     wednesday: {
       enabled: true,
       dayName: 'Rabu',
-      clockInStart: '07:00',
-      clockInEnd: '08:30',
+      clockInStart: '07:30',
+      clockInEnd: '08:00',
       clockOutStart: '16:30',
       clockOutEnd: '21:00',
       enableBreak: true,
@@ -3831,8 +3968,8 @@ export const DEFAULT_ATTENDANCE_SETTINGS = {
     thursday: {
       enabled: true,
       dayName: 'Kamis',
-      clockInStart: '07:00',
-      clockInEnd: '08:30',
+      clockInStart: '07:30',
+      clockInEnd: '08:00',
       clockOutStart: '16:30',
       clockOutEnd: '21:00',
       enableBreak: true,
@@ -3843,7 +3980,7 @@ export const DEFAULT_ATTENDANCE_SETTINGS = {
       enabled: true,
       dayName: 'Jumat',
       clockInStart: '07:00',
-      clockInEnd: '08:30',
+      clockInEnd: '07:30',
       clockOutStart: '11:00',
       clockOutEnd: '20:00',
       enableBreak: false,

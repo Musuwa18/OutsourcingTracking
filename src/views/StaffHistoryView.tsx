@@ -169,12 +169,19 @@ export const StaffHistoryView: React.FC<StaffHistoryViewProps> = ({
                         <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                           <span>Presensi Harian</span>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            dayAttendance.status === 'Hadir'
+                            dayAttendance.status === 'Hadir' && !(dayAttendance.lateMinutes || dayAttendance.late_minutes)
                               ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300'
                               : 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300'
                           }`}>
-                            {dayAttendance.status}
+                            {dayAttendance.status === 'Terlambat' || (dayAttendance.lateMinutes || dayAttendance.late_minutes)
+                              ? `Terlambat${(dayAttendance.lateMinutes || dayAttendance.late_minutes) ? ` (+${dayAttendance.lateMinutes || dayAttendance.late_minutes} mnt)` : ''}`
+                              : dayAttendance.status}
                           </span>
+                          {(dayAttendance.earlyLeaveMinutes || dayAttendance.early_leave_minutes) ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
+                              Pulang Cepat (-{dayAttendance.earlyLeaveMinutes || dayAttendance.early_leave_minutes} mnt)
+                            </span>
+                          ) : null}
                         </div>
                         <div className="text-[11px] text-slate-700 dark:text-slate-300 font-mono mt-0.5 font-semibold">
                           Masuk: {dayAttendance.clockInTime} · Pulang: {dayAttendance.clockOutTime || 'Belum'}

@@ -142,6 +142,10 @@ export interface AttendanceRecord {
     locationName: string;
   } | null;
   status: 'Hadir' | 'Terlambat' | 'Izin' | 'Sakit' | 'Alpha';
+  lateMinutes?: number;
+  late_minutes?: number;
+  earlyLeaveMinutes?: number;
+  early_leave_minutes?: number;
   isFieldDuty?: boolean;
   fieldDutyNotes?: string;
   autoClosed?: boolean;
@@ -439,8 +443,8 @@ export const DEFAULT_ATTENDANCE_SETTINGS: AttendanceGlobalSettings = {
     monday: {
       enabled: true,
       dayName: 'Senin',
-      clockInStart: '07:00',
-      clockInEnd: '08:30',
+      clockInStart: '07:30',
+      clockInEnd: '08:00',
       clockOutStart: '16:30',
       clockOutEnd: '21:00',
       enableBreak: true,
@@ -450,8 +454,8 @@ export const DEFAULT_ATTENDANCE_SETTINGS: AttendanceGlobalSettings = {
     tuesday: {
       enabled: true,
       dayName: 'Selasa',
-      clockInStart: '07:00',
-      clockInEnd: '08:30',
+      clockInStart: '07:30',
+      clockInEnd: '08:00',
       clockOutStart: '16:30',
       clockOutEnd: '21:00',
       enableBreak: true,
@@ -461,8 +465,8 @@ export const DEFAULT_ATTENDANCE_SETTINGS: AttendanceGlobalSettings = {
     wednesday: {
       enabled: true,
       dayName: 'Rabu',
-      clockInStart: '07:00',
-      clockInEnd: '08:30',
+      clockInStart: '07:30',
+      clockInEnd: '08:00',
       clockOutStart: '16:30',
       clockOutEnd: '21:00',
       enableBreak: true,
@@ -472,8 +476,8 @@ export const DEFAULT_ATTENDANCE_SETTINGS: AttendanceGlobalSettings = {
     thursday: {
       enabled: true,
       dayName: 'Kamis',
-      clockInStart: '07:00',
-      clockInEnd: '08:30',
+      clockInStart: '07:30',
+      clockInEnd: '08:00',
       clockOutStart: '16:30',
       clockOutEnd: '21:00',
       enableBreak: true,
@@ -484,7 +488,7 @@ export const DEFAULT_ATTENDANCE_SETTINGS: AttendanceGlobalSettings = {
       enabled: true,
       dayName: 'Jumat',
       clockInStart: '07:00',
-      clockInEnd: '08:30',
+      clockInEnd: '07:30',
       clockOutStart: '11:00',
       clockOutEnd: '20:00',
       enableBreak: false,

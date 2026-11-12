@@ -178,14 +178,17 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const isRestrictedEarlyWorker = Boolean(
-    staff?.roleTitle?.toLowerCase().includes('administrasi perkantoran') ||
-    staff?.roleTitle?.toLowerCase().includes('driver') ||
-    staff?.roleTitle?.toLowerCase().includes('pengemudi') ||
-    staff?.roleTitle?.toLowerCase().includes('supir')
-  );
+  const isFriday = todayDayKey === 'friday';
+  const openWindowTime = isNightShiftWorker
+    ? (wakarConfig.clockInStart ? (wakarConfig.clockInStart.length === 5 ? `${wakarConfig.clockInStart}:00` : wakarConfig.clockInStart) : '19:30:00')
+    : (isFriday ? '07:00:00' : '07:30:00');
+  const openWindowLabel = isNightShiftWorker
+    ? `${wakarConfig.clockInStart || '19:30'} WITA`
+    : (isFriday ? '07:00 WITA' : '07:30 WITA');
 
-  const isTooEarlyToClockIn = isRestrictedEarlyWorker && currentWitaTime < '07:30:00';
+  const isTooEarlyToClockIn = isNightShiftWorker
+    ? (currentWitaTime < openWindowTime && currentWitaTime > '12:00:00')
+    : (currentWitaTime < openWindowTime);
 
   // Report modal state
   const [watermarkModalOpen, setWatermarkModalOpen] = useState(false);
@@ -510,7 +513,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
   const handleOpenAttendance = (type: 'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin') => {
     if (type === 'clock-in' && isTooEarlyToClockIn) {
-      alert('Presensi Masuk Belum Dibuka: Presensi masuk untuk posisi Administrasi Perkantoran dan Driver / Pengemudi baru dibuka mulai pukul 07:30 WITA. Silakan tunggu jam operasional kantor.');
+      alert(`Presensi Masuk Belum Dibuka: Presensi masuk baru dibuka pukul ${openWindowLabel}. Silakan tunggu jam operasional kantor.`);
       return;
     }
     setActionType(type);
@@ -527,7 +530,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
     if (actionType === 'clock-in') {
       if (isTooEarlyToClockIn) {
-        alert('Presensi Masuk Belum Dibuka: Presensi masuk untuk posisi Administrasi Perkantoran dan Driver / Pengemudi baru dibuka mulai pukul 07:30 WITA. Silakan tunggu jam operasional kantor.');
+        alert(`Presensi Masuk Belum Dibuka: Presensi masuk baru dibuka pukul ${openWindowLabel}. Silakan tunggu jam operasional kantor.`);
         return;
       }
       onClockIn(selfieBase64, locationData);
@@ -715,7 +718,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               isTooEarlyToClockIn ? (
                 <p className="text-[11px] text-rose-700 dark:text-rose-400 font-bold pt-0.5 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 shrink-0" />
-                  Presensi Masuk khusus posisi Administrasi Perkantoran & Driver baru dibuka mulai pukul 07:30 WITA.
+                  Presensi masuk dibuka pukul {openWindowLabel}.
                 </p>
               ) : (
                 <p className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold pt-0.5">
@@ -883,7 +886,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                     ? 'Piket Malam Aktif'
                     : 'Sudah Clock In'
                   : isTooEarlyToClockIn
-                  ? 'Buka Jam 07:30 WITA'
+                  ? `Buka Jam ${openWindowLabel}`
                   : 'Clock In Masuk'}
               </span>
             </div>
@@ -891,7 +894,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               {hasClockedIn
                 ? `${todayAttendance?.clockInTime} WITA`
                 : isTooEarlyToClockIn
-                ? 'Terkunci (Khusus Admin & Supir)'
+                ? `Dibuka ${openWindowLabel}`
                 : 'Live Selfie + GPS'}
             </span>
           </button>

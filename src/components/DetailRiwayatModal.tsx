@@ -208,19 +208,28 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
                   Tugas Lapangan
                 </span>
               ) : isAttendance && attRecord ? (
-                <span
-                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                    attRecord.status === 'Hadir'
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                      : attRecord.status === 'Terlambat'
-                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                      : attRecord.status === 'Izin'
-                      ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                      : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
-                  }`}
-                >
-                  {attRecord.status}
-                </span>
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                      attRecord.status === 'Hadir' && !(attRecord.lateMinutes || attRecord.late_minutes)
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : attRecord.status === 'Terlambat' || (attRecord.lateMinutes || attRecord.late_minutes)
+                        ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        : attRecord.status === 'Izin'
+                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                        : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                    }`}
+                  >
+                    {attRecord.status === 'Terlambat' || (attRecord.lateMinutes || attRecord.late_minutes)
+                      ? `Terlambat${(attRecord.lateMinutes || attRecord.late_minutes) ? ` (+${attRecord.lateMinutes || attRecord.late_minutes} mnt)` : ''}`
+                      : attRecord.status}
+                  </span>
+                  {(attRecord.earlyLeaveMinutes || attRecord.early_leave_minutes) ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      Pulang Cepat (-{attRecord.earlyLeaveMinutes || attRecord.early_leave_minutes} mnt)
+                    </span>
+                  ) : null}
+                </div>
               ) : isReport && reportRecord ? (
                 <span
                   className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${

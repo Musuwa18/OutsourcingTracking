@@ -38,14 +38,21 @@ export const AttendanceInspectionModal: React.FC<AttendanceInspectionModalProps>
                 Verifikasi Presensi Digital
               </span>
               <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                record.status === 'Hadir'
+                record.status === 'Hadir' && !(record.lateMinutes || record.late_minutes)
                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                  : record.status === 'Terlambat'
+                  : record.status === 'Terlambat' || (record.lateMinutes || record.late_minutes)
                   ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
                   : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
               }`}>
-                {record.status}
+                {record.status === 'Terlambat' || (record.lateMinutes || record.late_minutes)
+                  ? `Terlambat${(record.lateMinutes || record.late_minutes) ? ` (+${record.lateMinutes || record.late_minutes} mnt)` : ''}`
+                  : record.status}
               </span>
+              {(record.earlyLeaveMinutes || record.early_leave_minutes) ? (
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                  Pulang Cepat (-{record.earlyLeaveMinutes || record.early_leave_minutes} mnt)
+                </span>
+              ) : null}
             </div>
             <p className="text-xs text-slate-500">
               {record.date} · {staff.name} ({staff.nip})

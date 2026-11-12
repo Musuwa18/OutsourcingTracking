@@ -549,20 +549,41 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
 
                       {/* Attendance Status Badge */}
                       <td className="py-3 px-4">
-                        <span
-                          className={`text-[10px] font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
-                            rec.status === 'Hadir'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                              : rec.status === 'Terlambat'
-                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-                          }`}
-                        >
-                          {rec.status === 'Hadir' && <CheckCircle2 className="w-3 h-3" />}
-                          {rec.status === 'Terlambat' && <Clock className="w-3 h-3" />}
-                          {rec.status === 'Izin' && <UserX className="w-3 h-3" />}
-                          <span>{rec.status}</span>
-                        </span>
+                        {(() => {
+                          const lateMins = rec.lateMinutes ?? rec.late_minutes ?? 0;
+                          const earlyLeaveMins = rec.earlyLeaveMinutes ?? rec.early_leave_minutes ?? 0;
+                          const isTerlambat = rec.status === 'Terlambat' || lateMins > 0;
+                          const isPulangCepat = earlyLeaveMins > 0;
+
+                          return (
+                            <div className="flex flex-col gap-1 items-start">
+                              <span
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                                  rec.status === 'Hadir' && !isTerlambat
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                    : isTerlambat
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                    : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                }`}
+                              >
+                                {rec.status === 'Hadir' && !isTerlambat && <CheckCircle2 className="w-3 h-3" />}
+                                {isTerlambat && <Clock className="w-3 h-3" />}
+                                {rec.status === 'Izin' && <UserX className="w-3 h-3" />}
+                                <span>
+                                  {isTerlambat
+                                    ? `Terlambat${lateMins > 0 ? ` (+${lateMins} mnt)` : ''}`
+                                    : rec.status}
+                                </span>
+                              </span>
+                              {isPulangCepat && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 bg-amber-50 text-amber-900 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60">
+                                  <Clock className="w-3 h-3" />
+                                  <span>Pulang Cepat (-{earlyLeaveMins} mnt)</span>
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Location & Radius status with visual warning */}

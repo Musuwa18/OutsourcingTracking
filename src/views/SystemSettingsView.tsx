@@ -2550,8 +2550,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 const day = scheduleSettings.workSchedule[key] || {
                   enabled: key !== 'saturday' && key !== 'sunday',
                   dayName: label,
-                  clockInStart: '07:00',
-                  clockInEnd: '08:30',
+                  clockInStart: key === 'friday' ? '07:00' : '07:30',
+                  clockInEnd: key === 'friday' ? '07:30' : '08:00',
                   clockOutStart: key === 'friday' ? '11:00' : '16:30',
                   clockOutEnd: '21:00',
                   enableBreak: key !== 'friday' && key !== 'saturday' && key !== 'sunday',
