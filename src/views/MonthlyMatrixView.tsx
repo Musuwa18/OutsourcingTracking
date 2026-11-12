@@ -80,12 +80,37 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
     return true;
   };
 
+  const isCoordinator = currentUser?.role === 'coordinator';
+  const supervisorAssignedGroup = (currentUser?.supervisedGroups && currentUser.supervisedGroups[0] && currentUser.supervisedGroups[0] !== 'ALL')
+    ? currentUser.supervisedGroups[0]
+    : (currentUser?.vendorName || '');
+
+  const coordinatorCategory: 'vendor' | 'pppk_paruh_waktu' | 'magang' = useMemo(() => {
+    const agLower = supervisorAssignedGroup.toLowerCase().trim();
+    if (agLower.includes('pppk')) return 'pppk_paruh_waktu';
+    if (agLower.includes('magang')) return 'magang';
+    return 'vendor';
+  }, [supervisorAssignedGroup]);
+
+  // Base list of staff for coordinator vs admin/supervisor
+  const scopedStaffList = useMemo(() => {
+    if (!isCoordinator || !supervisorAssignedGroup) return staffList;
+    const agLower = supervisorAssignedGroup.toLowerCase().trim();
+    return staffList.filter((st) => {
+      const vn = (st.vendorName || '').toLowerCase().trim();
+      const rt = (st.roleTitle || '').toLowerCase().trim();
+      if (agLower.includes('pppk')) return vn.includes('pppk') || rt.includes('pppk') || vn.includes('paruh waktu');
+      if (agLower.includes('magang')) return vn.includes('magang') || rt.includes('magang') || vn.includes('siswa') || vn.includes('mahasiswa');
+      return vn === agLower || vn.includes(agLower) || agLower.includes(vn);
+    });
+  }, [staffList, isCoordinator, supervisorAssignedGroup]);
+
   // Jumlah Staf per Kategori untuk Label Dropdown
   const categoryCounts = useMemo(() => {
     let vendor = 0;
     let pppk = 0;
     let magang = 0;
-    staffList.forEach((st) => {
+    scopedStaffList.forEach((st) => {
       const v = ((st.vendorName || '') + ' ' + (st.roleTitle || '')).toLowerCase();
       if (v.includes('pppk') || v.includes('paruh waktu')) {
         pppk++;
@@ -95,14 +120,14 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
         vendor++;
       }
     });
-    return { all: staffList.length, vendor, pppk, magang };
-  }, [staffList]);
+    return { all: scopedStaffList.length, vendor, pppk, magang };
+  }, [scopedStaffList]);
 
   // Filter Staf berdasarkan Kategori dan Search Query
   const filteredStaffList = useMemo(() => {
-    return staffList.filter((st) => {
-      // Filter Kategori
-      if (!matchCategory(st, selectedCategory)) {
+    return scopedStaffList.filter((st) => {
+      // Filter Kategori (hanya untuk admin / non-coordinator)
+      if (!isCoordinator && !matchCategory(st, selectedCategory)) {
         return false;
       }
       // Filter Search
@@ -117,7 +142,7 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
       }
       return true;
     });
-  }, [staffList, selectedCategory, searchQuery]);
+  }, [scopedStaffList, isCoordinator, selectedCategory, searchQuery]);
 
   // Lookup Absensi untuk Bulan Terpilih
   const attLookup = useMemo(() => {
@@ -125,7 +150,7 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
     attendanceRecords.forEach((att) => {
       if (att.date && att.date.startsWith(selectedMonth)) {
         map.set(`${att.staffId}_${att.date}`, att);
-        if (att.staffNip) map.set(`${att.staffNip}_${att.date}`, att);
+        if ((att as any).staffNip) map.set(`${(att as any).staffNip}_${att.date}`, att);
       }
     });
     return map;
@@ -135,8 +160,8 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
   const otLookup = useMemo(() => {
     const map = new Map<string, number>();
     overtimeRecords.forEach((ot) => {
-      if (ot.date && ot.date.startsWith(selectedMonth) && ot.status === 'Disetujui') {
-        const hrs = ot.durationHours || ot.estimatedHours || 0;
+      if (ot.date && ot.date.startsWith(selectedMonth) && (ot.status === 'COMPLETED' || (ot.status as any) === 'Disetujui')) {
+        const hrs = (ot as any).durationHours || ot.estimatedHours || 0;
         const key = `${ot.staffId}_${ot.date}`;
         map.set(key, (map.get(key) || 0) + hrs);
       }
@@ -148,7 +173,7 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
   const leaveLookup = useMemo(() => {
     const map = new Map<string, LeaveRequest>();
     leaveRecords.forEach((l) => {
-      if (l.status === 'Disetujui') {
+      if (l.status === 'APPROVED' || (l.status as any) === 'Disetujui') {
         let cur = new Date(l.startDate);
         const end = new Date(l.endDate);
         while (cur <= end) {
@@ -276,14 +301,15 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
     return (totalPcts / matrixData.length).toFixed(1) + '%';
   }, [matrixData]);
 
-  const categoryLabel =
-    selectedCategory === 'vendor'
-      ? `Vendor Swasta (${filteredStaffList.length} Personel)`
-      : selectedCategory === 'pppk_paruh_waktu'
-      ? `PPPK Paruh Waktu Disdik HST (${filteredStaffList.length} Personel)`
-      : selectedCategory === 'magang'
-      ? `Siswa / Mahasiswa Magang (${filteredStaffList.length} Personel)`
-      : `Seluruh Kelompok (${staffList.length} Personel)`;
+  const categoryLabel = isCoordinator
+    ? `${supervisorAssignedGroup} (${filteredStaffList.length} Personel)`
+    : selectedCategory === 'vendor'
+    ? `Vendor Swasta (${filteredStaffList.length} Personel)`
+    : selectedCategory === 'pppk_paruh_waktu'
+    ? `PPPK Paruh Waktu Disdik HST (${filteredStaffList.length} Personel)`
+    : selectedCategory === 'magang'
+    ? `Siswa / Mahasiswa Magang (${filteredStaffList.length} Personel)`
+    : `Seluruh Kelompok (${scopedStaffList.length} Personel)`;
 
   return (
     <div className="space-y-6 print:bg-white print:p-0">
@@ -306,7 +332,7 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Tombol Ekspor Excel (.xlsx) */}
           <a
-            href={`/api/reports/rekap-presensi/excel?month=${selectedMonth}&category=${selectedCategory}`}
+            href={`/api/reports/rekap-presensi/excel?month=${selectedMonth}&category=${isCoordinator ? coordinatorCategory : selectedCategory}&vendor=${isCoordinator ? encodeURIComponent(supervisorAssignedGroup) : ''}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
@@ -400,18 +426,28 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
           </div>
 
           {/* Filter Kategori / Kelompok Pegawai */}
-          <div className="w-full lg:w-64">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value as 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang')}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer transition-all"
-            >
-              <option value="ALL">Semua Kelompok ({categoryCounts.all})</option>
-              <option value="vendor">🏢 Vendor Swasta ({categoryCounts.vendor})</option>
-              <option value="pppk_paruh_waktu">🏛️ PPPK Paruh Waktu Disdik ({categoryCounts.pppk})</option>
-              <option value="magang">🎓 Siswa / Mahasiswa Magang ({categoryCounts.magang})</option>
-            </select>
-          </div>
+          {isCoordinator ? (
+            <div className="w-full lg:w-auto flex items-center gap-2 px-3.5 py-2 bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold text-indigo-700 dark:text-indigo-300">
+              <Building2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span>Area Supervisi: {supervisorAssignedGroup}</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-200/60 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200 font-semibold">
+                {filteredStaffList.length} Personel
+              </span>
+            </div>
+          ) : (
+            <div className="w-full lg:w-64">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value as 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang')}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer transition-all"
+              >
+                <option value="ALL">Semua Kelompok ({categoryCounts.all})</option>
+                <option value="vendor">🏢 Vendor Swasta ({categoryCounts.vendor})</option>
+                <option value="pppk_paruh_waktu">🏛️ PPPK Paruh Waktu Disdik ({categoryCounts.pppk})</option>
+                <option value="magang">🎓 Siswa / Mahasiswa Magang ({categoryCounts.magang})</option>
+              </select>
+            </div>
+          )}
 
           {/* Filter Periode Bulan */}
           <div className="w-full lg:w-48">
@@ -485,7 +521,7 @@ export const MonthlyMatrixView: React.FC<MonthlyMatrixViewProps> = ({
               {institutionSettings.namaPemda} &mdash; {institutionSettings.namaSkpd}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Matriks Presensi 1 - 31 ({selectedMonthName} {selectedYear}) &bull; Menampilkan {matrixData.length} dari {staffList.length} Staf
+              Matriks Presensi 1 - 31 ({selectedMonthName} {selectedYear}) &bull; Menampilkan {matrixData.length} dari {scopedStaffList.length} Staf
             </p>
           </div>
           <div className="flex items-center space-x-2 text-xs font-mono text-slate-500 dark:text-slate-400">

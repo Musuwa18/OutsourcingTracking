@@ -1057,11 +1057,49 @@ app.delete('/api/offices/:id', (req, res) => {
   }
 });
 
+function getCoordinatorStaffScope(req) {
+  const requestingUserId = req.headers['x-user-id'] || req.query.userId;
+  if (!requestingUserId) return null;
+  const reqUser = getUserById(requestingUserId);
+  if (!reqUser || reqUser.role !== 'coordinator') return null;
+
+  const targetGroup = (reqUser.supervisedGroups && reqUser.supervisedGroups[0] && reqUser.supervisedGroups[0] !== 'ALL')
+    ? reqUser.supervisedGroups[0]
+    : (reqUser.vendorName || '');
+
+  if (!targetGroup) return { isCoordinator: true, targetGroup: '', staffIdSet: new Set() };
+
+  const tgLower = targetGroup.toLowerCase().trim();
+  const allStaff = listUsersByDivision('div-all');
+  const staffIdSet = new Set();
+  for (const u of allStaff) {
+    const vn = (u.vendorName || '').toLowerCase().trim();
+    const rt = (u.roleTitle || '').toLowerCase().trim();
+    let matches = false;
+    if (tgLower.includes('pppk')) {
+      matches = vn.includes('pppk') || rt.includes('pppk') || vn.includes('paruh waktu');
+    } else if (tgLower.includes('magang')) {
+      matches = vn.includes('magang') || rt.includes('magang') || vn.includes('siswa') || vn.includes('mahasiswa');
+    } else {
+      matches = vn === tgLower || vn.includes(tgLower) || tgLower.includes(vn);
+    }
+    if (matches) {
+      staffIdSet.add(u.id);
+      if (u.nip) staffIdSet.add(u.nip);
+    }
+  }
+  return { isCoordinator: true, targetGroup, staffIdSet };
+}
+
 // 8. Users / Staff by Division
 app.get('/api/staff', (req, res) => {
   try {
     const divisionId = req.query.divisionId;
-    const users = listUsersByDivision(divisionId);
+    let users = listUsersByDivision(divisionId);
+    const scope = getCoordinatorStaffScope(req);
+    if (scope && scope.isCoordinator) {
+      users = users.filter((u) => scope.staffIdSet.has(u.id));
+    }
     res.json({ success: true, staff: users });
   } catch (err) {
     res.status(500).json({ error: 'Gagal memuat data staf.' });
@@ -1108,7 +1146,11 @@ app.get('/api/attendance', (req, res) => {
     if (todayDateStr) {
       autoClosePreviousDayAttendance(todayDateStr);
     }
-    const records = listAttendance({ staffId, divisionId, date });
+    let records = listAttendance({ staffId, divisionId, date });
+    const scope = getCoordinatorStaffScope(req);
+    if (scope && scope.isCoordinator) {
+      records = records.filter((r) => scope.staffIdSet.has(r.staffId) || (r.staffNip && scope.staffIdSet.has(r.staffNip)));
+    }
     res.json({ success: true, attendance: records });
   } catch (err) {
     res.status(500).json({ error: 'Gagal memuat riwayat presensi.' });
@@ -1329,7 +1371,11 @@ app.post('/api/overtime/request', (req, res) => {
 app.get('/api/overtime', (req, res) => {
   try {
     const { staffId, supervisorId, date, status } = req.query;
-    const list = listOvertimeRequests({ staffId, supervisorId, date, status });
+    let list = listOvertimeRequests({ staffId, supervisorId, date, status });
+    const scope = getCoordinatorStaffScope(req);
+    if (scope && scope.isCoordinator) {
+      list = list.filter((ot) => scope.staffIdSet.has(ot.staffId));
+    }
     res.json({ success: true, overtime: list });
   } catch (err) {
     res.status(500).json({ error: 'Gagal memuat daftar tugas lembur.' });
@@ -1429,7 +1475,11 @@ app.post('/api/leave/request', (req, res) => {
 app.get('/api/leave', (req, res) => {
   try {
     const { staffId, supervisorId, date, status, leaveType } = req.query;
-    const list = listLeaveRequests({ staffId, supervisorId, date, status, leaveType });
+    let list = listLeaveRequests({ staffId, supervisorId, date, status, leaveType });
+    const scope = getCoordinatorStaffScope(req);
+    if (scope && scope.isCoordinator) {
+      list = list.filter((l) => scope.staffIdSet.has(l.staffId));
+    }
     res.json({ success: true, leaves: list });
   } catch (err) {
     console.error('[API Error] List Leaves:', err);
@@ -1548,14 +1598,24 @@ app.get('/api/reports/rekap-presensi/excel', async (req, res) => {
   try {
     const { month, staffId, vendor, category } = req.query;
     const monthStr = month || new Date().toISOString().slice(0, 7);
+    const scope = getCoordinatorStaffScope(req);
+    let effectiveVendor = vendor || null;
+    let effectiveCategory = category || null;
+    if (scope && scope.isCoordinator && scope.targetGroup) {
+      effectiveVendor = scope.targetGroup;
+      const tgLower = scope.targetGroup.toLowerCase();
+      if (tgLower.includes('pppk')) effectiveCategory = 'pppk_paruh_waktu';
+      else if (tgLower.includes('magang')) effectiveCategory = 'magang';
+      else effectiveCategory = 'vendor';
+    }
     const { generateRekapPresensiWorkbook } = await import('./server/excelReport.js');
     const xlsxModule = await import('xlsx');
     const XLSX = xlsxModule.default || xlsxModule;
     const wb = generateRekapPresensiWorkbook({
       monthStr,
       targetStaffId: staffId || null,
-      vendorFilter: vendor || null,
-      categoryFilter: category || null
+      vendorFilter: effectiveVendor,
+      categoryFilter: effectiveCategory
     });
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -1571,7 +1631,11 @@ app.get('/api/reports/rekap-presensi/excel', async (req, res) => {
 app.get('/api/reports', (req, res) => {
   try {
     const { staffId, divisionId } = req.query;
-    const reports = listDailyReports({ staffId, divisionId });
+    let reports = listDailyReports({ staffId, divisionId });
+    const scope = getCoordinatorStaffScope(req);
+    if (scope && scope.isCoordinator) {
+      reports = reports.filter((rep) => scope.staffIdSet.has(rep.staffId));
+    }
     res.json({ success: true, reports });
   } catch (err) {
     res.status(500).json({ error: 'Gagal memuat laporan kerja.' });
@@ -1614,7 +1678,11 @@ app.patch('/api/reports/:id', (req, res) => {
 app.get('/api/evaluations', (req, res) => {
   try {
     const { staffId, divisionId } = req.query;
-    const evals = listEvaluations({ staffId, divisionId });
+    let evals = listEvaluations({ staffId, divisionId });
+    const scope = getCoordinatorStaffScope(req);
+    if (scope && scope.isCoordinator) {
+      evals = evals.filter((ev) => scope.staffIdSet.has(ev.staffId));
+    }
     res.json({ success: true, evaluations: evals });
   } catch (err) {
     res.status(500).json({ error: 'Gagal memuat data evaluasi mingguan.' });

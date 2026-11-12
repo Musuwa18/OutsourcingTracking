@@ -1190,6 +1190,8 @@ export function createUser(userData) {
     supervisedGroups = Array.isArray(userData.supervisedGroups) ? userData.supervisedGroups : [userData.supervisedGroups];
   } else if (userData.supervisedVendor) {
     supervisedGroups = [userData.supervisedVendor];
+  } else if (userData.role === 'coordinator' && userData.vendorName) {
+    supervisedGroups = [userData.vendorName];
   }
   const supervisedGroupsJson = supervisedGroups.length > 0 ? JSON.stringify(supervisedGroups) : null;
 
@@ -1746,6 +1748,10 @@ export function approveUserAssignmentChange(userId) {
   if (user.pendingVendor) {
     updates.push('vendor_name = ?');
     values.push(user.pendingVendor);
+    if (user.role === 'coordinator') {
+      updates.push('supervised_groups = ?');
+      values.push(JSON.stringify([user.pendingVendor]));
+    }
   }
   if (user.pendingLocationId) {
     let locData = null;
@@ -1783,7 +1789,12 @@ export function approveUserAssignmentChange(userId) {
     const u = fallbackStore.users.find((x) => x.id === userId);
     if (u) {
       if (user.pendingJobRole) u.roleTitle = user.pendingJobRole;
-      if (user.pendingVendor) u.vendorName = user.pendingVendor;
+      if (user.pendingVendor) {
+        u.vendorName = user.pendingVendor;
+        if (user.role === 'coordinator') {
+          u.supervisedGroups = [user.pendingVendor];
+        }
+      }
       if (user.pendingLocationId) {
         const loc = DEFAULT_OFFICES.find((l) => l.id === user.pendingLocationId);
         if (loc) {
@@ -2170,10 +2181,15 @@ export function updateUserProfile(userId, profileData) {
         ? (Array.isArray(profileData.supervisedGroups) ? JSON.stringify(profileData.supervisedGroups) : JSON.stringify([profileData.supervisedGroups]))
         : null;
       values.push(val);
-    }
-    if (profileData.supervisedVendor !== undefined && profileData.supervisedGroups === undefined) {
+    } else if (profileData.supervisedVendor !== undefined) {
       updates.push('supervised_groups = ?');
       values.push(profileData.supervisedVendor ? JSON.stringify([profileData.supervisedVendor]) : null);
+    } else if (profileData.vendorName) {
+      const existingUser = getUserById(userId);
+      if (existingUser && (existingUser.role === 'coordinator' || profileData.role === 'coordinator')) {
+        updates.push('supervised_groups = ?');
+        values.push(JSON.stringify([profileData.vendorName]));
+      }
     }
     if (updates.length > 0) {
       values.push(userId);

@@ -34,18 +34,22 @@ export function generateRekapPresensiWorkbook({ monthStr = '2026-10', targetStaf
 
   // Ambil seluruh staf alih daya aktif
   let allUsers = listAllUsers().filter((u) => u.role === 'outsourcing');
-  if (categoryFilter && categoryFilter !== 'ALL') {
+  if (vendorFilter && vendorFilter !== 'ALL') {
+    const vfLower = vendorFilter.toLowerCase().trim();
+    allUsers = allUsers.filter((u) => {
+      const vn = (u.vendorName || u.vendor_name || '').toLowerCase().trim();
+      const rt = (u.roleTitle || u.role_title || '').toLowerCase().trim();
+      if (vfLower.includes('pppk')) return vn.includes('pppk') || rt.includes('pppk') || vn.includes('paruh waktu');
+      if (vfLower.includes('magang')) return vn.includes('magang') || rt.includes('magang') || vn.includes('siswa') || vn.includes('mahasiswa');
+      return vn === vfLower || vn.includes(vfLower) || vfLower.includes(vn);
+    });
+  } else if (categoryFilter && categoryFilter !== 'ALL') {
     allUsers = allUsers.filter((u) => {
       const v = (((u.vendorName || u.vendor_name || '') + ' ' + (u.roleTitle || u.role_title || ''))).toUpperCase();
       if (categoryFilter === 'pppk_paruh_waktu') return v.includes('PPPK') || v.includes('PARUH WAKTU');
       if (categoryFilter === 'magang') return v.includes('MAGANG') || v.includes('SISWA') || v.includes('MAHASISWA');
       return !v.includes('PPPK') && !v.includes('PARUH WAKTU') && !v.includes('MAGANG') && !v.includes('SISWA') && !v.includes('MAHASISWA');
     });
-  } else if (vendorFilter && vendorFilter !== 'ALL') {
-    allUsers = allUsers.filter((u) => u.vendorName === vendorFilter);
-  }
-  if (allUsers.length === 0) {
-    allUsers = listAllUsers().filter((u) => u.role === 'outsourcing');
   }
 
   // Ambil rekaman kehadiran, lembur, dan izin pada bulan terkait

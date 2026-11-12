@@ -269,7 +269,7 @@ export default function App() {
             name: u.name,
             email: u.email,
             phone: u.phone || '',
-            division: u.divisionName,
+            division: u.divisionName || 'Dinas Pendidikan',
             vendorName: u.vendorName || 'PT. YASMINE BUIH PERSADA',
             roleTitle: u.roleTitle,
             assignedLocation: customLoc || PRIMARY_OFFICES[0],
@@ -1328,15 +1328,24 @@ export default function App() {
     }
   }, [currentStaff?.id]);
 
-  // Filtered staff list for Supervisor (strictly shows staff who selected them as supervisor or mapped by admin)
+  // Filtered staff list for Supervisor & Coordinator (strictly isolated to supervised group)
   const filteredStaffList = useMemo<StaffProfile[]>(() => {
     if (currentUser?.role === 'coordinator') {
-      const groups = currentUser.supervisedGroups || (currentUser.vendorName ? [currentUser.vendorName] : []);
-      if (groups.includes('ALL') || groups.includes('Semua') || groups.length === 0) {
-        return staffList;
+      const assignedGroup = (currentUser.supervisedGroups && currentUser.supervisedGroups[0] && currentUser.supervisedGroups[0] !== 'ALL')
+        ? currentUser.supervisedGroups[0]
+        : (currentUser.vendorName || '');
+
+      if (!assignedGroup) {
+        return [];
       }
+
+      const agLower = assignedGroup.toLowerCase().trim();
       return staffList.filter((s) => {
-        return groups.some((g) => g.trim().toLowerCase() === s.vendorName?.trim().toLowerCase());
+        const vn = (s.vendorName || '').toLowerCase().trim();
+        const rt = (s.roleTitle || '').toLowerCase().trim();
+        if (agLower.includes('pppk')) return vn.includes('pppk') || rt.includes('pppk') || vn.includes('paruh waktu');
+        if (agLower.includes('magang')) return vn.includes('magang') || rt.includes('magang') || vn.includes('siswa') || vn.includes('mahasiswa');
+        return vn === agLower || vn.includes(agLower) || agLower.includes(vn);
       });
     }
 
@@ -2372,8 +2381,9 @@ export default function App() {
                   currentUser={currentUser}
                   attendanceSettings={attendanceSettings}
                   onSelectStaff={(staff) => {
-                    setSelectedStaffForModal(staff);
-                    setIsStaffModalOpen(true);
+                    setPrintModalStaffId(staff.id);
+                    setPrintModalMode('timesheet-harian');
+                    setPrintModalOpen(true);
                   }}
                 />
               )}

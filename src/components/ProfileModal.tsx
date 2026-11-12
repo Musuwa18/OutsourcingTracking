@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   ShieldCheck,
@@ -108,6 +108,27 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   const changeCount = currentUser.supervisorChangeCount ?? 0;
   const isPending = currentUser.supervisorRequestStatus === 'PENDING';
+
+  const allVendors = useMemo<Vendor[]>(() => {
+    const rawList: Vendor[] = (vendors && vendors.length > 0) ? vendors : [
+      { id: 'ven-1793854918283', name: 'PT. YASMINE BUIH PERSADA', code: 'YASMINE', category: 'vendor', status: 'Aktif' },
+      { id: 'ven-004', name: 'PPPK Paruh Waktu Disdik HST', code: 'PPPK-PW', category: 'pppk_paruh_waktu', status: 'Aktif' },
+      { id: 'ven-005', name: 'Siswa / Mahasiswa Magang Disdik HST', code: 'MAGANG-HST', category: 'magang', status: 'Aktif' },
+    ];
+    const list = rawList.filter(
+      (v: Vendor) => !v.name.includes('Handil Bakti') && !v.name.includes('Murakata Sarana Mandiri')
+    );
+    if (!list.some((v: Vendor) => v.name.toUpperCase().includes('YASMINE'))) {
+      list.unshift({
+        id: 'ven-1793854918283',
+        name: 'PT. YASMINE BUIH PERSADA',
+        code: 'YASMINE',
+        category: 'vendor',
+        status: 'Aktif',
+      });
+    }
+    return list;
+  }, [vendors]);
   const currentSupervisor = supervisors.find((s) => s.id === currentUser.supervisorId);
   const pendingSupervisor = supervisors.find((s) => s.id === currentUser.pendingSupervisorId);
   const selectedSupervisor = supervisors.find((s) => s.id === selectedSupervisorId);
@@ -527,33 +548,71 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   )}
                 </div>
 
-                {/* 4. Perusahaan Penyedia Jasa (Vendor) */}
+                {/* 4. Perusahaan Penyedia Jasa (Vendor) / Kelompok yang Diawasi */}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Perusahaan Penyedia Jasa (Vendor)
+                    {currentUser.role === 'coordinator'
+                      ? 'Kelompok / Mitra yang Diawasi *'
+                      : 'Perusahaan Penyedia Jasa (Vendor)'}
                   </label>
                   <select
                     value={selectedVendor}
                     onChange={(e) => setSelectedVendor(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-900 dark:text-white cursor-pointer"
                   >
-                    <option value="">-- Pilih Mitra Vendor / Kelompok --</option>
-                    {vendors.map((v) => (
-                      <option key={v.id || v.name} value={v.name}>
-                        {v.name}
-                      </option>
-                    ))}
-                    {!vendors.some((v) => v.name === currentUser.vendorName) && currentUser.vendorName && (
+                    <option value="">
+                      {currentUser.role === 'coordinator'
+                        ? '-- Pilih Kelompok yang Diawasi --'
+                        : '-- Pilih Mitra Vendor / Kelompok --'}
+                    </option>
+                    {allVendors.filter((v) => !v.category || v.category === 'vendor').length > 0 && (
+                      <optgroup label="🏢 Perusahaan Vendor Rekanan">
+                        {allVendors
+                          .filter((v) => !v.category || v.category === 'vendor')
+                          .map((v) => (
+                            <option key={v.id || v.name} value={v.name}>
+                              {v.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                    {allVendors.filter((v) => v.category === 'pppk_paruh_waktu').length > 0 && (
+                      <optgroup label="🏛️ Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)">
+                        {allVendors
+                          .filter((v) => v.category === 'pppk_paruh_waktu')
+                          .map((v) => (
+                            <option key={v.id || v.name} value={v.name}>
+                              {v.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                    {allVendors.filter((v) => v.category === 'magang').length > 0 && (
+                      <optgroup label="🎓 Siswa / Mahasiswa Magang">
+                        {allVendors
+                          .filter((v) => v.category === 'magang')
+                          .map((v) => (
+                            <option key={v.id || v.name} value={v.name}>
+                              {v.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                    {!allVendors.some((v) => v.name === currentUser.vendorName) && currentUser.vendorName && (
                       <option value={currentUser.vendorName}>{currentUser.vendorName}</option>
                     )}
                   </select>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 italic">
-                    * S & K: Perubahan memerlukan persetujuan Superadmin.
+                    {currentUser.role === 'coordinator'
+                      ? '* S & K: Perubahan kelompok yang diawasi memerlukan persetujuan Superadmin.'
+                      : '* S & K: Perubahan memerlukan persetujuan Superadmin.'}
                   </p>
                   {currentUser.adminRequestStatus === 'PENDING' && currentUser.pendingVendor && (
                     <div className="mt-1.5 flex items-center gap-1.5 p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-medium text-[11px]">
                       <Clock className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-                      <span>Pengajuan vendor ({currentUser.pendingVendor}) sedang menunggu verifikasi Superadmin</span>
+                      <span>
+                        Pengajuan {currentUser.role === 'coordinator' ? 'kelompok binaan' : 'vendor'} ({currentUser.pendingVendor}) sedang menunggu verifikasi Superadmin
+                      </span>
                     </div>
                   )}
                 </div>

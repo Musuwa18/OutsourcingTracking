@@ -138,16 +138,34 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
     return staffList[0]?.id || '';
   }, [initialStaffId, isStaffUser, currentUser, staffList]);
 
+  const isCoordinator = currentUser?.role === 'coordinator';
+  const coordinatorGroup = (currentUser?.supervisedGroups && currentUser.supervisedGroups[0] && currentUser.supervisedGroups[0] !== 'ALL')
+    ? currentUser.supervisedGroups[0]
+    : (currentUser?.vendorName || '');
+
+  const coordinatorCategory: 'vendor' | 'pppk_paruh_waktu' | 'magang' = useMemo(() => {
+    const cg = coordinatorGroup.toLowerCase();
+    if (cg.includes('pppk')) return 'pppk_paruh_waktu';
+    if (cg.includes('magang')) return 'magang';
+    return 'vendor';
+  }, [coordinatorGroup]);
+
   const [printMode, setPrintMode] = useState<
     'rekap-matriks' | 'timesheet-harian' | 'rekap-divisi' | 'rapor-staf' | 'sptl-lembur' | 'surat-izin'
   >(initialPrintMode || (isStaffUser ? 'timesheet-harian' : 'rekap-matriks'));
   const [selectedStaffId, setSelectedStaffId] = useState<string>(defaultStaffId);
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-10');
-  const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang'>(initialCategory || 'ALL');
+  const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang'>(
+    isCoordinator ? coordinatorCategory : (initialCategory || 'ALL')
+  );
 
   React.useEffect(() => {
     if (isOpen) {
-      if (initialCategory) setSelectedCategory(initialCategory);
+      if (isCoordinator) {
+        setSelectedCategory(coordinatorCategory);
+      } else if (initialCategory) {
+        setSelectedCategory(initialCategory);
+      }
       if (initialPrintMode) {
         setPrintMode(initialPrintMode);
       } else if (isStaffUser) {
@@ -160,8 +178,18 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
         if (match) setSelectedStaffId(match.id);
       }
     }
-  }, [isOpen, initialCategory, initialPrintMode, initialStaffId, isStaffUser, currentUser, staffList]);
+  }, [isOpen, initialCategory, initialPrintMode, initialStaffId, isStaffUser, currentUser, staffList, isCoordinator, coordinatorCategory]);
   const displayedStaffList = useMemo(() => {
+    if (isCoordinator && coordinatorGroup) {
+      const cgLower = coordinatorGroup.toLowerCase().trim();
+      return staffList.filter((st) => {
+        const vn = (st.vendorName || '').toLowerCase().trim();
+        const rt = (st.roleTitle || '').toLowerCase().trim();
+        if (cgLower.includes('pppk')) return vn.includes('pppk') || rt.includes('pppk') || vn.includes('paruh waktu');
+        if (cgLower.includes('magang')) return vn.includes('magang') || rt.includes('magang') || vn.includes('siswa') || vn.includes('mahasiswa');
+        return vn === cgLower || vn.includes(cgLower) || cgLower.includes(vn);
+      });
+    }
     if (selectedCategory === 'ALL') return staffList;
     return staffList.filter((st) => {
       const v = (st.vendorName || '').toUpperCase();
@@ -169,7 +197,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
       if (selectedCategory === 'magang') return v.includes('MAGANG');
       return !v.includes('PPPK') && !v.includes('MAGANG');
     });
-  }, [staffList, selectedCategory]);
+  }, [staffList, selectedCategory, isCoordinator, coordinatorGroup]);
 
   const [yearNum, monthNum] = useMemo(() => {
     const parts = (selectedMonth || '2026-10').split('-').map(Number);
@@ -688,14 +716,15 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
   const orientation: 'portrait' | 'landscape' =
     printMode === 'rekap-matriks' ? 'landscape' : 'portrait';
 
-  const categoryLabel =
-    selectedCategory === 'vendor'
-      ? 'Tenaga Alih Daya (Vendor Swasta - PT. YASMINE BUIH PERSADA)'
-      : selectedCategory === 'pppk_paruh_waktu'
-      ? 'Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)'
-      : selectedCategory === 'magang'
-      ? 'Siswa / Mahasiswa Magang (PKL)'
-      : 'Seluruh Pegawai Alih Daya, PPPK & Magang';
+  const categoryLabel = isCoordinator
+    ? coordinatorGroup
+    : selectedCategory === 'vendor'
+    ? 'Tenaga Alih Daya (Vendor Swasta - PT. YASMINE BUIH PERSADA)'
+    : selectedCategory === 'pppk_paruh_waktu'
+    ? 'Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)'
+    : selectedCategory === 'magang'
+    ? 'Siswa / Mahasiswa Magang (PKL)'
+    : 'Seluruh Pegawai Alih Daya, PPPK & Magang';
 
   const docTitle =
     printMode === 'rekap-matriks'
@@ -841,18 +870,24 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
               )}
             </div>
 
-            {/* Filter Kelompok / Kategori Pegawai (Hanya untuk Admin / Pimpinan) */}
+            {/* Filter Kelompok / Kategori Pegawai (Hanya untuk Admin / Pimpinan / Pengawas) */}
             {!isStaffUser && (
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value as 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang')}
-                className="px-2.5 py-1.5 text-xs rounded-xl border border-slate-700 bg-slate-800 text-white font-medium cursor-pointer"
-              >
-                <option value="ALL">Semua Kelompok ({staffList.length})</option>
-                <option value="vendor">🏢 Vendor Swasta</option>
-                <option value="pppk_paruh_waktu">🏛️ PPPK Paruh Waktu</option>
-                <option value="magang">🎓 Siswa Magang</option>
-              </select>
+              isCoordinator ? (
+                <span className="px-2.5 py-1.5 text-xs rounded-xl bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30">
+                  Area: {coordinatorGroup}
+                </span>
+              ) : (
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value as 'ALL' | 'vendor' | 'pppk_paruh_waktu' | 'magang')}
+                  className="px-2.5 py-1.5 text-xs rounded-xl border border-slate-700 bg-slate-800 text-white font-medium cursor-pointer"
+                >
+                  <option value="ALL">Semua Kelompok ({staffList.length})</option>
+                  <option value="vendor">🏢 Vendor Swasta</option>
+                  <option value="pppk_paruh_waktu">🏛️ PPPK Paruh Waktu</option>
+                  <option value="magang">🎓 Siswa Magang</option>
+                </select>
+              )
             )}
 
             {/* Selector Bulan */}
@@ -910,8 +945,8 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           onClose={onClose}
           extraActions={
             <a
-              href={`/api/reports/rekap-presensi/excel?month=${selectedMonth}&staffId=${selectedStaff?.id || ''}&category=${selectedCategory}`}
-              download={`rekap_presensi_${selectedCategory}_${selectedMonth}.xlsx`}
+              href={`/api/reports/rekap-presensi/excel?month=${selectedMonth}&staffId=${selectedStaff?.id || ''}&category=${isCoordinator ? coordinatorCategory : selectedCategory}&vendor=${isCoordinator ? encodeURIComponent(coordinatorGroup) : ''}`}
+              download={`rekap_presensi_${isCoordinator ? coordinatorCategory : selectedCategory}_${selectedMonth}.xlsx`}
               className="inline-flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
               title="Unduh Berkas Excel (.xlsx) 2 Sheet Asli Berformula COUNTIF & SUM"
             >
@@ -1516,7 +1551,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-300 text-[10px] space-y-1 mb-4">
                     <strong className="text-slate-900 block uppercase font-bold text-[10px]">Catatan Evaluasi Atasan & Rekomendasi Kontrak:</strong>
                     <p className="text-slate-700 leading-relaxed italic">
-                      "{latestEval?.qualitativeNotes || staffMonthlyAgg?.contractRecommendation || 'Kinerja staf dinilai memenuhi standar operasional kedinasan dengan tingkat kedisiplinan yang baik.'}"
+                      "{latestEval?.qualitativeFeedback || (latestEval as any)?.qualitativeNotes || staffMonthlyAgg?.contractRecommendation || 'Kinerja staf dinilai memenuhi standar operasional kedinasan dengan tingkat kedisiplinan yang baik.'}"
                     </p>
                   </div>
 
@@ -1583,7 +1618,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                             {inst.namaSkpd}
                           </h4>
                           <p className="text-[8px] text-slate-600">
-                            {inst.alamat} · Pos-el: {inst.email}
+                            {(inst as any).alamat || (inst as any).alamatSkpd || 'Kabupaten Hulu Sungai Tengah'} · Pos-el: {inst.email}
                           </p>
                         </div>
                       </div>

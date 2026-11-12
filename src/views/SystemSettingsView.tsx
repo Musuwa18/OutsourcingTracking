@@ -384,6 +384,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const [editUserVendorName, setEditUserVendorName] = useState('');
   const [editUserRoleTitle, setEditUserRoleTitle] = useState('');
   const [editUserRole, setEditUserRole] = useState<'outsourcing' | 'coordinator' | 'supervisor' | 'admin'>('outsourcing');
+  const [editUserSupervisedGroup, setEditUserSupervisedGroup] = useState('');
   const [editUserStatus, setEditUserStatus] = useState<'Aktif' | 'Nonaktif'>('Aktif');
   const [isSavingUserEdit, setIsSavingUserEdit] = useState(false);
 
@@ -418,7 +419,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const [newUserRole, setNewUserRole] = useState<UserRole>('outsourcing');
   const [newUserRoleTitle, setNewUserRoleTitle] = useState('');
   const [newUserVendorName, setNewUserVendorName] = useState('');
-  const [newUserSupervisedGroup, setNewUserSupervisedGroup] = useState('ALL');
+  const [newUserSupervisedGroup, setNewUserSupervisedGroup] = useState('');
   // ================= TAB: RBAC LOCAL STATE =================
   const [localPermissions, setLocalPermissions] = useState<Record<string, RolePermissions>>(rolePermissions);
 
@@ -434,8 +435,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   );
 
 
-  const allVendors = useMemo(() => {
-    const rawList = (vendors && vendors.length > 0) ? vendors : [
+  const allVendors = useMemo<Vendor[]>(() => {
+    const rawList: Vendor[] = (vendors && vendors.length > 0) ? vendors : [
       { id: 'ven-1793854918283', name: 'PT. YASMINE BUIH PERSADA', code: 'YASMINE', category: 'vendor', status: 'Aktif' },
       { id: 'ven-004', name: 'PPPK Paruh Waktu Disdik HST', code: 'PPPK-PW', category: 'pppk_paruh_waktu', status: 'Aktif' },
       { id: 'ven-005', name: 'Siswa / Mahasiswa Magang Disdik HST', code: 'MAGANG-HST', category: 'magang', status: 'Aktif' },
@@ -690,7 +691,12 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     setTargetUserForEdit(user);
     setEditUserDivisionId(user.divisionId || '');
     setEditUserSupervisorId(user.supervisorId || '');
-    setEditUserVendorName(user.vendorName || (vendors[0]?.name || ''));
+    const defaultVen = vendors[0]?.name || '';
+    setEditUserVendorName(user.vendorName || defaultVen);
+    const initialGroup = (user.supervisedGroups && user.supervisedGroups[0] && user.supervisedGroups[0] !== 'ALL')
+      ? user.supervisedGroups[0]
+      : (user.vendorName || defaultVen);
+    setEditUserSupervisedGroup(initialGroup);
     setEditUserRoleTitle(user.roleTitle || '');
     setEditUserRole(user.role);
     setEditUserStatus(user.status === 'Nonaktif' ? 'Nonaktif' : 'Aktif');
@@ -703,11 +709,16 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     setIsSavingUserEdit(true);
     try {
       const selectedDiv = divisions.find((d) => d.id === editUserDivisionId);
+      const isCoord = editUserRole === 'coordinator';
+      const finalVendor = isCoord ? (editUserSupervisedGroup || editUserVendorName) : editUserVendorName;
+      const finalSupervisedGroups = isCoord ? [finalVendor] : undefined;
+
       const res = await apiUpdateUserProfile(targetUserForEdit.id, {
         divisionId: editUserDivisionId,
         divisionName: selectedDiv?.name || targetUserForEdit.divisionName,
         supervisorId: editUserSupervisorId,
-        vendorName: editUserVendorName,
+        vendorName: finalVendor,
+        supervisedGroups: finalSupervisedGroups,
         roleTitle: editUserRoleTitle.trim() || targetUserForEdit.roleTitle,
         role: editUserRole,
         status: editUserStatus,
@@ -723,7 +734,8 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               supervisorId: editUserSupervisorId,
               pendingSupervisorId: null,
               supervisorRequestStatus: 'APPROVED' as const,
-              vendorName: editUserVendorName,
+              vendorName: finalVendor,
+              supervisedGroups: finalSupervisedGroups || u.supervisedGroups,
               roleTitle: editUserRoleTitle.trim() || u.roleTitle,
               role: editUserRole,
               status: editUserStatus,
@@ -865,7 +877,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
   const handleConfigureStaffLocation = (u: UserAccount) => {
     const existingStaff = staffList.find((s) => s.id === u.id || s.nip === u.nip || s.email === u.email);
-    const activeLoc = u.customLocation || u.assignedLocation || existingStaff?.assignedLocation || locations[0] || PRIMARY_OFFICES[0];
+    const activeLoc = u.customLocation || u.assignedLocation || existingStaff?.assignedLocation || locations[0];
     const activeNote = u.workspaceNote || existingStaff?.workspaceNote || '';
 
     const targetStaff: StaffProfile = {
@@ -958,13 +970,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     setIsCreatingUser(true);
     try {
       const selectedDiv = divisions[0];
-      const defaultVendor = vendors[0]?.name || 'PT Handil Bakti Utama (Mitra Disdik HST)';
+      const defaultVendor = allVendors[0]?.name || vendors[0]?.name || 'PT. YASMINE BUIH PERSADA';
       const targetVendor = newUserRole === 'coordinator'
-        ? (newUserVendorName.trim() || defaultVendor)
+        ? (newUserSupervisedGroup && newUserSupervisedGroup !== 'ALL' ? newUserSupervisedGroup : (newUserVendorName.trim() || defaultVendor))
         : (newUserVendorName.trim() || defaultVendor);
 
       const targetSupervisedGroups = newUserRole === 'coordinator'
-        ? (newUserSupervisedGroup === 'ALL' ? ['ALL'] : [newUserSupervisedGroup])
+        ? [targetVendor]
         : [targetVendor];
 
       const created = await apiCreateUser({
@@ -3847,19 +3859,56 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Perusahaan Penyedia (Vendor)
+                    {editUserRole === 'coordinator' ? 'Kelompok / Mitra yang Diawasi *' : 'Perusahaan Penyedia (Vendor)'}
                   </label>
                   <select
-                    value={editUserVendorName}
-                    onChange={(e) => setEditUserVendorName(e.target.value)}
+                    value={editUserRole === 'coordinator' ? editUserSupervisedGroup : editUserVendorName}
+                    onChange={(e) => {
+                      if (editUserRole === 'coordinator') {
+                        setEditUserSupervisedGroup(e.target.value);
+                        setEditUserVendorName(e.target.value);
+                      } else {
+                        setEditUserVendorName(e.target.value);
+                      }
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
                   >
-                    <option value="">-- Pilih Vendor Rekanan --</option>
-                    {vendors.map((v) => (
-                      <option key={v.id} value={v.name}>
-                        {v.name}
-                      </option>
-                    ))}
+                    <option value="">
+                      {editUserRole === 'coordinator' ? '-- Pilih Kelompok Binaan --' : '-- Pilih Vendor Rekanan --'}
+                    </option>
+                    {allVendors.filter((v) => !v.category || v.category === 'vendor').length > 0 && (
+                      <optgroup label="🏢 Perusahaan Vendor Rekanan">
+                        {allVendors
+                          .filter((v) => !v.category || v.category === 'vendor')
+                          .map((v) => (
+                            <option key={v.id || v.name} value={v.name}>
+                              {v.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                    {allVendors.filter((v) => v.category === 'pppk_paruh_waktu').length > 0 && (
+                      <optgroup label="🏛️ Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)">
+                        {allVendors
+                          .filter((v) => v.category === 'pppk_paruh_waktu')
+                          .map((v) => (
+                            <option key={v.id || v.name} value={v.name}>
+                              {v.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                    {allVendors.filter((v) => v.category === 'magang').length > 0 && (
+                      <optgroup label="🎓 Siswa / Mahasiswa Magang">
+                        {allVendors
+                          .filter((v) => v.category === 'magang')
+                          .map((v) => (
+                            <option key={v.id || v.name} value={v.name}>
+                              {v.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
 
@@ -4150,8 +4199,10 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                     onChange={(e) => {
                       const nextRole = e.target.value as UserRole;
                       setNewUserRole(nextRole);
-                      if (nextRole === 'coordinator' && !newUserVendorName) {
-                        setNewUserVendorName(vendors[0]?.name || '');
+                      if (nextRole === 'coordinator') {
+                        const defaultGrp = allVendors[0]?.name || vendors[0]?.name || 'PT. YASMINE BUIH PERSADA';
+                        setNewUserSupervisedGroup(defaultGrp);
+                        setNewUserVendorName(defaultGrp);
                       }
                     }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
@@ -4231,7 +4282,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                       }}
                       className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
                     >
-                      <option value="ALL">-- Semua Kelompok Pegawai (Lintas Vendor) --</option>
+                      <option value="">-- Pilih Kelompok Pegawai yang Diawasi --</option>
                       {allVendors.filter((v) => !v.category || v.category === 'vendor').length > 0 && (
                         <optgroup label="🏢 Perusahaan Vendor Rekanan">
                           {allVendors

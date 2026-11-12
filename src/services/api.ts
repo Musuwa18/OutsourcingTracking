@@ -11,8 +11,18 @@ function getAuthHeaders(userId?: string): HeadersInit {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
-  if (userId) {
-    headers['x-user-id'] = userId;
+  let uid = userId;
+  if (!uid && typeof window !== 'undefined') {
+    try {
+      const sess = localStorage.getItem('ot_session_user');
+      if (sess) {
+        const u = JSON.parse(sess);
+        uid = u.id;
+      }
+    } catch {}
+  }
+  if (uid) {
+    headers['x-user-id'] = uid;
   }
   return headers;
 }
@@ -1109,7 +1119,7 @@ export async function apiBiometricLoginOptions(usernameOrEmail?: string): Promis
   return { options: data.options, challengeKey: data.challengeKey };
 }
 
-export async function apiBiometricLoginVerify(response: any, challengeKey?: string, deviceId?: string, hardwareFingerprint?: string): Promise<AuthResponse> {
+export async function apiBiometricLoginVerify(response: any, challengeKey?: string, deviceId?: string, hardwareFingerprint?: string): Promise<{ token: string; user: AuthUser }> {
   const hwFp = hardwareFingerprint || deviceId || getDeviceFingerprint();
   const res = await fetch(`${API_BASE}/auth/biometric/login-verify`, {
     method: 'POST',

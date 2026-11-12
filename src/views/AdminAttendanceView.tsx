@@ -410,24 +410,26 @@ export const AdminAttendanceView: React.FC<AdminAttendanceViewProps> = ({
           </div>
 
           {/* Vendor / Kelompok Filter */}
-          <div>
-            <select
-              value={selectedVendorGroup}
-              onChange={(e) => setSelectedVendorGroup(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-            >
-              <option value="ALL">
-                {isCoordinator && !supervisedGroups.includes('ALL') && supervisedGroups.length > 0
-                  ? 'Semua Kelompok Binaan'
-                  : 'Semua Kelompok / Vendor'}
-              </option>
-              {availableVendorNames.map((vName) => (
-                <option key={vName} value={vName}>
-                  {vName}
-                </option>
-              ))}
-            </select>
-          </div>
+          {isCoordinator ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold">
+              <span>Supervisi: {supervisedGroups[0] || currentUser?.vendorName}</span>
+            </div>
+          ) : (
+            <div>
+              <select
+                value={selectedVendorGroup}
+                onChange={(e) => setSelectedVendorGroup(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="ALL">Semua Kelompok / Vendor</option>
+                {availableVendorNames.map((vName) => (
+                  <option key={vName} value={vName}>
+                    {vName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Status Filter */}
           <div>
