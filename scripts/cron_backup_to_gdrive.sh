@@ -74,13 +74,17 @@ if os.path.exists(db_path) and os.path.getsize(db_path) > 0:
     print("   [OK] Dump SQL berhasil dibuat.")
 PYEOF
 
-# 3. Kompresi Arsip Lengkap (Database + Uploads Foto + Env)
-log ">> [3/6] Mengompresi berkas cadangan (Database + Foto Uploads)..."
-tar -czf "$ARCHIVE_PATH" \
+# 3. Kompresi Arsip Lengkap (Aplikasi + Database Snapshot + Uploads + Env)
+log ">> [3/6] Mengompresi berkas cadangan aplikasi dan data lengkap..."
+tar --warning=no-file-changed -czf "$ARCHIVE_PATH" \
+  --exclude="node_modules" \
+  --exclude="dist" \
+  --exclude=".git" \
+  --exclude="data" \
+  --exclude="*.tar.gz" \
   -C "$STAGE_DIR" outsource_track_snapshot.db $(ls "$STAGE_DIR" | grep -E '\.sql$' || true) \
-  -C "$APP_DIR" --ignore-failed-read uploads .env 2>> "$LOG_FILE" || \
-tar -czf "$ARCHIVE_PATH" -C "$STAGE_DIR" outsource_track_snapshot.db
-
+  -C "$APP_DIR" . 2>> "$LOG_FILE" || \
+tar --warning=no-file-changed -czf "$ARCHIVE_PATH" -C "$STAGE_DIR" outsource_track_snapshot.db -C "$APP_DIR" --ignore-failed-read uploads .env server.js package.json
 ARCHIVE_BYTES=$(stat -c%s "$ARCHIVE_PATH" 2>/dev/null || stat -f%z "$ARCHIVE_PATH")
 ARCHIVE_MB=$(awk "BEGIN {printf \"%.2f\", $ARCHIVE_BYTES / (1024 * 1024)}")
 log "   [OK] Arsip terbuat: ${ARCHIVE_NAME} (${ARCHIVE_MB} MB)"

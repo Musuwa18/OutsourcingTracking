@@ -33,7 +33,16 @@ try {
   const { DatabaseSync } = await import('node:sqlite');
   dbEngine = new DatabaseSync(DB_PATH);
   isNodeSqlite = true;
-  console.log(`[Database] Menggunakan Node.js built-in SQLite: ${DB_PATH}`);
+  try {
+    dbEngine.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = 10000;
+      PRAGMA synchronous = NORMAL;
+    `);
+  } catch (pragmaErr) {
+    console.warn('[Database] Peringatan pengaturan PRAGMA SQLite:', pragmaErr.message);
+  }
+  console.log(`[Database] Menggunakan Node.js built-in SQLite (WAL mode aktif): ${DB_PATH}`);
 } catch (err) {
   console.warn(`[Database] node:sqlite tidak aktif/didukung di versi Node ini. Menggunakan Fallback Storage JSON: ${DATA_DIR}`);
 }
