@@ -230,12 +230,29 @@ app.post('/api/auth/login', (req, res) => {
       // 2. Cek apakah akun staf ini sudah terikat pada HP berbeda
       const userBoundFp = user.hardwareFingerprint || user.deviceId;
       if (userBoundFp) {
-        if (!hardwareFp || (hardwareFp !== userBoundFp && hardwareFp !== user.deviceId && hardwareFp !== user.hardwareFingerprint)) {
+        const isExactMatch = hardwareFp && (
+          hardwareFp === userBoundFp ||
+          hardwareFp === user.deviceId ||
+          hardwareFp === user.hardwareFingerprint ||
+          (deviceId && (deviceId === user.deviceId || deviceId === user.hardwareFingerprint))
+        );
+        const isFormatMigration = hardwareFp && (
+          (userBoundFp.startsWith('dev-') && hardwareFp.startsWith('hw-')) ||
+          (userBoundFp.startsWith('hw-') && hardwareFp.startsWith('dev-'))
+        );
+
+        if (!isExactMatch && !isFormatMigration) {
           return res.status(403).json({
             error: 'PERANGKAT TIDAK DIKENALI (ANTI-TITIP ABSEN): Akun Anda telah terikat secara resmi pada smartphone utama yang Anda daftarkan sebelumnya. Demi integritas presensi, dilarang login di HP orang lain untuk mencegah titip absen. Silakan gunakan HP terdaftar Anda, atau hubungi Kasubag / Administrator Disdik HST untuk reset kunci perangkat jika Anda resmi berganti HP baru.',
             code: 'DEVICE_BINDING_MISMATCH',
             boundDeviceId: userBoundFp
           });
+        }
+
+        if (isFormatMigration) {
+          updateUserDevice(user.id, deviceId || hardwareFp, null, hardwareFp);
+          user.deviceId = deviceId || hardwareFp;
+          user.hardwareFingerprint = hardwareFp;
         }
       } else if (hardwareFp) {
         // Ikat HP pertama kali (setelah registrasi atau setelah di-reset oleh admin)
@@ -527,11 +544,29 @@ app.post('/api/auth/biometric/login-verify', async (req, res) => {
         }
       }
       const userBoundFp = user.hardwareFingerprint || user.deviceId;
-      if (userBoundFp && hardwareFp && hardwareFp !== userBoundFp && hardwareFp !== user.deviceId && hardwareFp !== user.hardwareFingerprint) {
-        return res.status(403).json({
-          error: 'PERANGKAT TIDAK DIKENALI: Akun Anda terikat pada HP lain. Demi keamanan presensi, dilarang login di perangkat berbeda.',
-          code: 'DEVICE_BINDING_MISMATCH',
-        });
+      if (userBoundFp) {
+        const isExactMatch = hardwareFp && (
+          hardwareFp === userBoundFp ||
+          hardwareFp === user.deviceId ||
+          hardwareFp === user.hardwareFingerprint ||
+          (deviceId && (deviceId === user.deviceId || deviceId === user.hardwareFingerprint))
+        );
+        const isFormatMigration = hardwareFp && (
+          (userBoundFp.startsWith('dev-') && hardwareFp.startsWith('hw-')) ||
+          (userBoundFp.startsWith('hw-') && hardwareFp.startsWith('dev-'))
+        );
+
+        if (!isExactMatch && !isFormatMigration) {
+          return res.status(403).json({
+            error: 'PERANGKAT TIDAK DIKENALI: Akun Anda terikat pada HP lain. Demi keamanan presensi, dilarang login di perangkat berbeda.',
+            code: 'DEVICE_BINDING_MISMATCH',
+          });
+        }
+        if (isFormatMigration) {
+          updateUserDevice(user.id, deviceId || hardwareFp, null, hardwareFp);
+          user.deviceId = deviceId || hardwareFp;
+          user.hardwareFingerprint = hardwareFp;
+        }
       }
     }
 

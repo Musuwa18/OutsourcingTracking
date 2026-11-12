@@ -1550,7 +1550,7 @@ export default function App() {
   };
 
   // Handle Clock In (Staff)
-  const handleClockIn = (selfieBase64: string, locationData: any) => {
+  const handleClockIn = async (selfieBase64: string, locationData: any) => {
     const timeStr = getCurrentWitaTimeStr();
     const targetStaffId = currentStaff?.id || 'usr-os-default';
 
@@ -1575,78 +1575,90 @@ export default function App() {
       return;
     }
 
-    const newRecord: AttendanceRecord = {
-      id: `att-${targetStaffId}-${todayDateStr}`,
-      staffId: targetStaffId,
-      date: todayDateStr,
-      clockInTime: timeStr,
-      selfieUrl: selfieBase64,
-      locationCoords: locationData,
-      status: 'Hadir',
-      verifiedBy: isFieldDuty ? 'Disetujui: Penugasan Lapangan' : 'Sistem Geofence WebRTC',
-      isFieldDuty,
-      fieldDutyNotes,
-    };
+    try {
+      const savedRecord = await apiSubmitAttendance({
+        staffId: targetStaffId,
+        date: todayDateStr,
+        clockInTime: timeStr,
+        selfieUrl: selfieBase64,
+        locationCoords: locationData,
+        status: 'Hadir',
+        verifiedBy: isFieldDuty ? 'Disetujui: Penugasan Lapangan' : 'Sistem Geofence WebRTC',
+        isFieldDuty,
+        fieldDutyNotes,
+      });
 
-    setAttendanceRecords((prev) => {
-      const filtered = prev.filter(
-        (r) => !(r.staffId === targetStaffId && r.date === todayDateStr)
-      );
-      return [newRecord, ...filtered];
-    });
+      const updatedList = await apiFetchAttendance({ todayDateStr: getTodayDateStr() });
+      if (updatedList && updatedList.length > 0) {
+        setAttendanceRecords(updatedList);
+        localStorage.setItem('ot_attendance_records', JSON.stringify(updatedList));
+      } else {
+        const newRecord: AttendanceRecord = {
+          id: savedRecord?.id || `att-${targetStaffId}-${todayDateStr}`,
+          staffId: targetStaffId,
+          date: todayDateStr,
+          clockInTime: savedRecord?.clockInTime || timeStr,
+          selfieUrl: selfieBase64,
+          locationCoords: locationData,
+          status: savedRecord?.status || 'Hadir',
+          verifiedBy: isFieldDuty ? 'Disetujui: Penugasan Lapangan' : 'Sistem Geofence WebRTC',
+          isFieldDuty,
+          fieldDutyNotes,
+        };
+        setAttendanceRecords((prev) => {
+          const filtered = prev.filter(
+            (r) => !(r.staffId === targetStaffId && r.date === todayDateStr)
+          );
+          return [newRecord, ...filtered];
+        });
+      }
 
-    // Background sync to SQLite server
-    apiSubmitAttendance({
-      staffId: targetStaffId,
-      date: todayDateStr,
-      clockInTime: timeStr,
-      selfieUrl: selfieBase64,
-      locationCoords: locationData,
-      status: 'Hadir',
-      verifiedBy: isFieldDuty ? 'Disetujui: Penugasan Lapangan' : 'Sistem Geofence WebRTC',
-      isFieldDuty,
-      fieldDutyNotes,
-    }).catch((err) => console.warn('Sync attendance failed:', err));
+      showToast(`Clock In berhasil dicatat (${timeStr} WITA). Selamat bekerja!`, 'success');
 
-    if (isFieldDuty) {
-      addAuditLog(
-        'Presensi Penugasan Lapangan (Clock In)',
-        `${currentStaff?.name || 'Staf'} melakukan Clock-In Tugas Lapangan (${fieldDutyNotes || 'Dinas Luar'}). Koordinat: ${locationData.latitude ? locationData.latitude.toFixed(6) : '-'}, ${locationData.longitude ? locationData.longitude.toFixed(6) : '-'}. Radius dilewati otomatis sesuai kebijakan penugasan.`,
-        'Kehadiran'
-      );
+      if (isFieldDuty) {
+        addAuditLog(
+          'Presensi Penugasan Lapangan (Clock In)',
+          `${currentStaff?.name || 'Staf'} melakukan Clock-In Tugas Lapangan (${fieldDutyNotes || 'Dinas Luar'}). Koordinat: ${locationData.latitude ? locationData.latitude.toFixed(6) : '-'}, ${locationData.longitude ? locationData.longitude.toFixed(6) : '-'}. Radius dilewati otomatis sesuai kebijakan penugasan.`,
+          'Kehadiran'
+        );
 
-      addNotification(
-        'Presensi Tugas Lapangan Berhasil',
-        `Clock In Tugas Lapangan tercatat pada pukul ${timeStr} WITA (${fieldDutyNotes || 'Dinas Luar'}).`,
-        'attendance',
-        { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
-      );
-    } else if (!locationData.withinRadius) {
-      addAuditLog(
-        'Pelanggaran Geofence: Presensi di Luar Radius',
-        `PERINGATAN GEOFENCE: ${currentStaff?.name || 'Staf'} presensi di luar radius aman (${locationData.distanceMeters}m dari ${locationData.locationName}, batas radius ${currentStaff?.assignedLocation?.radiusMeters || 80}m). Notifikasi otomatis dikirim ke supervisor.`,
-        'Kehadiran'
-      );
+        addNotification(
+          'Presensi Tugas Lapangan Berhasil',
+          `Clock In Tugas Lapangan tercatat pada pukul ${timeStr} WITA (${fieldDutyNotes || 'Dinas Luar'}).`,
+          'attendance',
+          { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
+        );
+      } else if (!locationData.withinRadius) {
+        addAuditLog(
+          'Pelanggaran Geofence: Presensi di Luar Radius',
+          `PERINGATAN GEOFENCE: ${currentStaff?.name || 'Staf'} presensi di luar radius aman (${locationData.distanceMeters}m dari ${locationData.locationName}, batas radius ${currentStaff?.assignedLocation?.radiusMeters || 80}m). Notifikasi otomatis dikirim ke supervisor.`,
+          'Kehadiran'
+        );
 
-      addNotification(
-        'Peringatan Geofence: Presensi di Luar Radius',
-        `${currentStaff?.name || 'Staf'} (${currentStaff?.nip || '-'}) melakukan Clock-In berjarak ${locationData.distanceMeters} meter dari ${locationData.locationName} (Batas Radius Aman: ${currentStaff?.assignedLocation?.radiusMeters || 80}m).`,
-        'geofence_alert',
-        { staffId: targetStaffId, severity: 'warning', distanceExceededMeters: locationData.distanceMeters, locationName: locationData.locationName }
-      );
-    } else {
-      addAuditLog(
-        'Presensi Masuk (Clock In)',
-        `Berhasil clock-in selfie WebRTC pada ${timeStr} WITA di ${locationData.locationName} (Jarak: ${locationData.distanceMeters}m, Akurasi: ±${Math.round(locationData.accuracy || 0)}m).`,
-        'Kehadiran'
-      );
+        addNotification(
+          'Peringatan Geofence: Presensi di Luar Radius',
+          `${currentStaff?.name || 'Staf'} (${currentStaff?.nip || '-'}) melakukan Clock-In berjarak ${locationData.distanceMeters} meter dari ${locationData.locationName} (Batas Radius Aman: ${currentStaff?.assignedLocation?.radiusMeters || 80}m).`,
+          'geofence_alert',
+          { staffId: targetStaffId, severity: 'warning', distanceExceededMeters: locationData.distanceMeters, locationName: locationData.locationName }
+        );
+      } else {
+        addAuditLog(
+          'Presensi Masuk (Clock In)',
+          `Berhasil clock-in selfie WebRTC pada ${timeStr} WITA di ${locationData.locationName} (Jarak: ${locationData.distanceMeters}m, Akurasi: ±${Math.round(locationData.accuracy || 0)}m).`,
+          'Kehadiran'
+        );
 
-      addNotification(
-        'Presensi Masuk Berhasil',
-        `Clock In Anda pada pukul ${timeStr} WITA telah diverifikasi dan terkunci otomatis oleh server.`,
-        'attendance',
-        { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
-      );
+        addNotification(
+          'Presensi Masuk Berhasil',
+          `Clock In Anda pada pukul ${timeStr} WITA telah diverifikasi dan terkunci otomatis oleh server.`,
+          'attendance',
+          { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
+        );
+      }
+    } catch (err: unknown) {
+      console.error('Clock-In failed:', err);
+      const msg = err instanceof Error ? err.message : 'Presensi Clock In gagal disimpan ke server.';
+      showToast(msg, 'warning');
     }
   };
 
@@ -1656,23 +1668,6 @@ export default function App() {
     const targetStaffId = currentStaff?.id || 'usr-os-default';
     const targetRecord = staffTodayAttendance;
     const targetDate = targetRecord?.date || todayDateStr;
-
-    // Optimistic local state update
-    setAttendanceRecords((prev) =>
-      prev.map((r) => {
-        if (
-          (targetRecord && r.id === targetRecord.id) ||
-          (r.staffId === targetStaffId && r.date === targetDate)
-        ) {
-          return {
-            ...r,
-            breakOutTime: timeStr,
-            break_out_time: timeStr,
-          };
-        }
-        return r;
-      })
-    );
 
     try {
       await apiSubmitAttendance({
@@ -1690,6 +1685,22 @@ export default function App() {
       if (updatedList && updatedList.length > 0) {
         setAttendanceRecords(updatedList);
         localStorage.setItem('ot_attendance_records', JSON.stringify(updatedList));
+      } else {
+        setAttendanceRecords((prev) =>
+          prev.map((r) => {
+            if (
+              (targetRecord && r.id === targetRecord.id) ||
+              (r.staffId === targetStaffId && r.date === targetDate)
+            ) {
+              return {
+                ...r,
+                breakOutTime: timeStr,
+                break_out_time: timeStr,
+              };
+            }
+            return r;
+          })
+        );
       }
 
       showToast(`Clock Out Istirahat berhasil dicatat (${timeStr} WITA). Selamat beristirahat!`, 'success');
@@ -1720,23 +1731,6 @@ export default function App() {
     const targetRecord = staffTodayAttendance;
     const targetDate = targetRecord?.date || todayDateStr;
 
-    // Optimistic local state update
-    setAttendanceRecords((prev) =>
-      prev.map((r) => {
-        if (
-          (targetRecord && r.id === targetRecord.id) ||
-          (r.staffId === targetStaffId && r.date === targetDate)
-        ) {
-          return {
-            ...r,
-            breakInTime: timeStr,
-            break_in_time: timeStr,
-          };
-        }
-        return r;
-      })
-    );
-
     try {
       await apiSubmitAttendance({
         id: targetRecord?.id,
@@ -1753,6 +1747,22 @@ export default function App() {
       if (updatedList && updatedList.length > 0) {
         setAttendanceRecords(updatedList);
         localStorage.setItem('ot_attendance_records', JSON.stringify(updatedList));
+      } else {
+        setAttendanceRecords((prev) =>
+          prev.map((r) => {
+            if (
+              (targetRecord && r.id === targetRecord.id) ||
+              (r.staffId === targetStaffId && r.date === targetDate)
+            ) {
+              return {
+                ...r,
+                breakInTime: timeStr,
+                break_in_time: timeStr,
+              };
+            }
+            return r;
+          })
+        );
       }
 
       showToast(`Clock In Istirahat berhasil dicatat (${timeStr} WITA). Selamat melanjutkan tugas!`, 'success');
@@ -1775,7 +1785,7 @@ export default function App() {
       showToast(msg, 'warning');
     }
   };
-  const handleClockOut = (selfieBase64: string, locationData: Partial<AttendanceRecord['locationCoords']>) => {
+  const handleClockOut = async (selfieBase64: string, locationData: Partial<AttendanceRecord['locationCoords']>) => {
     const isFieldDuty = Boolean(locationData?.isFieldDuty);
     if (!isFieldDuty && locationData && locationData.withinRadius === false) {
       showToast(`Presensi Clock-Out Ditolak: Lokasi Anda (${locationData.distanceMeters || 0}m) di luar batas radius aman kantor penugasan.`, 'warning');
@@ -1787,55 +1797,68 @@ export default function App() {
     const targetRecord = staffTodayAttendance;
     const targetDate = targetRecord?.date || todayDateStr;
 
-    setAttendanceRecords((prev) =>
-      prev.map((r) => {
-        if (
-          (targetRecord && r.id === targetRecord.id) ||
-          (r.staffId === targetStaffId && r.date === targetDate)
-        ) {
-          return {
-            ...r,
-            clockOutTime: timeStr,
-            clockOutSelfieUrl: selfieBase64,
-            clockOutLocationCoords: locationData ? {
-              latitude: locationData.latitude || -2.591165,
-              longitude: locationData.longitude || 115.373661,
-              accuracy: locationData.accuracy || 15,
-              locationName: locationData.locationName || 'Lokasi Pulang',
-            } : null,
-            autoClosed: false,
-          };
-        }
-        return r;
-      })
-    );
+    try {
+      await apiSubmitAttendance({
+        id: targetRecord?.id,
+        staffId: targetStaffId,
+        date: targetDate,
+        clockOutTime: timeStr,
+        selfieUrl: selfieBase64,
+        clockOutSelfieUrl: selfieBase64,
+        locationCoords: locationData,
+        status: targetRecord?.status || 'Hadir',
+        autoClosed: false,
+        verifiedBy: 'Sistem Geofence WebRTC',
+      });
 
-    // Background sync to SQLite server
-    apiSubmitAttendance({
-      id: targetRecord?.id,
-      staffId: targetStaffId,
-      date: targetDate,
-      clockOutTime: timeStr,
-      selfieUrl: selfieBase64,
-      clockOutSelfieUrl: selfieBase64,
-      locationCoords: locationData,
-      status: targetRecord?.status || 'Hadir',
-      autoClosed: false,
-      verifiedBy: 'Sistem Geofence WebRTC',
-    }).catch((err) => console.warn('Sync clock-out failed:', err));
+      const updatedList = await apiFetchAttendance({ todayDateStr: getTodayDateStr() });
+      if (updatedList && updatedList.length > 0) {
+        setAttendanceRecords(updatedList);
+        localStorage.setItem('ot_attendance_records', JSON.stringify(updatedList));
+      } else {
+        setAttendanceRecords((prev) =>
+          prev.map((r) => {
+            if (
+              (targetRecord && r.id === targetRecord.id) ||
+              (r.staffId === targetStaffId && r.date === targetDate)
+            ) {
+              return {
+                ...r,
+                clockOutTime: timeStr,
+                clockOutSelfieUrl: selfieBase64,
+                clockOutLocationCoords: locationData ? {
+                  latitude: locationData.latitude || -2.591165,
+                  longitude: locationData.longitude || 115.373661,
+                  accuracy: locationData.accuracy || 15,
+                  locationName: locationData.locationName || 'Lokasi Pulang',
+                } : null,
+                autoClosed: false,
+              };
+            }
+            return r;
+          })
+        );
+      }
 
-    addAuditLog(
-      'Presensi Pulang (Clock Out)',
-      `Berhasil clock-out pada ${timeStr} WITA. Jam kerja harian terkunci.`,
-      'Kehadiran'
-    );
+      showToast(`Clock Out berhasil dicatat (${timeStr} WITA). Terima kasih!`, 'success');
 
-    addNotification(
-      'Presensi Pulang Terkunci',
-      `Clock Out tercatat pada ${timeStr} WITA. Terima kasih atas dedikasi kerja Anda hari ini!`,
-      'attendance',
-      { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
-    );
+      addAuditLog(
+        'Presensi Pulang (Clock Out)',
+        `Berhasil clock-out pada ${timeStr} WITA. Jam kerja harian terkunci.`,
+        'Kehadiran'
+      );
+
+      addNotification(
+        'Presensi Pulang Terkunci',
+        `Clock Out tercatat pada ${timeStr} WITA. Terima kasih atas dedikasi kerja Anda hari ini!`,
+        'attendance',
+        { staffId: targetStaffId, userId: currentUser?.id || targetStaffId }
+      );
+    } catch (err: unknown) {
+      console.error('Clock-Out failed:', err);
+      const msg = err instanceof Error ? err.message : 'Presensi Clock Out gagal disimpan ke server.';
+      showToast(msg, 'warning');
+    }
   };
 
   // Handle Field Duty Checkin (Staff - Multi-titik kunjungan harian)

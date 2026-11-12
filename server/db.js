@@ -1286,6 +1286,15 @@ export function checkDeviceBindingConflict(hardwareFingerprint, userId = null) {
   const fp = String(hardwareFingerprint).trim();
   if (!fp || fp.length < 5) return null;
 
+  // Fingerprint berbasis 'hw-' adalah coarse hardware hash (kanvas/webgl/audio/layar)
+  // yang identik pada semua smartphone dengan tipe/model yang sama (misal sesama iPhone atau Redmi).
+  // Hash ini BUKAN identitas fisik unik per HP dan TIDAK BOLEH dijadikan dasar
+  // pemblokiran konflik antar-pegawai karena menyebabkan false positive massal bagi pegawai
+  // yang masing-masing memegang HP fisiknya sendiri.
+  if (fp.startsWith('hw-')) {
+    return null;
+  }
+
   if (isNodeSqlite && dbEngine) {
     let sql = `
       SELECT id, name, nip, role, vendor_name, hardware_fingerprint, device_id 
@@ -2328,10 +2337,26 @@ export function saveAttendance(attData) {
     // 2. Cek apakah akun staf ini sudah terikat pada HP berbeda
     const userBoundFp = user.hardwareFingerprint || user.deviceId;
     if (userBoundFp) {
-      if (!clientFp || (clientFp !== userBoundFp && clientFp !== user.deviceId && clientFp !== user.hardwareFingerprint)) {
+      const isExactMatch = clientFp && (
+        clientFp === userBoundFp ||
+        clientFp === user.deviceId ||
+        clientFp === user.hardwareFingerprint
+      );
+      const isFormatMigration = clientFp && (
+        (userBoundFp.startsWith('dev-') && clientFp.startsWith('hw-')) ||
+        (userBoundFp.startsWith('hw-') && clientFp.startsWith('dev-'))
+      );
+
+      if (!isExactMatch && !isFormatMigration) {
         const error = new Error('PRESENSI_DITOLAK_PERANGKAT_BERBEDA: Presensi ditolak karena perangkat yang Anda gunakan tidak cocok dengan HP resmi yang terikat pada akun Anda. Dilarang berganti perangkat tanpa izin admin.');
         error.statusCode = 403;
         throw error;
+      }
+
+      if (isFormatMigration) {
+        updateUserDevice(user.id, clientFp, null, clientFp);
+        user.deviceId = clientFp;
+        user.hardwareFingerprint = clientFp;
       }
     } else if (clientFp) {
       // Ikat perangkat pertama kali jika akun belum memiliki device terikat
