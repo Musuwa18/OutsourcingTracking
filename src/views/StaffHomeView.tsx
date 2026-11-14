@@ -2100,6 +2100,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
             : safeOffice
         }
         actionType={actionType}
+        allowedPurposes={attendanceSettings?.fieldDutySettings?.allowedPurposes}
       />
 
       <WatermarkCameraModal

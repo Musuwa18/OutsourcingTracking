@@ -73,9 +73,30 @@ export const TaskDispatchView: React.FC<TaskDispatchViewProps> = ({
   const [detailModalTask, setDetailModalTask] = useState<TaskAssignment | null>(null);
   const [selectedProofAssignee, setSelectedProofAssignee] = useState<TaskAssigneeItem | null>(null);
 
+  // Ambil daftar kategori resmi penugasan lapangan dari pengaturan sistem
+  const taskCategories = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('ot_attendance_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.fieldDutySettings?.allowedPurposes?.length > 0) {
+          return parsed.fieldDutySettings.allowedPurposes as string[];
+        }
+      }
+    } catch (e) {}
+    return [
+      'Monitoring & Pengawasan Sekolah',
+      'Inspeksi & Pemeliharaan Sarpras',
+      'Pengantaran Berkas & Logistik Dinas',
+      'Penyelenggaraan Acara Kedinasan',
+      'Pelayanan Operasional Korwil',
+      'Tugas Lapangan Khusus',
+    ];
+  }, []);
+
   // Form create state
   const [formTitle, setFormTitle] = useState<string>('');
-  const [formCategory, setFormCategory] = useState<string>('Monitoring & Lapangan');
+  const [formCategory, setFormCategory] = useState<string>(() => taskCategories[0] || 'Monitoring & Pengawasan Sekolah');
   const [formPriority, setFormPriority] = useState<TaskPriority>('NORMAL');
   const [formStartDate, setFormStartDate] = useState<string>(getTodayDateStr());
   const [formEndDate, setFormEndDate] = useState<string>(getTodayDateStr());
@@ -246,7 +267,7 @@ export const TaskDispatchView: React.FC<TaskDispatchViewProps> = ({
 
   const resetForm = () => {
     setFormTitle('');
-    setFormCategory('Monitoring & Lapangan');
+    setFormCategory(taskCategories[0] || 'Monitoring & Pengawasan Sekolah');
     setFormPriority('NORMAL');
     setFormStartDate(getTodayDateStr());
     setFormEndDate(getTodayDateStr());
@@ -697,11 +718,9 @@ export const TaskDispatchView: React.FC<TaskDispatchViewProps> = ({
                     onChange={(e) => setFormCategory(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="Monitoring & Lapangan">Monitoring & Lapangan</option>
-                    <option value="Pengantaran Dokumen & Surat">Pengantaran Dokumen & Surat</option>
-                    <option value="Perbaikan Sarpras & IT">Perbaikan Sarpras & IT</option>
-                    <option value="Pengawalan / Kebersihan Acara">Pengawalan / Kebersihan Acara</option>
-                    <option value="Dinas Luar Daerah">Dinas Luar Daerah</option>
+                    {taskCategories.map((cat, idx) => (
+                      <option key={idx} value={cat}>{cat}</option>
+                    ))}
                     <option value="Tugas Khusus Lainnya">Tugas Khusus Lainnya</option>
                   </select>
                 </div>

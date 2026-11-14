@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, RefreshCw, X, ShieldCheck, AlertCircle, MapPin, CheckCircle2, Navigation, Briefcase, FileText, Check, Coffee, Lock } from 'lucide-react';
 import { OfficeLocation } from '../types';
@@ -22,6 +22,7 @@ interface CameraCaptureModalProps {
   }) => void;
   assignedLocation?: OfficeLocation;
   actionType: 'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin' | 'overtime-start' | 'overtime-finish' | 'task-checkin';
+  allowedPurposes?: string[];
 }
 
 export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
@@ -30,6 +31,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   onCapture,
   assignedLocation,
   actionType,
+  allowedPurposes,
 }) => {
   const safeOffice = assignedLocation || PRIMARY_OFFICES[0];
   const targetLat = typeof safeOffice?.latitude === 'number' ? safeOffice.latitude : PRIMARY_OFFICES[0].latitude;
@@ -62,10 +64,41 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   // Mode Tampilan: Kamera Selfie vs Peta Radar Lokasi
   const [activeViewTab, setActiveViewTab] = useState<'camera' | 'map'>('camera');
 
+  // Daftar Jenis Penugasan Lapangan Resmi (Sinkron dengan Pengaturan Sistem & LocalStorage)
+  const resolvedPurposes = useMemo(() => {
+    if (allowedPurposes && allowedPurposes.length > 0) {
+      return allowedPurposes;
+    }
+    try {
+      const saved = localStorage.getItem('ot_attendance_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.fieldDutySettings?.allowedPurposes?.length > 0) {
+          return parsed.fieldDutySettings.allowedPurposes as string[];
+        }
+      }
+    } catch (e) {}
+    return [
+      'Monitoring & Pengawasan Sekolah',
+      'Inspeksi & Pemeliharaan Sarpras',
+      'Pengantaran Berkas & Logistik Dinas',
+      'Penyelenggaraan Acara Kedinasan',
+      'Pelayanan Operasional Korwil',
+      'Tugas Lapangan Khusus',
+    ];
+  }, [allowedPurposes]);
+
   // Mode Tugas Lapangan / Dinas Luar
   const [isFieldDuty, setIsFieldDuty] = useState(false);
-  const [fieldDutyPurpose, setFieldDutyPurpose] = useState('Monitoring & Pengawasan Sekolah');
+  const [fieldDutyPurpose, setFieldDutyPurpose] = useState(() => resolvedPurposes[0] || 'Monitoring & Pengawasan Sekolah');
   const [fieldDutyNotes, setFieldDutyNotes] = useState('');
+
+  // Sinkronkan pilihan jenis penugasan jika daftar resmi terbarui
+  useEffect(() => {
+    if (resolvedPurposes.length > 0 && !resolvedPurposes.includes(fieldDutyPurpose)) {
+      setFieldDutyPurpose(resolvedPurposes[0]);
+    }
+  }, [resolvedPurposes]);
 
   // Jaga video stream WebRTC tetap hidup & terhubung saat berpindah tab (Anti-Black Screen)
   useEffect(() => {
@@ -107,8 +140,13 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     }
     if (actionType === 'field-checkin') {
       setIsFieldDuty(true);
+      if (resolvedPurposes.length > 0) {
+        setFieldDutyPurpose(resolvedPurposes[0]);
+      }
+      setFieldDutyNotes('');
     } else {
       setIsFieldDuty(false);
+      setFieldDutyNotes('');
     }
     const updateTimeDisplay = () => {
       const now = getSyncedDate();
@@ -348,15 +386,22 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   const handleConfirm = () => {
     if (!capturedImage || !coords) return;
+    const cleanNotes = fieldDutyNotes.trim();
+    const finalLocationName = isFieldDuty
+      ? (actionType === 'field-checkin' && cleanNotes
+          ? `${cleanNotes} (${fieldDutyPurpose})`
+          : `Tugas Lapangan (${fieldDutyPurpose})`)
+      : targetName;
+
     onCapture(capturedImage, {
       latitude: coords.latitude,
       longitude: coords.longitude,
       accuracy: coords.accuracy,
       distanceMeters: Math.round(coords.distance),
       withinRadius: isFieldDuty ? true : coords.withinRadius,
-      locationName: isFieldDuty ? `Tugas Lapangan (${fieldDutyPurpose})` : targetName,
+      locationName: finalLocationName,
       isFieldDuty,
-      fieldDutyNotes: isFieldDuty ? `${fieldDutyPurpose}${fieldDutyNotes ? `: ${fieldDutyNotes}` : ''}` : undefined,
+      fieldDutyNotes: isFieldDuty ? `${fieldDutyPurpose}${cleanNotes ? `: ${cleanNotes}` : ''}` : undefined,
     });
     onClose();
   };
@@ -552,7 +597,56 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           </div>
 
           {/* Toggle Mode Penugasan Lapangan / Peringatan Wajib Kantor untuk Istirahat */}
-          {isBreakAction ? (
+          {actionType === 'field-checkin' ? (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2.5 animate-in fade-in duration-150">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-amber-500 text-white shadow-xs">
+                  <Briefcase className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span>Presensi Tugas Lapangan Resmi</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold">
+                      Multi-Titik
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Pilih jenis penugasan dinas resmi & isi catatan lokasi tugas
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-amber-500/20 space-y-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Jenis Penugasan Lapangan Resmi:
+                  </label>
+                  <select
+                    value={fieldDutyPurpose}
+                    onChange={(e) => setFieldDutyPurpose(e.target.value)}
+                    className="w-full text-xs py-2 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-amber-500 outline-hidden"
+                  >
+                    {resolvedPurposes.map((p, idx) => (
+                      <option key={idx} value={p}>{p}</option>
+                    ))}
+                    <option value="Tugas Lapangan Khusus Lainnya">Tugas Lapangan Khusus Lainnya</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Nama Lokasi / Tempat Bertugas Lapangan (Opsional):
+                  </label>
+                  <input
+                    type="text"
+                    value={fieldDutyNotes}
+                    onChange={(e) => setFieldDutyNotes(e.target.value)}
+                    placeholder="Contoh: SDN 1 Barabai / Aula Bappeda / Korwil"
+                    className="w-full text-xs py-2 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500 outline-hidden"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : isBreakAction ? (
             <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1">
               <div className="font-bold text-amber-600 dark:text-amber-400 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
@@ -571,7 +665,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 Presensi sesi istirahat wajib dilakukan di dalam radius kantor tempat Anda ditugaskan (<strong>{targetName}</strong>).
               </p>
             </div>
-          ) : actionType !== 'field-checkin' ? (
+          ) : (
             <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -618,12 +712,10 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                       onChange={(e) => setFieldDutyPurpose(e.target.value)}
                       className="w-full text-xs py-1.5 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium focus:ring-1 focus:ring-amber-500 outline-hidden"
                     >
-                      <option value="Monitoring & Pengawasan Sekolah">Monitoring & Pengawasan Sekolah</option>
-                      <option value="Inspeksi & Pemeliharaan Sarpras">Inspeksi & Pemeliharaan Sarpras</option>
-                      <option value="Pelayanan Operasional Korwil">Pelayanan Operasional Korwil</option>
-                      <option value="Pendampingan Acara Kedinasan">Pendampingan Acara Kedinasan</option>
-                      <option value="Pengantaran Berkas & Logistik Dinas">Pengantaran Berkas & Logistik Dinas</option>
-                      <option value="Tugas Lapangan Khusus">Tugas Lapangan Khusus</option>
+                      {resolvedPurposes.map((p, idx) => (
+                        <option key={idx} value={p}>{p}</option>
+                      ))}
+                      <option value="Tugas Lapangan Khusus Lainnya">Tugas Lapangan Khusus Lainnya</option>
                     </select>
                   </div>
                   <div>
@@ -641,7 +733,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 </div>
               )}
             </div>
-          ) : null}
+          )}
 
           {/* Rincian Status Lokasi & GPS */}
           <div className={`p-3.5 rounded-2xl border text-xs transition-colors ${
