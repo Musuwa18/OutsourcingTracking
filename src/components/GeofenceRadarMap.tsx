@@ -38,8 +38,79 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
   const officeMarkerRef = useRef<L.Marker | null>(null);
   const geofenceCircleRef = useRef<L.Circle | null>(null);
   const connectionLineRef = useRef<L.Polyline | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const overlayLayerRef = useRef<L.TileLayer | null>(null);
+
+  const [mapMode, setMapMode] = useState<'streets' | 'satellite'>(() => {
+    try {
+      const saved = localStorage.getItem('outsourcetrack_map_layer_mode');
+      if (saved === 'satellite' || saved === 'streets') return saved;
+    } catch (e) {}
+    return 'streets';
+  });
 
   const [mapReady, setMapReady] = useState(false);
+
+  const handleSwitchMapMode = (newMode: 'streets' | 'satellite') => {
+    setMapMode(newMode);
+    try {
+      localStorage.setItem('outsourcetrack_map_layer_mode', newMode);
+      window.dispatchEvent(new CustomEvent('outsourcetrack:map-mode-changed', { detail: newMode }));
+    } catch (e) {}
+  };
+
+  // Sync mode when other map components change it
+  useEffect(() => {
+    const handleSync = (e: Event) => {
+      const customEvt = e as CustomEvent<'streets' | 'satellite'>;
+      if (customEvt.detail && (customEvt.detail === 'streets' || customEvt.detail === 'satellite')) {
+        setMapMode(customEvt.detail);
+      }
+    };
+    window.addEventListener('outsourcetrack:map-mode-changed', handleSync);
+    return () => window.removeEventListener('outsourcetrack:map-mode-changed', handleSync);
+  }, []);
+
+  // Update tile layers when mapMode changes
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+      tileLayerRef.current = null;
+    }
+    if (overlayLayerRef.current) {
+      map.removeLayer(overlayLayerRef.current);
+      overlayLayerRef.current = null;
+    }
+
+    if (mapMode === 'satellite') {
+      const satLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Esri World Imagery',
+        }
+      ).addTo(map);
+      tileLayerRef.current = satLayer;
+
+      const overlayLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Esri Labels',
+        }
+      ).addTo(map);
+      overlayLayerRef.current = overlayLayer;
+    } else {
+      const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
+      }).addTo(map);
+      tileLayerRef.current = osmLayer;
+    }
+  }, [mapMode]);
 
   // Inisialisasi Leaflet Map
   useEffect(() => {
@@ -61,11 +132,31 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
       attributionControl: false,
     });
 
-    // OpenStreetMap Standar Resmi (Bebas Token/API Key, Beresolusi Tinggi & Lengkap di Barabai Kab. HST)
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
+    if (mapMode === 'satellite') {
+      const satLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Esri World Imagery',
+        }
+      ).addTo(map);
+      tileLayerRef.current = satLayer;
+
+      const overlayLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Esri Labels',
+        }
+      ).addTo(map);
+      overlayLayerRef.current = overlayLayer;
+    } else {
+      const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
+      }).addTo(map);
+      tileLayerRef.current = osmLayer;
+    }
 
     // Zoom control di pojok kanan bawah agar tidak bertumpukan dengan status badge
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -297,17 +388,47 @@ export const GeofenceRadarMap: React.FC<GeofenceRadarMapProps> = ({
           )}
         </div>
 
-        {/* Tombol Expand / Minimize jika disediakan */}
-        {onToggleExpand && (
-          <button
-            type="button"
-            onClick={onToggleExpand}
-            className="pointer-events-auto p-1.5 rounded-xl bg-white/90 dark:bg-slate-900/90 hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-md backdrop-blur-md transition-all active:scale-95 cursor-pointer"
-            title={isExpanded ? 'Kecilkan Peta' : 'Perbesar Peta Layar Penuh'}
-          >
-            {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-        )}
+        {/* Tombol Layer Mode (Jalan vs Satelit Hibrida) & Expand */}
+        <div className="flex items-center gap-1.5 pointer-events-auto">
+          <div className="flex items-center bg-slate-950/85 backdrop-blur-md p-0.5 rounded-xl border border-slate-700/80 shadow-md">
+            <button
+              type="button"
+              onClick={() => handleSwitchMapMode('streets')}
+              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                mapMode === 'streets'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Tampilkan peta jalan standar OpenStreetMap"
+            >
+              🗺️ Jalan
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitchMapMode('satellite')}
+              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                mapMode === 'satellite'
+                  ? 'bg-cyan-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Tampilkan citra satelit hibrida dengan garis jalan & nama gedung"
+            >
+              🛰️ Satelit
+            </button>
+          </div>
+
+          {/* Tombol Expand / Minimize jika disediakan */}
+          {onToggleExpand && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="p-1.5 rounded-xl bg-white/90 dark:bg-slate-900/90 hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-md backdrop-blur-md transition-all active:scale-95 cursor-pointer"
+              title={isExpanded ? 'Kecilkan Peta' : 'Perbesar Peta Layar Penuh'}
+            >
+              {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Floating Bottom Action Toolbar */}

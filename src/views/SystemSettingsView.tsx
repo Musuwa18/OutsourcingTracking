@@ -63,6 +63,7 @@ import {
   DEFAULT_INSTITUTION_SETTINGS,
 } from '../types';
 import { VisualMapPicker } from '../components/VisualMapPicker';
+import { LocationAutoSuggestInput } from '../components/LocationAutoSuggestInput';
 import { StaffDetailModal } from '../components/StaffDetailModal';
 import {
   apiCreateDivision,
@@ -2366,6 +2367,17 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                     <span>Ubah Koordinat</span>
                   </button>
 
+                  <a
+                    href={`https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors"
+                    title="Buka titik koordinat di Google Maps"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Peta</span>
+                  </a>
+
                   <button
                     type="button"
                     onClick={() => handleDeleteLocation(loc.id, loc.name)}
@@ -4073,17 +4085,29 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveLocation} className="p-6 space-y-4 overflow-y-auto text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Nama Lokasi / Kantor / Pos Tugas
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Kantor Dinas Pendidikan Kab. HST"
+              <div className="relative z-20">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                    Nama Lokasi / Kantor / Pos Tugas <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-indigo-500 font-medium">
+                    Otomatis cari koordinat saat diketik
+                  </span>
+                </div>
+                <LocationAutoSuggestInput
                   value={locName}
-                  onChange={(e) => setLocName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  onChange={(val) => setLocName(val)}
+                  onSelectLocation={(selected) => {
+                    setLocName(selected.name);
+                    setLocLat(selected.latitude);
+                    setLocLng(selected.longitude);
+                    if (selected.address) {
+                      setLocAddress(selected.address);
+                    }
+                  }}
+                  placeholder="Ketik nama lokasi (contoh: Kantor Camat Barabai / SMPN 1 Barabai)"
+                  presetLocations={locations}
+                  required
                 />
               </div>
 
@@ -4115,6 +4139,11 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                     setLocLng(lng);
                   }}
                   onChangeRadius={(r) => setLocRadius(r)}
+                  onAddressFound={(addr) => {
+                    if (!locAddress.trim()) {
+                      setLocAddress(addr);
+                    }
+                  }}
                 />
               </div>
 

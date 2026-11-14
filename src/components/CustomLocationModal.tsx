@@ -12,7 +12,8 @@ import {
 import { OfficeLocation, StaffProfile } from '../types';
 import { PRIMARY_OFFICES } from '../utils/geo';
 import { apiUpdateStaffLocation } from '../services/api';
-import { parseGoogleMapsCoords } from './VisualMapPicker';
+import { VisualMapPicker, parseGoogleMapsCoords } from './VisualMapPicker';
+import { LocationAutoSuggestInput } from './LocationAutoSuggestInput';
 
 interface CustomLocationModalProps {
   isOpen: boolean;
@@ -212,17 +213,27 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
               </div>
             </div>
           ) : (
-            <div className="space-y-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
-              <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Nama Titik Lokasi / Fasilitas Khusus:
-                </label>
-                <input
-                  type="text"
+            <div className="space-y-3.5 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+              <div className="relative z-20">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Nama Titik Lokasi / Fasilitas Khusus <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-indigo-500 font-medium">
+                    Otomatis cari koordinat saat diketik
+                  </span>
+                </div>
+                <LocationAutoSuggestInput
                   value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  placeholder="Misal: Balai Belajar GTK / Gudang WorkShop Banua Hanyar"
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                  onChange={(val) => setCustomName(val)}
+                  onSelectLocation={(loc) => {
+                    setCustomName(loc.name);
+                    setCustomLat(loc.latitude);
+                    setCustomLng(loc.longitude);
+                    if (loc.address) setCustomAddress(loc.address);
+                  }}
+                  placeholder="Misal: Balai Belajar GTK / Gudang Workshop Banua Hanyar"
+                  presetLocations={availableOffices}
                   required
                 />
               </div>
@@ -240,84 +251,24 @@ export const CustomLocationModal: React.FC<CustomLocationModalProps> = ({
                 />
               </div>
 
+              {/* Visual Map Picker & Geofence Radius Circle */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Titik Koordinat Google Maps (Latitude, Longitude):
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Tempel dari Google Maps, contoh: -2.591159, 115.373525"
-                    onChange={(e) => {
-                      const parsed = parseGoogleMapsCoords(e.target.value);
-                      if (parsed) {
-                        setCustomLat(parsed.lat);
-                        setCustomLng(parsed.lng);
-                      }
-                    }}
-                    className="flex-1 font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const txt = await navigator.clipboard.readText();
-                        const parsed = parseGoogleMapsCoords(txt);
-                        if (parsed) {
-                          setCustomLat(parsed.lat);
-                          setCustomLng(parsed.lng);
-                          onShowToast('Koordinat berhasil ditempel dari clipboard.', 'success');
-                        }
-                      } catch (err) {}
-                    }}
-                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 cursor-pointer"
-                  >
-                    Tempel
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Latitude (Lintang):
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={customLat}
-                    onChange={(e) => setCustomLat(parseFloat(e.target.value) || 0)}
-                    className="w-full font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Longitude (Bujur):
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={customLng}
-                    onChange={(e) => setCustomLng(parseFloat(e.target.value) || 0)}
-                    className="w-full font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Radius Toleransi (m):
-                  </label>
-                  <input
-                    type="number"
-                    min={30}
-                    max={500}
-                    value={customRadius}
-                    onChange={(e) => setCustomRadius(parseInt(e.target.value, 10) || 100)}
-                    className="w-full font-mono bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
-                    required
-                  />
-                </div>
+                <VisualMapPicker
+                  latitude={customLat}
+                  longitude={customLng}
+                  radiusMeters={customRadius}
+                  locationName={customName || 'Lokasi Khusus Pegawai'}
+                  onChangeCoordinates={(lat, lng) => {
+                    setCustomLat(lat);
+                    setCustomLng(lng);
+                  }}
+                  onChangeRadius={(r) => setCustomRadius(r)}
+                  onAddressFound={(addr) => {
+                    if (!customAddress.trim()) setCustomAddress(addr);
+                  }}
+                  minRadius={20}
+                  maxRadius={500}
+                />
               </div>
             </div>
           )}

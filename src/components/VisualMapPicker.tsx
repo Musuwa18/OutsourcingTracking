@@ -11,6 +11,9 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
+  Layers,
+  Sparkles,
+  Search,
 } from 'lucide-react';
 
 interface VisualMapPickerProps {
@@ -20,7 +23,12 @@ interface VisualMapPickerProps {
   locationName: string;
   onChangeCoordinates: (lat: number, lng: number) => void;
   onChangeRadius: (radius: number) => void;
+  onAddressFound?: (address: string) => void;
+  minRadius?: number;
+  maxRadius?: number;
 }
+
+export const STORAGE_MAP_LAYER_KEY = 'outsourcetrack_map_layer_mode';
 
 export function parseGoogleMapsCoords(input: string): { lat: number; lng: number } | null {
   if (!input || !input.trim()) return null;
@@ -56,11 +64,25 @@ export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
   locationName,
   onChangeCoordinates,
   onChangeRadius,
+  onAddressFound,
+  minRadius = 10,
+  maxRadius = 500,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const circleRef = useRef<L.Circle | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const overlayLayerRef = useRef<L.TileLayer | null>(null);
+
+  const [mapMode, setMapMode] = useState<'streets' | 'satellite'>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_MAP_LAYER_KEY);
+      if (saved === 'satellite' || saved === 'streets') return saved;
+    } catch (e) {}
+    return 'streets';
+  });
+  const [isResolvingAddress, setIsResolvingAddress] = useState(false);
 
   // Unified string coordinate input state
   const [coordsInput, setCoordsInput] = useState<string>(
@@ -70,6 +92,61 @@ export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
   const [isLocatingGps, setIsLocatingGps] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
+  // Switch map mode and save to localStorage
+  const handleSwitchMapMode = (newMode: 'streets' | 'satellite') => {
+    setMapMode(newMode);
+    try {
+      localStorage.setItem(STORAGE_MAP_LAYER_KEY, newMode);
+      window.dispatchEvent(new CustomEvent('outsourcetrack:map-mode-changed', { detail: newMode }));
+    } catch (e) {}
+  };
+
+  // Sync mode when other map components change it
+  useEffect(() => {
+    const handleSync = (e: Event) => {
+      const customEvt = e as CustomEvent<'streets' | 'satellite'>;
+      if (customEvt.detail && (customEvt.detail === 'streets' || customEvt.detail === 'satellite')) {
+        setMapMode(customEvt.detail);
+      }
+    };
+    window.addEventListener('outsourcetrack:map-mode-changed', handleSync);
+    return () => window.removeEventListener('outsourcetrack:map-mode-changed', handleSync);
+  }, []);
+
+  // Resolve address from coordinates
+  const resolveAddress = async (lat: number, lng: number) => {
+    if (!onAddressFound) return;
+    try {
+      setIsResolvingAddress(true);
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        { headers: { 'Accept-Language': 'id, en' } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.display_name) {
+          const addr = data.address || {};
+          const detected =
+            addr.amenity ||
+            addr.building ||
+            addr.school ||
+            addr.office ||
+            addr.government ||
+            addr.neighbourhood ||
+            addr.village ||
+            data.display_name.split(',')[0];
+          if (detected) {
+            onAddressFound(detected.trim());
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to reverse geocode:', e);
+    } finally {
+      setIsResolvingAddress(false);
+    }
+  };
+
   // Sync coordsInput when props change externally (e.g. initial load or parent update)
   useEffect(() => {
     const parsedCurrent = parseGoogleMapsCoords(coordsInput);
@@ -77,6 +154,51 @@ export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
       setCoordsInput(`${latitude}, ${longitude}`);
     }
   }, [latitude, longitude]);
+
+  // Sync tile layers when mapMode changes
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+
+    // Remove existing tile and overlay layers
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+      tileLayerRef.current = null;
+    }
+    if (overlayLayerRef.current) {
+      map.removeLayer(overlayLayerRef.current);
+      overlayLayerRef.current = null;
+    }
+
+    if (mapMode === 'satellite') {
+      // 1. Esri World Imagery Base
+      const satLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Esri, Maxar, Earthstar Geographics',
+        }
+      ).addTo(map);
+      tileLayerRef.current = satLayer;
+
+      // 2. Esri World Boundaries & Places Overlay (Hybrid Road & Place Labels)
+      const overlayLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Esri Labels',
+        }
+      ).addTo(map);
+      overlayLayerRef.current = overlayLayer;
+    } else {
+      // OpenStreetMap Standard Street Layer
+      const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
+      }).addTo(map);
+      tileLayerRef.current = osmLayer;
+    }
+  }, [mapMode]);
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -97,11 +219,31 @@ export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
       attributionControl: false,
     });
 
-    // High resolution OpenStreetMap layer
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
+    if (mapMode === 'satellite') {
+      const satLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Esri World Imagery',
+        }
+      ).addTo(map);
+      tileLayerRef.current = satLayer;
+
+      const overlayLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Esri Labels',
+        }
+      ).addTo(map);
+      overlayLayerRef.current = overlayLayer;
+    } else {
+      const layer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap',
+      }).addTo(map);
+      tileLayerRef.current = layer;
+    }
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -164,6 +306,7 @@ export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
       onChangeCoordinates(newLat, newLng);
       setCoordsInput(`${newLat}, ${newLng}`);
       setParseError(null);
+      resolveAddress(newLat, newLng);
     });
 
     // Event: Click anywhere on map to move marker
@@ -175,17 +318,18 @@ export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
       onChangeCoordinates(newLat, newLng);
       setCoordsInput(`${newLat}, ${newLng}`);
       setParseError(null);
+      resolveAddress(newLat, newLng);
     });
 
     markerRef.current = marker;
     mapInstanceRef.current = map;
 
-    const timer = setTimeout(() => {
-      map.invalidateSize();
-    }, 200);
+    const t1 = setTimeout(() => map.invalidateSize(), 150);
+    const t2 = setTimeout(() => map.invalidateSize(), 400);
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(t1);
+      clearTimeout(t2);
       map.remove();
       mapInstanceRef.current = null;
     };
@@ -293,6 +437,19 @@ export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
 
           {/* Quick Action Tools */}
           <div className="flex items-center gap-1.5 self-end sm:self-auto">
+            {onAddressFound && (
+              <button
+                type="button"
+                onClick={() => resolveAddress(latitude, longitude)}
+                disabled={isResolvingAddress}
+                className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer disabled:opacity-50"
+                title="Deteksi nama tempat/bangunan di titik koordinat ini"
+              >
+                <Search className={`w-3 h-3 text-indigo-500 ${isResolvingAddress ? 'animate-spin' : ''}`} />
+                <span>{isResolvingAddress ? 'Mendeteksi...' : 'Deteksi Nama'}</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handlePasteFromClipboard}
@@ -391,6 +548,34 @@ export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
             <span>Klik peta / geser pin untuk sesuaikan titik</span>
           </div>
 
+          {/* Layer Mode Switcher (Peta vs Citra Satelit Hibrida) */}
+          <div className="absolute top-2.5 right-2.5 z-[400] flex items-center bg-slate-950/85 backdrop-blur-md p-0.5 rounded-xl border border-slate-700/80 shadow-md">
+            <button
+              type="button"
+              onClick={() => handleSwitchMapMode('streets')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                mapMode === 'streets'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Tampilkan peta jalan standar OpenStreetMap"
+            >
+              🗺️ Jalan
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitchMapMode('satellite')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                mapMode === 'satellite'
+                  ? 'bg-cyan-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Tampilkan citra satelit hibrida dengan garis jalan & label gedung"
+            >
+              🛰️ Satelit
+            </button>
+          </div>
+
           {/* Radius Badge Overlay */}
           <div className="absolute bottom-2.5 left-2.5 z-[400] bg-indigo-950/90 backdrop-blur-xs px-3 py-1 rounded-xl border border-indigo-700/80 text-[10px] text-indigo-200 font-mono font-bold shadow-md pointer-events-none">
             Radius Toleransi: {radiusMeters} meter
@@ -407,24 +592,24 @@ export const VisualMapPicker: React.FC<VisualMapPickerProps> = ({
               {radiusMeters} meter
             </span>
           </label>
-          <span className="text-[10px] text-slate-400 font-medium">Rentang: 10m - 200m</span>
+          <span className="text-[10px] text-slate-400 font-medium">Rentang: {minRadius}m - {maxRadius}m</span>
         </div>
 
         <input
           type="range"
-          min={10}
-          max={200}
-          step={5}
+          min={minRadius}
+          max={maxRadius}
+          step={maxRadius >= 500 ? 10 : 5}
           value={radiusMeters}
           onChange={(e) => onChangeRadius(Number(e.target.value))}
           className="w-full accent-indigo-600 h-2 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
         />
 
         <div className="flex justify-between text-[9px] text-slate-400 font-mono">
-          <span>10m (Sangat Ketat)</span>
-          <span>50m (Standar Kantor)</span>
+          <span>{minRadius}m (Ketat)</span>
+          <span>50m (Standar)</span>
           <span>100m (Gedung Luas)</span>
-          <span>200m (Maksimal)</span>
+          <span>{maxRadius}m (Maksimal)</span>
         </div>
       </div>
     </div>
