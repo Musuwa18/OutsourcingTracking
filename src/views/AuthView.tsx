@@ -403,7 +403,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
             Portal Autentikasi Terpadu
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-            Sistem Informasi Manajemen Mitra Kerja, PPPK & Magang Disdik Kab. Hulu Sungai Tengah
+            Sistem Informasi Manajemen Mitra Kerja
           </p>
         </div>
 
@@ -871,7 +871,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
         {/* Footer info */}
         <div className="text-center text-[11px] text-slate-400 space-y-1">
-          <p>© 2026 Dinas Pendidikan Kabupaten Hulu Sungai Tengah · Barabai, Kalsel</p>
+          <p>© 2026 Dikembangkan Oleh Sub bagian Perencanaan dan Pelaporan Disdik HST</p>
           <p>Dilindungi Enkripsi TLS 1.3 & Device Binding Keamanan Absensi</p>
         </div>
       </div>
