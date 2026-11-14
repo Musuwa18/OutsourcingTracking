@@ -53,6 +53,7 @@ import { AdminAttendanceView } from './views/AdminAttendanceView';
 import { SupervisorEvaluationView } from './views/SupervisorEvaluationView';
 import { AnalyticsMonthlyView } from './views/AnalyticsMonthlyView';
 import { MonthlyMatrixView } from './views/MonthlyMatrixView';
+import { TaskDispatchView } from './views/TaskDispatchView';
 import { SettingsSecurityView } from './views/SettingsSecurityView';
 import { SystemSettingsView, SettingsTab } from './views/SystemSettingsView';
 import { AuditLogView } from './views/AuditLogView';
@@ -2407,6 +2408,17 @@ export default function App() {
                     setPrintModalStaffId(staff.id);
                     setPrintModalMode('timesheet-harian');
                     setPrintModalOpen(true);
+                  }}
+                />
+              )}
+
+              {adminTab === 'penugasan-lapangan' && (
+                <TaskDispatchView
+                  currentUser={currentUser}
+                  staffList={staffList}
+                  locations={locations}
+                  onNavigateToReports={() => {
+                    setAdminTab('persetujuan-laporan');
                   }}
                 />
               )}

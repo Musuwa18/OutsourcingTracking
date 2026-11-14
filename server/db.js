@@ -285,6 +285,52 @@ if (isNodeSqlite && dbEngine) {
     );
     CREATE INDEX IF NOT EXISTS idx_biometrics_user_id ON user_biometrics(user_id);
     CREATE INDEX IF NOT EXISTS idx_biometrics_credential_id ON user_biometrics(credential_id);
+
+    CREATE TABLE IF NOT EXISTS task_assignments (
+      id TEXT PRIMARY KEY,
+      supervisor_id TEXT NOT NULL,
+      supervisor_name TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      category TEXT NOT NULL,
+      priority TEXT DEFAULT 'NORMAL',
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      start_time TEXT,
+      end_time TEXT,
+      location_id TEXT,
+      location_name TEXT NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      radius_meters INTEGER DEFAULT 100,
+      status TEXT DEFAULT 'OPEN',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tasks_supervisor ON task_assignments(supervisor_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_dates ON task_assignments(start_date, end_date);
+
+    CREATE TABLE IF NOT EXISTS task_assignees (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      staff_id TEXT NOT NULL,
+      staff_name TEXT NOT NULL,
+      staff_nip TEXT,
+      division_name TEXT,
+      status TEXT DEFAULT 'ASSIGNED',
+      acknowledged_at TEXT,
+      checkin_time TEXT,
+      checkin_selfie_url TEXT,
+      checkin_latitude REAL,
+      checkin_longitude REAL,
+      checkin_distance_meters REAL,
+      report_id TEXT,
+      completed_at TEXT,
+      supervisor_feedback TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (task_id) REFERENCES task_assignments(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_assignees_task ON task_assignees(task_id);
+    CREATE INDEX IF NOT EXISTS idx_assignees_staff ON task_assignees(staff_id);
   `);
 
   // Migrasi aman untuk kolom baru users jika database sudah ada sebelumnya
@@ -431,6 +477,57 @@ if (isNodeSqlite && dbEngine) {
   try {
     dbEngine.exec(`ALTER TABLE notifications ADD COLUMN division_name TEXT;`);
   } catch (e) {}
+
+  // Migrasi aman untuk tabel penugasan lapangan / disposisi tugas
+  try {
+    dbEngine.exec(`
+      CREATE TABLE IF NOT EXISTS task_assignments (
+        id TEXT PRIMARY KEY,
+        supervisor_id TEXT NOT NULL,
+        supervisor_name TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        category TEXT NOT NULL,
+        priority TEXT DEFAULT 'NORMAL',
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        start_time TEXT,
+        end_time TEXT,
+        location_id TEXT,
+        location_name TEXT NOT NULL,
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        radius_meters INTEGER DEFAULT 100,
+        status TEXT DEFAULT 'OPEN',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_tasks_supervisor ON task_assignments(supervisor_id);
+      CREATE INDEX IF NOT EXISTS idx_tasks_dates ON task_assignments(start_date, end_date);
+
+      CREATE TABLE IF NOT EXISTS task_assignees (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        staff_id TEXT NOT NULL,
+        staff_name TEXT NOT NULL,
+        staff_nip TEXT,
+        division_name TEXT,
+        status TEXT DEFAULT 'ASSIGNED',
+        acknowledged_at TEXT,
+        checkin_time TEXT,
+        checkin_selfie_url TEXT,
+        checkin_latitude REAL,
+        checkin_longitude REAL,
+        checkin_distance_meters REAL,
+        report_id TEXT,
+        completed_at TEXT,
+        supervisor_feedback TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES task_assignments(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_assignees_task ON task_assignees(task_id);
+      CREATE INDEX IF NOT EXISTS idx_assignees_staff ON task_assignees(staff_id);
+    `);
+  } catch (e) {}
 }
 
 // Fallback JSON in-memory store jika sqlite bawaan tidak aktif
@@ -443,7 +540,9 @@ let fallbackStore = {
   evaluations: [],
   leave_requests: [],
   notifications: [],
-  user_biometrics: []
+  user_biometrics: [],
+  task_assignments: [],
+  task_assignees: []
 };
 
 if (!isNodeSqlite && fs.existsSync(FALLBACK_FILE)) {
@@ -4236,6 +4335,346 @@ export function saveInstitutionSettings(settings) {
     `).run(jsonStr, now);
   }
   return settings;
+}
+
+// ==============================================================================
+// MODUL PENUGASAN LAPANGAN / DISPOSISI TUGAS KHUSUS (TASK ASSIGNMENTS)
+// ==============================================================================
+
+export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
+
+export function createTaskAssignment(data) {
+  const serverWita = getServerWitaTime();
+  const now = new Date().toISOString();
+  const id = data.id || `tsk-${Date.now()}`;
+  const supervisorId = data.supervisorId || data.supervisor_id || 'admin';
+  const supervisorName = data.supervisorName || data.supervisor_name || 'Atasan Langsung';
+  const title = data.title;
+  const description = data.description || '';
+  const category = data.category || 'Tugas Lapangan';
+  const priority = data.priority || 'NORMAL';
+  const startDate = data.startDate || data.start_date || serverWita.date;
+  const endDate = data.endDate || data.end_date || startDate;
+  const startTime = data.startTime || data.start_time || '08:00';
+  const endTime = data.endTime || data.end_time || '16:00';
+  const locationId = data.locationId || data.location_id || null;
+  const locationName = data.locationName || data.location_name || 'Titik Tugas Khusus';
+  const latitude = Number(data.latitude ?? -2.591159);
+  const longitude = Number(data.longitude ?? 115.373524);
+  const radiusMeters = Number(data.radiusMeters || data.radius_meters || 100);
+  const status = data.status || 'OPEN';
+
+  const assignees = Array.isArray(data.assignees) ? data.assignees : [];
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      INSERT INTO task_assignments (
+        id, supervisor_id, supervisor_name, title, description, category, priority,
+        start_date, end_date, start_time, end_time, location_id, location_name,
+        latitude, longitude, radius_meters, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, supervisorId, supervisorName, title, description, category, priority,
+      startDate, endDate, startTime, endTime, locationId, locationName,
+      latitude, longitude, radiusMeters, status, now
+    );
+
+    const insertAssigneeStmt = dbEngine.prepare(`
+      INSERT INTO task_assignees (
+        id, task_id, staff_id, staff_name, staff_nip, division_name,
+        status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const a of assignees) {
+      const aId = a.id || `tska-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const staffId = a.staffId || a.staff_id;
+      const staffName = a.staffName || a.staff_name;
+      const staffNip = a.staffNip || a.staff_nip || '';
+      const divisionName = a.divisionName || a.division_name || '';
+
+      insertAssigneeStmt.run(
+        aId, id, staffId, staffName, staffNip, divisionName, 'ASSIGNED', now
+      );
+
+      // Kirim notifikasi ke masing-masing staf yang ditugaskan
+      try {
+        createNotification({
+          userId: staffId,
+          staffId,
+          staffName,
+          title: `📌 Penugasan Resmi: ${title}`,
+          message: `Atasan ${supervisorName} menugaskan Anda ke ${locationName} (${startDate} s.d. ${endDate}). Buka Beranda untuk melihat detail & check-in lokasi.`,
+          type: 'task_assignment',
+        });
+      } catch (errNotif) {}
+    }
+  }
+
+  return getTaskAssignmentById(id);
+}
+
+export function listTaskAssignments(filters = {}) {
+  const { supervisorId, staffId, date, status } = filters;
+
+  if (isNodeSqlite && dbEngine) {
+    let query = `SELECT DISTINCT t.* FROM task_assignments t`;
+    const params = [];
+
+    if (staffId) {
+      query += ` JOIN task_assignees a ON t.id = a.task_id WHERE a.staff_id = ?`;
+      params.push(staffId);
+    } else {
+      query += ` WHERE 1=1`;
+    }
+
+    if (supervisorId && supervisorId !== 'admin') {
+      query += ` AND t.supervisor_id = ?`;
+      params.push(supervisorId);
+    }
+
+    if (date) {
+      query += ` AND ? >= t.start_date AND ? <= t.end_date`;
+      params.push(date, date);
+    }
+
+    if (status && status !== 'ALL') {
+      query += ` AND t.status = ?`;
+      params.push(status);
+    }
+
+    query += ` ORDER BY t.created_at DESC`;
+
+    const tasks = dbEngine.prepare(query).all(...params);
+
+    const getAssigneesStmt = dbEngine.prepare(`
+      SELECT * FROM task_assignees WHERE task_id = ? ORDER BY staff_name ASC
+    `);
+
+    return tasks.map((t) => {
+      const assigneesRows = getAssigneesStmt.all(t.id);
+      return {
+        id: t.id,
+        supervisorId: t.supervisor_id,
+        supervisorName: t.supervisor_name,
+        title: t.title,
+        description: t.description,
+        category: t.category,
+        priority: t.priority,
+        startDate: t.start_date,
+        endDate: t.end_date,
+        startTime: t.start_time,
+        endTime: t.end_time,
+        locationId: t.location_id,
+        locationName: t.location_name,
+        latitude: t.latitude,
+        longitude: t.longitude,
+        radiusMeters: t.radius_meters,
+        status: t.status,
+        createdAt: t.created_at,
+        assignees: assigneesRows.map((a) => ({
+          id: a.id,
+          taskId: a.task_id,
+          staffId: a.staff_id,
+          staffName: a.staff_name,
+          staffNip: a.staff_nip,
+          divisionName: a.division_name,
+          status: a.status,
+          acknowledgedAt: a.acknowledged_at,
+          checkinTime: a.checkin_time,
+          checkinSelfieUrl: a.checkin_selfie_url,
+          checkinLatitude: a.checkin_latitude,
+          checkinLongitude: a.checkin_longitude,
+          checkinDistanceMeters: a.checkin_distance_meters,
+          reportId: a.report_id,
+          completedAt: a.completed_at,
+          supervisorFeedback: a.supervisor_feedback,
+          createdAt: a.created_at,
+        })),
+      };
+    });
+  }
+
+  return [];
+}
+
+export function getTaskAssignmentById(id) {
+  if (isNodeSqlite && dbEngine) {
+    const t = dbEngine.prepare(`SELECT * FROM task_assignments WHERE id = ?`).get(id);
+    if (!t) return null;
+
+    const assigneesRows = dbEngine.prepare(`
+      SELECT * FROM task_assignees WHERE task_id = ? ORDER BY staff_name ASC
+    `).all(id);
+
+    return {
+      id: t.id,
+      supervisorId: t.supervisor_id,
+      supervisorName: t.supervisor_name,
+      title: t.title,
+      description: t.description,
+      category: t.category,
+      priority: t.priority,
+      startDate: t.start_date,
+      endDate: t.end_date,
+      startTime: t.start_time,
+      endTime: t.end_time,
+      locationId: t.location_id,
+      locationName: t.location_name,
+      latitude: t.latitude,
+      longitude: t.longitude,
+      radiusMeters: t.radius_meters,
+      status: t.status,
+      createdAt: t.created_at,
+      assignees: assigneesRows.map((a) => ({
+        id: a.id,
+        taskId: a.task_id,
+        staffId: a.staff_id,
+        staffName: a.staff_name,
+        staffNip: a.staff_nip,
+        divisionName: a.division_name,
+        status: a.status,
+        acknowledgedAt: a.acknowledged_at,
+        checkinTime: a.checkin_time,
+        checkinSelfieUrl: a.checkin_selfie_url,
+        checkinLatitude: a.checkin_latitude,
+        checkinLongitude: a.checkin_longitude,
+        checkinDistanceMeters: a.checkin_distance_meters,
+        reportId: a.report_id,
+        completedAt: a.completed_at,
+        supervisorFeedback: a.supervisor_feedback,
+        createdAt: a.created_at,
+      })),
+    };
+  }
+  return null;
+}
+
+export function acknowledgeTaskAssignment(taskId, staffId) {
+  const now = new Date().toISOString();
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      UPDATE task_assignees
+      SET status = 'ACKNOWLEDGED', acknowledged_at = COALESCE(acknowledged_at, ?)
+      WHERE task_id = ? AND staff_id = ? AND status = 'ASSIGNED'
+    `).run(now, taskId, staffId);
+  }
+  return getTaskAssignmentById(taskId);
+}
+
+export function checkinTaskAssignment(taskId, staffId, checkinData) {
+  const serverWita = getServerWitaTime();
+  const task = getTaskAssignmentById(taskId);
+  if (!task) {
+    const error = new Error('Tugas penugasan tidak ditemukan.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const assignee = task.assignees.find((a) => a.staffId === staffId);
+  if (!assignee) {
+    const error = new Error('Anda tidak terdaftar dalam personil penugasan ini.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const lat = Number(checkinData.latitude);
+  const lon = Number(checkinData.longitude);
+  const acc = Number(checkinData.accuracy || 15);
+  const dist = calculateDistanceMeters(lat, lon, task.latitude, task.longitude);
+
+  // Validasi Geofence: Jarak tidak boleh melebihi batas radius tugas (+ toleransi akurasi GPS)
+  const maxAllowedDist = task.radiusMeters + Math.min(acc, 50);
+  if (dist > maxAllowedDist) {
+    const error = new Error(`CHECKIN_DITOLAK_LUAR_RADIUS: Posisi Anda berjarak ${dist}m dari titik lokasi tugas (${task.locationName}). Batas radius toleransi adalah ${task.radiusMeters}m.`);
+    error.statusCode = 422;
+    throw error;
+  }
+
+  const savedSelfie = saveBase64Image(checkinData.selfieUrl, 'tasks');
+
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      UPDATE task_assignees
+      SET status = 'CHECKED_IN',
+          checkin_time = ?,
+          checkin_selfie_url = ?,
+          checkin_latitude = ?,
+          checkin_longitude = ?,
+          checkin_distance_meters = ?
+      WHERE task_id = ? AND staff_id = ?
+    `).run(
+      serverWita.time,
+      savedSelfie,
+      lat,
+      lon,
+      dist,
+      taskId,
+      staffId
+    );
+
+    // Otomatis ubah status penugasan menjadi IN_PROGRESS jika masih OPEN
+    if (task.status === 'OPEN') {
+      dbEngine.prepare(`UPDATE task_assignments SET status = 'IN_PROGRESS' WHERE id = ?`).run(taskId);
+    }
+
+    // Otomatis catat ke field_checkins agar terekam dalam histori tugas harian staf
+    try {
+      saveFieldCheckin({
+        staffId,
+        staffName: assignee.staffName,
+        divisionId: 'div-tugas',
+        selfieUrl: savedSelfie,
+        locationCoords: {
+          latitude: lat,
+          longitude: lon,
+          accuracy: acc,
+          locationName: task.locationName,
+        },
+        activityNotes: `Check-in Penugasan Resmi: ${task.title} (${task.locationName})`,
+      });
+    } catch (eField) {}
+  }
+
+  return getTaskAssignmentById(taskId);
+}
+
+export function updateTaskAssignmentStatus(taskId, status, supervisorFeedback = '') {
+  const now = new Date().toISOString();
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`
+      UPDATE task_assignments SET status = ? WHERE id = ?
+    `).run(status, taskId);
+
+    if (status === 'COMPLETED') {
+      dbEngine.prepare(`
+        UPDATE task_assignees
+        SET status = 'DONE', completed_at = COALESCE(completed_at, ?), supervisor_feedback = COALESCE(?, supervisor_feedback)
+        WHERE task_id = ?
+      `).run(now, supervisorFeedback || null, taskId);
+    }
+  }
+  return getTaskAssignmentById(taskId);
+}
+
+export function deleteTaskAssignment(taskId) {
+  if (isNodeSqlite && dbEngine) {
+    dbEngine.prepare(`DELETE FROM task_assignees WHERE task_id = ?`).run(taskId);
+    dbEngine.prepare(`DELETE FROM task_assignments WHERE id = ?`).run(taskId);
+  }
+  return true;
 }
 
 // Jalankan inisialisasi awal

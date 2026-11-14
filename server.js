@@ -88,6 +88,13 @@ import {
   listNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  createTaskAssignment,
+  listTaskAssignments,
+  getTaskAssignmentById,
+  acknowledgeTaskAssignment,
+  checkinTaskAssignment,
+  updateTaskAssignmentStatus,
+  deleteTaskAssignment,
 } from './server/db.js';
 dotenv.config();
 
@@ -1813,6 +1820,88 @@ Pedoman Menjawab:
   } catch (err) {
     console.error('[API Error] AI Chat:', err);
     res.status(500).json({ error: err.message || 'Gagal memproses analisis AI.' });
+  }
+});
+
+// ==============================================================================
+// 15. TASK ASSIGNMENTS & DISPATCHING API
+// ==============================================================================
+app.get('/api/tasks', (req, res) => {
+  try {
+    const { supervisorId, staffId, date, status } = req.query;
+    const tasks = listTaskAssignments({ supervisorId, staffId, date, status });
+    res.json({ success: true, tasks });
+  } catch (err) {
+    console.error('[API Error] List Tasks:', err);
+    res.status(500).json({ error: 'Gagal memuat daftar penugasan.' });
+  }
+});
+
+app.get('/api/tasks/:id', (req, res) => {
+  try {
+    const task = getTaskAssignmentById(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Penugasan tidak ditemukan.' });
+    res.json({ success: true, task });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal memuat detail penugasan.' });
+  }
+});
+
+app.post('/api/tasks', (req, res) => {
+  try {
+    const task = createTaskAssignment(req.body);
+    res.status(201).json({ success: true, task, message: 'Penugasan berhasil diterbitkan dan diteruskan ke personil.' });
+  } catch (err) {
+    console.error('[API Error] Create Task:', err);
+    res.status(500).json({ error: err.message || 'Gagal menerbitkan penugasan baru.' });
+  }
+});
+
+app.post('/api/tasks/:id/acknowledge', (req, res) => {
+  try {
+    const { staffId } = req.body;
+    if (!staffId) return res.status(400).json({ error: 'staffId wajib diisi.' });
+    const updated = acknowledgeTaskAssignment(req.params.id, staffId);
+    res.json({ success: true, task: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Gagal mengonfirmasi penugasan.' });
+  }
+});
+
+app.post('/api/tasks/:id/checkin', (req, res) => {
+  try {
+    const { staffId, selfieUrl, latitude, longitude, accuracy } = req.body;
+    if (!staffId || !selfieUrl || latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ error: 'Data check-in tidak lengkap (staffId, selfieUrl, latitude, longitude diperlukan).' });
+    }
+    const updated = checkinTaskAssignment(req.params.id, staffId, { selfieUrl, latitude, longitude, accuracy });
+    res.json({ success: true, task: updated, message: 'Check-in penugasan berhasil diverifikasi di lokasi tugas.' });
+  } catch (err) {
+    console.error('[API Error] Task Checkin:', err);
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    res.status(500).json({ error: err.message || 'Gagal melakukan check-in penugasan.' });
+  }
+});
+
+app.put('/api/tasks/:id/status', (req, res) => {
+  try {
+    const { status, supervisorFeedback } = req.body;
+    if (!status) return res.status(400).json({ error: 'Status tugas wajib diisi.' });
+    const updated = updateTaskAssignmentStatus(req.params.id, status, supervisorFeedback);
+    res.json({ success: true, task: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Gagal memperbarui status penugasan.' });
+  }
+});
+
+app.delete('/api/tasks/:id', (req, res) => {
+  try {
+    deleteTaskAssignment(req.params.id);
+    res.json({ success: true, message: 'Penugasan berhasil dihapus.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menghapus penugasan.' });
   }
 });
 

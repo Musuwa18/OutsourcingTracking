@@ -21,7 +21,7 @@ interface CameraCaptureModalProps {
     fieldDutyNotes?: string;
   }) => void;
   assignedLocation?: OfficeLocation;
-  actionType: 'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin' | 'overtime-start' | 'overtime-finish';
+  actionType: 'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin' | 'overtime-start' | 'overtime-finish' | 'task-checkin';
 }
 
 export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
@@ -107,7 +107,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     }
     if (actionType === 'field-checkin') {
       setIsFieldDuty(true);
-    } else if (actionType === 'break-out' || actionType === 'break-in') {
+    } else {
       setIsFieldDuty(false);
     }
     const updateTimeDisplay = () => {
@@ -372,6 +372,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       case 'break-out': return 'Presensi Istirahat Keluar';
       case 'break-in': return 'Presensi Selesai Istirahat';
       case 'field-checkin': return 'Presensi Tugas Lapangan (Multi-Titik)';
+      case 'task-checkin': return 'Check-in Penugasan Resmi Lapangan';
       case 'overtime-start': return 'Presensi Mulai Lembur (Kantor)';
       case 'overtime-finish': return 'Presensi Selesai Lembur (Kantor)';
       default: return 'Presensi WebRTC';

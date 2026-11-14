@@ -17,6 +17,7 @@ import {
   Briefcase,
   ShieldCheck,
   HelpCircle,
+  Compass,
 } from 'lucide-react';
 import { UserRole } from '../types';
 interface SidebarProps {
@@ -74,6 +75,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       isAlertBadge: false,
     },
     {
+      id: 'penugasan-lapangan',
+      label: 'Penugasan Lapangan',
+      icon: Compass,
+      badge: 'Disposisi',
+      isAlertBadge: false,
+    },
+    {
       id: 'persetujuan-laporan',
       label: 'Verifikasi Laporan',
       icon: FileCheck2,
@@ -113,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isSupervisor = currentRole === 'supervisor' || currentRole === 'coordinator';
   const displayedNavItems = isSupervisor
     ? adminNavItems.filter((item) =>
-        ['monitoring-presensi', 'matriks-presensi', 'persetujuan-laporan', 'evaluasi-mingguan', 'analitik-bulanan'].includes(
+        ['monitoring-presensi', 'matriks-presensi', 'penugasan-lapangan', 'persetujuan-laporan', 'evaluasi-mingguan', 'analitik-bulanan'].includes(
           item.id
         )
       )

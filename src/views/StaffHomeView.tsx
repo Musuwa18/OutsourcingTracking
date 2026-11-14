@@ -28,9 +28,12 @@ import {
   Printer,
   FileSpreadsheet,
   Lock,
+  Navigation,
+  Compass,
+  LogOut,
 } from 'lucide-react';
-import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, DayWorkSchedule, FieldCheckinRecord, OvertimeRecord, LeaveRequest, LeaveQuota, LeaveType } from '../types';
-import { PRIMARY_OFFICES } from '../utils/geo';
+import { StaffProfile, AttendanceRecord, DailyWorkReport, AttendanceGlobalSettings, DEFAULT_ATTENDANCE_SETTINGS, DayWorkSchedule, FieldCheckinRecord, OvertimeRecord, LeaveRequest, LeaveQuota, LeaveType, TaskAssignment, TaskAssigneeItem } from '../types';
+import { PRIMARY_OFFICES, calculateDistanceMeters } from '../utils/geo';
 import { getDayOfWeekKey, getTodayDateStr, getCurrentWitaTimeStr } from '../utils/date';
 import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { WatermarkCameraModal } from '../components/WatermarkCameraModal';
@@ -38,6 +41,8 @@ import { AiDuplicateValidationModal } from '../components/AiDuplicateValidationM
 import { validateReportPhotoAgainstHistory, computeImagePerceptualHash } from '../utils/imageHash';
 import { IndonesianDatePicker } from '../components/IndonesianDatePicker';
 import { createWorkPhotoThumbnail } from '../data/mockData';
+import { apiGetTasks, apiAcknowledgeTask, apiCheckinTask } from '../services/api';
+import { GeofenceMiniMap } from '../components/GeofenceMiniMap';
 
 interface StaffHomeViewProps {
   staff: StaffProfile;
@@ -132,7 +137,95 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 }) => {
   const safeOffice = staff?.assignedLocation || PRIMARY_OFFICES[0];
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
-  const [actionType, setActionType] = useState<'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin'>('clock-in');
+  const [actionType, setActionType] = useState<'clock-in' | 'clock-out' | 'break-out' | 'break-in' | 'field-checkin' | 'task-checkin'>('clock-in');
+  const [myTasks, setMyTasks] = useState<TaskAssignment[]>([]);
+  const [selectedTaskForCheckin, setSelectedTaskForCheckin] = useState<TaskAssignment | null>(null);
+  const [taskCheckinSubmitting, setTaskCheckinSubmitting] = useState<boolean>(false);
+
+  // Load active tasks assigned to this staff member
+  const loadMyTasks = async () => {
+    if (!staff?.id) return;
+    try {
+      const today = getTodayDateStr();
+      const data = await apiGetTasks({ staffId: staff.id, date: today });
+      setMyTasks(data);
+    } catch (e) {
+      console.warn('Failed to load my tasks:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadMyTasks();
+  }, [staff?.id]);
+
+  // Live GPS tracking for GeofenceMiniMap
+  const [homeGpsCoords, setHomeGpsCoords] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    distance: number;
+    withinRadius: boolean;
+  } | null>(null);
+  const [isLocatingHomeGps, setIsLocatingHomeGps] = useState<boolean>(true);
+
+  const officeLat = typeof safeOffice?.latitude === 'number' ? safeOffice.latitude : PRIMARY_OFFICES[0].latitude;
+  const officeLng = typeof safeOffice?.longitude === 'number' ? safeOffice.longitude : PRIMARY_OFFICES[0].longitude;
+  const officeRadius = typeof safeOffice?.radiusMeters === 'number' ? safeOffice.radiusMeters : 100;
+
+  const refreshHomeGps = () => {
+    if (!('geolocation' in navigator)) {
+      setIsLocatingHomeGps(false);
+      return;
+    }
+    setIsLocatingHomeGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const dist = calculateDistanceMeters(latitude, longitude, officeLat, officeLng);
+        const within = dist <= officeRadius;
+        setHomeGpsCoords({
+          latitude,
+          longitude,
+          accuracy,
+          distance: dist,
+          withinRadius: within,
+        });
+        setIsLocatingHomeGps(false);
+      },
+      (err) => {
+        console.warn('[HomeGPS] Error detecting location:', err.message);
+        setIsLocatingHomeGps(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+    );
+  };
+
+  useEffect(() => {
+    refreshHomeGps();
+    let watchId: number | null = null;
+    if ('geolocation' in navigator) {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          const dist = calculateDistanceMeters(latitude, longitude, officeLat, officeLng);
+          const within = dist <= officeRadius;
+          setHomeGpsCoords({
+            latitude,
+            longitude,
+            accuracy,
+            distance: dist,
+            withinRadius: within,
+          });
+          setIsLocatingHomeGps(false);
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 15000 }
+      );
+    }
+    return () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [officeLat, officeLng, officeRadius]);
 
   const isNightShiftWorker = Boolean(
     staff?.roleTitle?.toLowerCase().includes('jaga malam') ||
@@ -520,7 +613,40 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
     setCameraModalOpen(true);
   };
 
+  const handleTaskCheckinSubmit = async (
+    selfieBase64: string,
+    locationData: any,
+    targetTask: TaskAssignment
+  ) => {
+    if (!staff?.id) return;
+    try {
+      setTaskCheckinSubmitting(true);
+      await apiCheckinTask(targetTask.id, {
+        staffId: staff.id,
+        selfieUrl: selfieBase64,
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+        accuracy: locationData.accuracy,
+      });
+      alert(`✅ Berhasil! Check-in kehadiran tugas "${targetTask.title}" di ${targetTask.locationName} telah terverifikasi.`);
+      loadMyTasks();
+      setSelectedTaskForCheckin(null);
+    } catch (err: any) {
+      console.error('Task checkin error:', err);
+      alert(err.message || 'Gagal memverifikasi check-in penugasan.');
+    } finally {
+      setTaskCheckinSubmitting(false);
+    }
+  };
+
   const handleAttendanceCapture = (selfieBase64: string, locationData: any) => {
+    if (actionType === 'task-checkin') {
+      if (selectedTaskForCheckin) {
+        handleTaskCheckinSubmit(selfieBase64, locationData, selectedTaskForCheckin);
+      }
+      return;
+    }
+
     // Penegakan Geofence Ketat (Strict Geofence Enforcement):
     // Presensi di luar perimeter kantor wajib ditolak kecuali mode tugas dinas lapangan resmi aktif
     if (!locationData.isFieldDuty && locationData.withinRadius === false) {
@@ -666,31 +792,48 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-24 md:pb-8">
       
-      {/* Active Staff Identity Banner */}
-      <div className="p-3.5 glass-card border border-white/60 dark:border-white/10 shadow-xs flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span
-            className="w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-bold text-white shadow-md shadow-indigo-500/20 shrink-0"
-            style={{ backgroundColor: staff?.avatarColor || '#4f46e5' }}
-          >
-            {staff?.initials || 'OS'}
-          </span>
-          <div>
-            <div className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">
-              {staff?.name || 'Staf Alih Daya'}
-            </div>
-            <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
-              {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono text-indigo-600 dark:text-cyan-400 font-bold">{staff?.nip || '-'}</span>
+      {/* ========================================================================= */}
+      {/* 1. GEOFENCE MAP-AWARE HEADER (Khusus Tab Presensi Mobile)                  */}
+      {/* ========================================================================= */}
+      {isPresensiMode && (
+        <div className="space-y-3 -mx-4 sm:mx-0">
+          <GeofenceMiniMap
+            userCoords={homeGpsCoords}
+            assignedLocation={safeOffice}
+            isLocating={isLocatingHomeGps}
+            onRecenter={refreshHomeGps}
+            className="rounded-none sm:rounded-3xl border-x-0 sm:border-x"
+          />
+        </div>
+      )}
+
+      {/* Active Staff Identity Banner (Hanya Tampil di Mode Laporan Non-Presensi) */}
+      {!isPresensiMode && (
+        <div className="p-3.5 glass-card border border-white/60 dark:border-white/10 shadow-xs flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span
+              className="w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-bold text-white shadow-md shadow-indigo-500/20 shrink-0"
+              style={{ backgroundColor: staff?.avatarColor || '#4f46e5' }}
+            >
+              {staff?.initials || 'OS'}
+            </span>
+            <div>
+              <div className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">
+                {staff?.name || 'Staf Alih Daya'}
+              </div>
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono text-indigo-600 dark:text-cyan-400 font-bold">{staff?.nip || '-'}</span>
+              </div>
             </div>
           </div>
+          <div className="text-right shrink-0">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {staff?.division ? staff.division.split(' ')[0] : 'Umum'}
+            </span>
+          </div>
         </div>
-        <div className="text-right shrink-0">
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800/60">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            {staff?.division ? staff.division.split(' ')[0] : 'Umum'}
-          </span>
-        </div>
-      </div>
+      )}
 
       {/* Friendly Schedule & Operational Reminder Banner (Sembunyi di Tab Laporan) */}
       {!isLaporanMode && (
@@ -730,237 +873,214 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
         </div>
       )}
 
-      {/* Profile & Shift Status Header Card (Sembunyi di Tab Laporan) */}
+      {/* ========================================================================= */}
+      {/* 2. PANEL AKSI BOTTOM-SHEET PRESENSI (Geofence Map-Aware Minimalist)       */}
+      {/* ========================================================================= */}
       {!isLaporanMode && (
-        <div className="p-5 glass-card space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white text-base shadow-md shadow-indigo-500/20 border border-white/30 shrink-0"
-              style={{ backgroundColor: staff?.avatarColor || '#4f46e5' }}
-            >
-              {staff?.initials || 'OS'}
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
-                {staff?.name || 'Staf Alih Daya'}
-              </h1>
-              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono">{staff?.nip || '-'}</span>
-              </p>
-            </div>
-          </div>
-          <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full glass-pill text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
-            {staff?.vendorName || 'Mitra Disdik'}
-          </span>
-        </div>
-
-        {/* Assigned Location Badge or Field Duty Badge */}
-        {todayAttendance?.isFieldDuty ? (
-          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-xs text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800 font-medium">
-            <Briefcase className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="truncate">Penugasan Lapangan: <strong className="text-amber-950 dark:text-amber-100">{todayAttendance.fieldDutyNotes || 'Dinas Luar Resmi'}</strong></span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 backdrop-blur-md text-xs text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10 font-medium">
-            <MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span className="truncate">Lokasi Tugas: <strong className="text-slate-900 dark:text-white">{safeOffice.name || PRIMARY_OFFICES[0].name}</strong></span>
-          </div>
-        )}
-
-        {/* Overnight Shift Active Banner */}
-        {isOvernightShift && (
-          <div className="flex items-center gap-2 p-3 rounded-2xl bg-indigo-50/90 dark:bg-indigo-950/50 text-xs text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800/80 font-medium shadow-xs">
-            <div className="p-1.5 rounded-xl bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0">
-              <Moon className="w-4 h-4" />
-            </div>
-            <div className="min-w-0 flex-1 leading-snug">
-              <span className="font-bold text-slate-900 dark:text-white">Shift Jaga Malam (Lintas Hari) Aktif</span>
-              <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
-                Clock In tercatat sejak kemarin pukul <strong className="text-indigo-600 dark:text-cyan-400">{todayAttendance?.clockInTime} WITA</strong> ({todayAttendance?.date}). Silakan tekan tombol <strong>Clock Out</strong> di bawah untuk menyelesaikan piket malam.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Sesi Istirahat (Clock Out Istirahat & Clock In Kembali) */}
-        {hasClockedIn && (attendanceSettings?.breakSettings?.enabled !== false) && (
-          <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex items-center justify-between gap-3 text-xs shadow-xs">
-            <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300 min-w-0">
-              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
-                <Coffee className="w-4 h-4" />
+        <div className="rounded-t-3xl bg-slate-900/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-800 -mt-3 sm:-mt-4 relative z-10 p-4 sm:p-5 pb-24 shadow-2xl space-y-4 text-white">
+          {/* Header Profil Ringkas */}
+          <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className="w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-white text-sm shadow-md shadow-indigo-500/20 border border-white/20 shrink-0"
+                style={{ backgroundColor: staff?.avatarColor || '#4f46e5' }}
+              >
+                {staff?.initials || 'OS'}
               </div>
               <div className="min-w-0">
-                <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
-                  <span>Sesi Istirahat Kerja</span>
-                  <span className="font-mono text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
-                    ({todaySchedule?.enableBreak ? `${todaySchedule.breakStart} - 15:00 WITA (Fleksibel)` : '11:30 - 15:00 WITA (Fleksibel)'})
-                  </span>
-                </span>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  {hasBrokenOut && !hasBrokenIn
-                    ? `Sedang istirahat keluar sejak ${breakOutValue} WITA`
-                    : hasBrokenIn
-                    ? `Istirahat selesai (${breakOutValue} - ${breakInValue} WITA)`
-                    : hasClockedOut
-                    ? 'Jam kerja telah dikunci (Clock Out).'
-                    : 'Klik "Clock Out Istirahat" saat keluar & "Clock In Istirahat" saat kembali (Toleransi Fleksibel s.d. 15:00 WITA).'}
+                <h1 className="text-sm font-bold text-white leading-tight truncate">
+                  {staff?.name || 'Staf Alih Daya'}
+                </h1>
+                <p className="text-xs text-slate-300 truncate mt-0.5">
+                  {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono text-cyan-400 font-semibold">{staff?.nip || '-'}</span>
                 </p>
               </div>
             </div>
-            {hasClockedOut ? (
-              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 shrink-0 whitespace-nowrap">
-                {hasBrokenIn ? 'Sesi Istirahat Tuntas' : 'Sesi Selesai (Clock Out)'}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200 border border-slate-700">
+                {staff?.vendorName || 'Mitra Disdik'}
               </span>
-            ) : !hasBrokenOut ? (
-              <button
-                type="button"
-                onClick={() => handleOpenAttendance('break-out')}
-                className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-all shrink-0 active:scale-95 whitespace-nowrap"
-              >
-                Clock Out Istirahat
-              </button>
-            ) : !hasBrokenIn ? (
-              <button
-                type="button"
-                onClick={() => handleOpenAttendance('break-in')}
-                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-all shrink-0 active:scale-95 whitespace-nowrap"
-              >
-                Clock In Istirahat
-              </button>
-            ) : (
-              <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20 shrink-0 whitespace-nowrap">
-                Istirahat Selesai ({breakOutValue} - {breakInValue} WITA)
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                {staff?.division ? staff.division.split(' ')[0] : 'Umum'}
               </span>
-            )}
-          </div>
-        )}
-
-        {/* Daftar Singkat Kunjungan Tugas Lapangan Hari Ini */}
-        {fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length > 0 && (
-          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
-            <div className="flex items-center justify-between text-amber-800 dark:text-amber-300">
-              <span className="font-bold flex items-center gap-1.5">
-                <Briefcase className="w-3.5 h-3.5" />
-                Riwayat Kunjungan Lapangan Hari Ini ({fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length} Titik)
-              </span>
-              <span className="text-[10px] font-mono">Tersimpan di Server</span>
             </div>
-            <div className="space-y-1">
-              {fieldCheckins
-                .filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10)))
-                .map((fc, idx) => (
-                  <div key={fc.id} className="flex items-center justify-between text-[11px] text-slate-700 dark:text-slate-300 font-mono pl-5">
-                    <span>{idx + 1}. {fc.locationCoords.locationName}</span>
-                    <span className="font-bold text-amber-600 dark:text-amber-400">{fc.time} WITA</span>
+          </div>
+
+          {/* Assigned Location Badge or Field Duty Badge */}
+          {todayAttendance?.isFieldDuty ? (
+            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-500/10 text-xs text-amber-200 border border-amber-500/30 font-medium">
+              <Briefcase className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="truncate">Penugasan Lapangan: <strong className="text-amber-100">{todayAttendance.fieldDutyNotes || 'Dinas Luar Resmi'}</strong></span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-800/60 text-xs text-slate-300 border border-slate-700/60 font-medium">
+              <MapPin className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span className="truncate">Titik Tugas: <strong className="text-white">{safeOffice.name || PRIMARY_OFFICES[0].name}</strong></span>
+            </div>
+          )}
+
+          {/* ACTIVE OFFICIAL FIELD TASK ASSIGNMENT BANNER */}
+          {myTasks.length > 0 && (
+            <div className="space-y-3">
+              {myTasks.map((t) => {
+                const myAssigneeInfo = t.assignees?.find((a) => a.staffId === staff.id);
+                const isCheckedIn = myAssigneeInfo?.status === 'CHECKED_IN' || myAssigneeInfo?.status === 'DONE';
+
+                return (
+                  <div
+                    key={t.id}
+                    className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 text-white border border-indigo-500/40 shadow-lg relative overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500 text-white">
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-ping" />
+                        Tugas Lapangan Resmi
+                      </span>
+                      {t.priority === 'URGENT' && (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-rose-600 text-white">
+                          PENTING & MENDESAK
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-xs font-bold text-white">{t.title}</h3>
+                    <p className="text-[11px] text-slate-300 mt-1 line-clamp-2">{t.description}</p>
+                    <div className="mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-cyan-300">
+                        📍 {t.locationName}
+                      </span>
+                      {!isCheckedIn ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTaskForCheckin(t);
+                            setActionType('task-checkin');
+                            setCameraModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold transition-all"
+                        >
+                          Check-in Lokasi Tugas
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-bold text-emerald-400">
+                          ✓ Check-in Terverifikasi
+                        </span>
+                      )}
+                    </div>
                   </div>
-                ))}
+                );
+              })}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Menu Utama: 3 Tombol Aksi Presensi (Masuk, Tugas Lapangan Multi-Titik, Pulang) */}
-        <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          {/* 1. Clock In Button */}
-          <button
-            type="button"
-            onClick={() => handleOpenAttendance('clock-in')}
-            disabled={hasClockedIn || isTooEarlyToClockIn}
-            className={`p-3.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              hasClockedIn
-                ? 'bg-emerald-100/80 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300 font-bold backdrop-blur-md'
-                : isTooEarlyToClockIn
-                ? 'bg-slate-100/80 dark:bg-slate-800/40 border-slate-300 dark:border-slate-700/60 text-slate-500 dark:text-slate-400 cursor-not-allowed opacity-75'
-                : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white border-indigo-700/50 shadow-lg shadow-indigo-500/25 active:scale-[0.98]'
-            }`}
-          >
-            <div className="flex items-center gap-1.5">
-              {isTooEarlyToClockIn && !hasClockedIn ? (
-                <Lock className="w-4 h-4 text-amber-500 dark:text-amber-400" />
-              ) : (
-                <Camera className="w-4 h-4" />
-              )}
-              <span className="text-xs font-bold">
-                {hasClockedIn
-                  ? isOvernightShift
-                    ? 'Piket Malam Aktif'
-                    : 'Sudah Clock In'
+          {/* Overnight Shift Active Banner */}
+          {isOvernightShift && (
+            <div className="flex items-center gap-2 p-3 rounded-2xl bg-indigo-950/60 text-xs text-indigo-200 border border-indigo-800/80 font-medium">
+              <div className="p-1.5 rounded-xl bg-indigo-500/20 text-indigo-400 shrink-0">
+                <Moon className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1 leading-snug">
+                <span className="font-bold text-white">Shift Jaga Malam (Lintas Hari) Aktif</span>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  Clock In tercatat sejak kemarin pukul <strong className="text-cyan-400">{todayAttendance?.clockInTime} WITA</strong> ({todayAttendance?.date}).
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* BARIS AKSI UTAMA: 2 KOLOM SEJAJAR (Clock In Kiri, Clock Out Kanan)        */}
+          {/* ========================================================================= */}
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            {/* 1. Kiri: Clock In Masuk */}
+            <button
+              type="button"
+              onClick={() => handleOpenAttendance('clock-in')}
+              disabled={hasClockedIn || isTooEarlyToClockIn}
+              className={`p-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 min-h-[62px] transition-all cursor-pointer shadow-md active:scale-[0.98] ${
+                hasClockedIn
+                  ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-bold'
                   : isTooEarlyToClockIn
-                  ? `Buka Jam ${openWindowLabel}`
-                  : 'Clock In Masuk'}
-              </span>
-            </div>
-            <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
-              {hasClockedIn
-                ? `${todayAttendance?.clockInTime} WITA`
-                : isTooEarlyToClockIn
-                ? `Dibuka ${openWindowLabel}`
-                : 'Live Selfie + GPS'}
-            </span>
-          </button>
-
-          {/* 2. Tombol Tugas Lapangan (Multi-Titik, Bisa Berkali-kali) */}
-          <button
-            type="button"
-            onClick={() => handleOpenAttendance('field-checkin')}
-            className="p-3.5 rounded-xl border border-amber-600/60 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-amber-500/25 active:scale-[0.98]"
-          >
-            <div className="flex items-center gap-1.5">
-              <Briefcase className="w-4 h-4" />
-              <span className="text-xs font-bold">Presensi Lapangan</span>
-            </div>
-            <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
-              {fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length > 0
-                ? `${fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length} Titik Tercatat`
-                : 'Multi-Titik (Bebas)'}
-            </span>
-          </button>
-
-          {/* 3. Clock Out Button */}
-          <button
-            type="button"
-            onClick={() => handleOpenAttendance('clock-out')}
-            disabled={!hasClockedIn || hasClockedOut}
-            className={`p-3.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              hasClockedOut
-                ? 'bg-slate-100 border-slate-300 dark:bg-slate-800/60 dark:border-slate-700 text-slate-800 dark:text-slate-300 font-bold backdrop-blur-md'
-                : hasClockedIn
-                ? 'bg-gradient-to-r from-slate-900 to-slate-800 dark:from-white dark:to-slate-100 text-white dark:text-slate-900 border-slate-700 shadow-md active:scale-[0.98]'
-                : 'bg-slate-100/60 dark:bg-slate-800/20 border-slate-200 dark:border-white/5 text-slate-500 cursor-not-allowed opacity-60'
-            }`}
-          >
-            <div className="flex items-center gap-1.5">
-              <Clock className="w-4 h-4" />
-              <span className="text-xs font-bold">
-                {hasClockedOut
-                  ? 'Sudah Clock Out'
-                  : isOvernightShift
-                  ? 'Clock Out (Selesai Jaga Malam)'
-                  : `Clock Out (${todaySchedule?.clockOutStart || '16:30'})`}
-              </span>
-            </div>
-            <span className="text-[11px] font-mono tabular-nums opacity-95 font-semibold">
-              {hasClockedOut ? `${todayAttendance?.clockOutTime} WITA` : 'Kunci Jam Kerja'}
-            </span>
-          </button>
-        </div>
-
-        {/* Quick Action: Permohonan Izin / Sakit / Cuti */}
-        <div className="pt-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-teal-500/10 dark:bg-teal-950/30 border border-teal-200/70 dark:border-teal-800/50">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0 shadow-xs">
-                <HeartPulse className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="font-bold text-xs text-slate-900 dark:text-white block leading-tight">
-                  Berhalangan Hadir Hari Ini?
-                </span>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Ajukan izin sakit (SKD) atau cuti tahunan resmi (Sisa: <strong className="text-teal-600 dark:text-teal-400 font-mono">{activeAnnualRemaining} Hari</strong>)
+                  ? 'bg-slate-800/50 border border-slate-700/60 text-slate-400 cursor-not-allowed opacity-70'
+                  : 'bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/50 text-white shadow-indigo-600/30'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                {isTooEarlyToClockIn && !hasClockedIn ? (
+                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                ) : (
+                  <Camera className="w-4 h-4 shrink-0" />
+                )}
+                <span className="text-xs font-bold">
+                  {hasClockedIn
+                    ? isOvernightShift
+                      ? 'Piket Malam'
+                      : 'Sudah Masuk'
+                    : isTooEarlyToClockIn
+                    ? `Buka ${openWindowLabel}`
+                    : 'Clock In Masuk'}
                 </span>
               </div>
-            </div>
+              <span className="text-[10px] font-mono tabular-nums text-slate-200 font-semibold">
+                {hasClockedIn
+                  ? `${todayAttendance?.clockInTime} WITA`
+                  : isTooEarlyToClockIn
+                  ? `Buka ${openWindowLabel}`
+                  : 'Selfie + GPS'}
+              </span>
+            </button>
+
+            {/* 2. Kanan: Clock Out Pulang */}
+            <button
+              type="button"
+              onClick={() => handleOpenAttendance('clock-out')}
+              disabled={!hasClockedIn || hasClockedOut}
+              className={`p-3.5 rounded-2xl border flex flex-col items-center justify-center gap-1 min-h-[62px] transition-all cursor-pointer shadow-md active:scale-[0.98] ${
+                hasClockedOut
+                  ? 'bg-slate-800/80 border-slate-700 text-slate-300 font-bold'
+                  : hasClockedIn
+                  ? 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-white hover:text-rose-200'
+                  : 'bg-slate-800/30 border-slate-700/40 text-slate-500 cursor-not-allowed opacity-60'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <LogOut className="w-4 h-4 shrink-0" />
+                <span className="text-xs font-bold">
+                  {hasClockedOut
+                    ? 'Sudah Pulang'
+                    : isOvernightShift
+                    ? 'Clock Out (Wakar)'
+                    : `Clock Out (${todaySchedule?.clockOutStart || '16:30'})`}
+                </span>
+              </div>
+              <span className="text-[10px] font-mono tabular-nums text-slate-300 font-semibold">
+                {hasClockedOut ? `${todayAttendance?.clockOutTime} WITA` : 'Kunci Jam Pulang'}
+              </span>
+            </button>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* BARIS AKSI SEKUNDER: 2 KOLOM SEJAJAR (Presensi Lapangan & Izin / Cuti)    */}
+          {/* ========================================================================= */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Kiri: Presensi Lapangan Multi-Titik */}
+            <button
+              type="button"
+              onClick={() => handleOpenAttendance('field-checkin')}
+              className="p-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 flex flex-col items-center justify-center gap-1 min-h-[58px] transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-1.5">
+                <Briefcase className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="text-xs font-bold text-amber-200">Presensi Lapangan</span>
+              </div>
+              <span className="text-[10px] font-mono text-amber-300/90 font-semibold truncate max-w-full">
+                {fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length > 0
+                  ? `${fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length} Titik Tercatat`
+                  : 'Multi-Titik Bebas'}
+              </span>
+            </button>
+
+            {/* Kanan: Izin / Tugas Luar */}
             <button
               type="button"
               onClick={() => {
@@ -970,59 +1090,136 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
                 setLeaveAttachmentUrl('');
                 setLeaveModalOpen(true);
               }}
-              className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 text-white shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+              className="p-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 flex flex-col items-center justify-center gap-1 min-h-[58px] transition-all cursor-pointer shadow-xs active:scale-[0.98]"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Ajukan Izin / Cuti</span>
+              <div className="flex items-center gap-1.5">
+                <HeartPulse className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-xs font-bold text-emerald-200">Izin / Tugas Luar</span>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-300/90 font-semibold">
+                Cuti Sisa: <strong className="text-white">{activeAnnualRemaining} Hari</strong>
+              </span>
             </button>
           </div>
-        </div>
-      </div>
-    )}
 
-      {/* Tab Presensi: Durasi Kerja Aktif & Ringkasan Laporan dengan Tombol Navigasi Cepat */}
-      {isPresensiMode && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="p-4 glass-card">
-            <div className="text-[11px] text-slate-700 dark:text-slate-300 font-bold">Durasi Kerja Aktif Hari Ini</div>
-            <div className="text-xl font-bold font-mono text-indigo-700 dark:text-cyan-400 mt-1">
-              {computeActiveWorkDuration()}
+          {/* ========================================================================= */}
+          {/* SESI ISTIRAHAT KERJA (Jika Aktif)                                         */}
+          {/* ========================================================================= */}
+          {hasClockedIn && (attendanceSettings?.breakSettings?.enabled !== false) && (
+            <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-900/50 flex items-center justify-between gap-3 text-xs shadow-xs">
+              <div className="flex items-center gap-2.5 text-slate-300 min-w-0">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
+                  <Coffee className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-bold text-white flex items-center gap-1.5 flex-wrap">
+                    <span>Sesi Istirahat Kerja</span>
+                    <span className="font-mono text-[10px] text-amber-400 font-semibold">
+                      ({todaySchedule?.enableBreak ? `${todaySchedule.breakStart} - ${todaySchedule.breakEnd} WITA` : '11:30 - 15:00 WITA (Fleksibel)'})
+                    </span>
+                  </span>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                    {hasBrokenOut && !hasBrokenIn
+                      ? `Sedang istirahat keluar sejak ${breakOutValue} WITA`
+                      : hasBrokenIn
+                      ? `Istirahat selesai (${breakOutValue} - ${breakInValue} WITA)`
+                      : hasClockedOut
+                      ? 'Jam kerja telah dikunci (Clock Out).'
+                      : 'Klik "Clock Out Istirahat" saat keluar & "Clock In Istirahat" saat kembali.'}
+                  </p>
+                </div>
+              </div>
+              {hasClockedOut ? (
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 shrink-0 whitespace-nowrap">
+                  {hasBrokenIn ? 'Istirahat Tuntas' : 'Selesai (Clock Out)'}
+                </span>
+              ) : !hasBrokenOut ? (
+                <button
+                  type="button"
+                  onClick={() => handleOpenAttendance('break-out')}
+                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-all shrink-0 active:scale-95 whitespace-nowrap"
+                >
+                  Out Istirahat
+                </button>
+              ) : !hasBrokenIn ? (
+                <button
+                  type="button"
+                  onClick={() => handleOpenAttendance('break-in')}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-all shrink-0 active:scale-95 whitespace-nowrap"
+                >
+                  In Istirahat
+                </button>
+              ) : (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-950 text-emerald-300 border border-emerald-500/30 shrink-0 whitespace-nowrap">
+                  Selesai
+                </span>
+              )}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              {hasClockedIn
-                ? hasClockedOut
-                  ? 'Jam kerja telah dikunci (Clock Out)'
-                  : 'Sedang bertugas aktif di lokasi'
-                : 'Belum memulai jam kerja'}
+          )}
+
+          {/* ========================================================================= */}
+          {/* DURASI KERJA AKTIF & STATUS LAPORAN (Minimalist Info Cards)               */}
+          {/* ========================================================================= */}
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Durasi Kerja Aktif</div>
+              <div className="text-lg font-bold font-mono text-cyan-400 mt-0.5 tabular-nums">
+                {computeActiveWorkDuration()}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                {hasClockedIn
+                  ? hasClockedOut
+                    ? 'Jam kerja telah dikunci'
+                    : 'Sedang bertugas aktif'
+                  : 'Belum Clock In'}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60 flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Laporan Kinerja</div>
+                <div className="text-lg font-bold font-mono text-white mt-0.5">
+                  {todayReports.length} <span className="text-xs text-slate-400 font-normal">/ target 1</span>
+                </div>
+              </div>
+              {onNavigateToReports && (
+                <button
+                  type="button"
+                  onClick={onNavigateToReports}
+                  className="mt-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <span>{todayReports.length > 0 ? 'Buka Laporan' : 'Tulis Laporan'}</span>
+                  <span>→</span>
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="p-4 glass-card flex flex-col justify-between">
-            <div>
-              <div className="text-[11px] text-slate-700 dark:text-slate-300 font-bold">Status Pelaporan Kinerja</div>
-              <div className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">
-                {todayReports.length} <span className="text-xs text-slate-600 dark:text-slate-400 font-semibold">/ target 1 selesai</span>
+          {/* DAFTAR SINGKAT KUNJUNGAN LAPANGAN HARI INI */}
+          {fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length > 0 && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
+              <div className="flex items-center justify-between text-amber-300">
+                <span className="font-bold flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5" />
+                  Kunjungan Lapangan ({fieldCheckins.filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10))).length} Titik)
+                </span>
+                <span className="text-[10px] font-mono">Tersimpan</span>
               </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">
-                {todayReports.length === 0
-                  ? 'Belum ada laporan aktivitas hari ini'
-                  : `${todayReports.filter((r) => r.supervisorApproval === 'Disetujui').length} Disetujui · ${todayReports.filter((r) => r.supervisorApproval === 'Pending').length} Menunggu`}
+              <div className="space-y-1">
+                {fieldCheckins
+                  .filter(fc => fc.staffId === staff?.id && fc.date === (todayAttendance?.date || new Date().toISOString().slice(0, 10)))
+                  .map((fc, idx) => (
+                    <div key={fc.id} className="flex items-center justify-between text-[11px] text-slate-300 font-mono pl-5">
+                      <span>{idx + 1}. {fc.locationCoords.locationName}</span>
+                      <span className="font-bold text-amber-400">{fc.time} WITA</span>
+                    </div>
+                  ))}
               </div>
             </div>
-            {onNavigateToReports && (
-              <button
-                type="button"
-                onClick={onNavigateToReports}
-                className="mt-3 w-full py-2 px-3 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-              >
-                <Briefcase className="w-3.5 h-3.5" />
-                <span>{todayReports.length > 0 ? 'Buka Tab Laporan' : 'Tulis Laporan Tugas Baru'}</span>
-                <span>→</span>
-              </button>
-            )}
-          </div>
+          )}
         </div>
       )}
+
 
       {/* Tab Laporan: Sub-Menu Switcher & Content */}
       {isLaporanMode && (
@@ -1885,9 +2082,23 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
       {/* Modals */}
       <CameraCaptureModal
         isOpen={cameraModalOpen}
-        onClose={() => setCameraModalOpen(false)}
+        onClose={() => {
+          setCameraModalOpen(false);
+          setSelectedTaskForCheckin(null);
+        }}
         onCapture={handleAttendanceCapture}
-        assignedLocation={safeOffice}
+        assignedLocation={
+          actionType === 'task-checkin' && selectedTaskForCheckin
+            ? {
+                id: selectedTaskForCheckin.id,
+                name: selectedTaskForCheckin.locationName,
+                latitude: selectedTaskForCheckin.latitude,
+                longitude: selectedTaskForCheckin.longitude,
+                radiusMeters: selectedTaskForCheckin.radiusMeters,
+                description: selectedTaskForCheckin.title,
+              }
+            : safeOffice
+        }
         actionType={actionType}
       />
 

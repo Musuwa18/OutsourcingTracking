@@ -3,7 +3,7 @@
  * Menghubungkan frontend React ke backend Express REST API di Port 3010
  * Dinas Pendidikan Kabupaten Hulu Sungai Tengah
  */
-import { AuthUser, UserRole, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings, OvertimeRecord, LeaveRequest, LeaveQuota, NotificationItem } from '../types';
+import { AuthUser, UserRole, Division, Vendor, UserAccount, OfficeLocation, AttendanceRecord, DailyWorkReport, WeeklyEvaluation, FieldCheckinRecord, HelpDeskConfig, InstitutionSettings, OvertimeRecord, LeaveRequest, LeaveQuota, NotificationItem, TaskAssignment, TaskAssigneeItem } from '../types';
 
 const API_BASE = '/api';
 
@@ -1149,3 +1149,126 @@ export async function apiDeleteBiometricCredential(credentialId: string, userId:
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Gagal menghapus kunci biometrik.');
 }
+
+// ==========================================
+// MODUL PENUGASAN LAPANGAN / DISPOSISI TUGAS
+// ==========================================
+
+export async function apiGetTasks(params?: {
+  supervisorId?: string;
+  staffId?: string;
+  date?: string;
+  status?: string;
+}): Promise<TaskAssignment[]> {
+  const query = new URLSearchParams();
+  if (params?.supervisorId) query.append('supervisorId', params.supervisorId);
+  if (params?.staffId) query.append('staffId', params.staffId);
+  if (params?.date) query.append('date', params.date);
+  if (params?.status) query.append('status', params.status);
+
+  const res = await fetch(`${API_BASE}/tasks?${query.toString()}`, {
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal mengambil daftar penugasan lapangan.');
+  return data.tasks || [];
+}
+
+export async function apiGetTaskById(id: string): Promise<TaskAssignment> {
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(id)}`, {
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal mengambil detail penugasan.');
+  return data.task;
+}
+
+export async function apiCreateTask(payload: {
+  supervisorId: string;
+  supervisorName: string;
+  title: string;
+  description: string;
+  category?: string;
+  priority?: string;
+  startDate: string;
+  endDate: string;
+  startTime?: string;
+  endTime?: string;
+  locationId?: string | null;
+  locationName: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters?: number;
+  assignees: Array<{
+    staffId: string;
+    staffName: string;
+    staffNip?: string;
+    divisionName?: string;
+  }>;
+}): Promise<{ success: boolean; task: TaskAssignment; message?: string }> {
+  const res = await fetch(`${API_BASE}/tasks`, {
+    method: 'POST',
+    headers: getAuthHeaders(payload.supervisorId),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal menerbitkan penugasan lapangan.');
+  return data;
+}
+
+export async function apiAcknowledgeTask(taskId: string, staffId: string): Promise<TaskAssignment> {
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}/acknowledge`, {
+    method: 'POST',
+    headers: getAuthHeaders(staffId),
+    body: JSON.stringify({ staffId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal mengonfirmasi penugasan.');
+  return data.task;
+}
+
+export async function apiCheckinTask(
+  taskId: string,
+  payload: {
+    staffId: string;
+    selfieUrl: string;
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  }
+): Promise<{ success: boolean; task: TaskAssignment; message?: string }> {
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}/checkin`, {
+    method: 'POST',
+    headers: getAuthHeaders(payload.staffId),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal verifikasi check-in penugasan.');
+  return data;
+}
+
+export async function apiUpdateTaskStatus(
+  taskId: string,
+  status: string,
+  supervisorFeedback?: string,
+  supervisorId?: string
+): Promise<TaskAssignment> {
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}/status`, {
+    method: 'PUT',
+    headers: getAuthHeaders(supervisorId),
+    body: JSON.stringify({ status, supervisorFeedback }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal memperbarui status penugasan.');
+  return data.task;
+}
+
+export async function apiDeleteTask(taskId: string, supervisorId?: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(supervisorId),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gagal menghapus penugasan.');
+}
+

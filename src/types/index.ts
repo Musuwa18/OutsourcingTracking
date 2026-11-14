@@ -689,4 +689,51 @@ export interface LeaveQuota {
   specialUsed: number;
 }
 
+export type TaskPriority = 'NORMAL' | 'URGENT' | 'HIGH';
+export type TaskStatus = 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type TaskAssigneeStatus = 'ASSIGNED' | 'ACKNOWLEDGED' | 'CHECKED_IN' | 'DONE';
+
+export interface TaskAssigneeItem {
+  id: string;
+  taskId: string;
+  staffId: string;
+  staffName: string;
+  staffNip?: string;
+  divisionName?: string;
+  status: TaskAssigneeStatus;
+  acknowledgedAt?: string;
+  checkinTime?: string;
+  checkinSelfieUrl?: string;
+  checkinLatitude?: number;
+  checkinLongitude?: number;
+  checkinDistanceMeters?: number;
+  reportId?: string;
+  completedAt?: string;
+  supervisorFeedback?: string;
+  createdAt: string;
+}
+
+export interface TaskAssignment {
+  id: string;
+  supervisorId: string;
+  supervisorName: string;
+  title: string;
+  description: string;
+  category: string;
+  priority: TaskPriority;
+  startDate: string;
+  endDate: string;
+  startTime?: string;
+  endTime?: string;
+  locationId?: string | null;
+  locationName: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  status: TaskStatus;
+  assignees: TaskAssigneeItem[];
+  createdAt: string;
+}
+
+
 

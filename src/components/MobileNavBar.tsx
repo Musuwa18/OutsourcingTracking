@@ -9,6 +9,7 @@ import {
   Star,
   BarChart3,
   Settings,
+  Compass,
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -48,6 +49,13 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({
           icon: CalendarCheck2,
           badge: geofenceBreachCount > 0 ? `${geofenceBreachCount}` : null,
           isAlert: true,
+        },
+        {
+          id: 'penugasan-lapangan',
+          label: 'Disposisi',
+          icon: Compass,
+          badge: null,
+          isAlert: false,
         },
         {
           id: 'persetujuan-laporan',
