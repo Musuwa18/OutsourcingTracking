@@ -817,12 +817,14 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
             >
               {staff?.initials || 'OS'}
             </span>
-            <div className="min-w-0">
-              <div className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight truncate">
+            <div className="min-w-0 flex-1">
+              <div className="font-extrabold text-sm text-slate-900 dark:text-white leading-snug break-words">
                 {staff?.name || 'Staf Alih Daya'}
               </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium truncate">
-                {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono text-indigo-600 dark:text-cyan-400 font-bold">{staff?.nip || '-'}</span>
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium flex items-center gap-1.5 flex-wrap mt-0.5">
+                <span>{staff?.roleTitle || 'Tenaga Outsourcing'}</span>
+                <span>·</span>
+                <span className="font-mono text-indigo-600 dark:text-cyan-400 font-bold">{staff?.nip || '-'}</span>
               </div>
             </div>
           </div>
@@ -878,7 +880,7 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
       {/* ========================================================================= */}
       {!isLaporanMode && (
         <div className="rounded-t-3xl bg-slate-900/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-800 -mt-3 sm:-mt-4 relative z-10 p-4 sm:p-5 pb-24 shadow-2xl space-y-4 text-white">
-          {/* Header Profil Ringkas: Responsif Mobile (Nama di atas, Vendor/PT Yasmine di bawah) */}
+          {/* Header Profil: Responsif Mobile Tanpa Pemotongan Nama */}
           <div className="flex items-start gap-3 pb-3 border-b border-slate-800/80">
             <div
               className="w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-white text-sm shadow-md shadow-indigo-500/20 border border-white/20 shrink-0 mt-0.5"
@@ -887,24 +889,25 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
               {staff?.initials || 'OS'}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2">
-                <div className="min-w-0">
-                  <h1 className="text-sm sm:text-base font-bold text-white leading-tight truncate" title={staff?.name || 'Staf Alih Daya'}>
-                    {staff?.name || 'Staf Alih Daya'}
-                  </h1>
-                  <p className="text-xs text-slate-300 truncate mt-0.5">
-                    {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono text-cyan-400 font-semibold">{staff?.nip || '-'}</span>
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-                  <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200 border border-slate-700 max-w-full truncate">
-                    {staff?.vendorName || 'Mitra Disdik'}
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 shrink-0">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    {staff?.division ? staff.division.split(' ')[0] : 'Umum'}
-                  </span>
-                </div>
+              {/* Nama Lengkap: break-words tanpa truncate agar selalu tampil utuh */}
+              <h1 className="text-sm sm:text-base font-bold text-white leading-snug break-words">
+                {staff?.name || 'Staf Alih Daya'}
+              </h1>
+              {/* Jabatan & NIP */}
+              <div className="text-xs text-slate-300 flex items-center gap-1.5 flex-wrap mt-0.5 leading-snug">
+                <span>{staff?.roleTitle || 'Tenaga Outsourcing'}</span>
+                <span className="text-slate-500">·</span>
+                <span className="font-mono text-cyan-400 font-semibold">{staff?.nip || '-'}</span>
+              </div>
+              {/* Badge Vendor & Divisi diletakkan di bawah nama & jabatan */}
+              <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-200 border border-slate-700">
+                  {staff?.vendorName || 'Mitra Disdik'}
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/60">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {staff?.division || 'Umum'}
+                </span>
               </div>
             </div>
           </div>
@@ -913,12 +916,12 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
           {todayAttendance?.isFieldDuty ? (
             <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-500/10 text-xs text-amber-200 border border-amber-500/30 font-medium">
               <Briefcase className="w-4 h-4 text-amber-400 shrink-0" />
-              <span className="truncate">Penugasan Lapangan: <strong className="text-amber-100">{todayAttendance.fieldDutyNotes || 'Dinas Luar Resmi'}</strong></span>
+              <span className="break-words leading-snug min-w-0 flex-1">Penugasan Lapangan: <strong className="text-amber-100">{todayAttendance.fieldDutyNotes || 'Dinas Luar Resmi'}</strong></span>
             </div>
           ) : (
             <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-800/60 text-xs text-slate-300 border border-slate-700/60 font-medium">
               <MapPin className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span className="truncate">Titik Tugas: <strong className="text-white">{safeOffice.name || PRIMARY_OFFICES[0].name}</strong></span>
+              <span className="break-words leading-snug min-w-0 flex-1">Titik Tugas: <strong className="text-white">{safeOffice.name || PRIMARY_OFFICES[0].name}</strong></span>
             </div>
           )}
 
