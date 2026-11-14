@@ -809,19 +809,19 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
 
       {/* Active Staff Identity Banner (Hanya Tampil di Mode Laporan Non-Presensi) */}
       {!isPresensiMode && (
-        <div className="p-3.5 glass-card border border-white/60 dark:border-white/10 shadow-xs flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="p-3.5 glass-card border border-white/60 dark:border-white/10 shadow-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <span
               className="w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-bold text-white shadow-md shadow-indigo-500/20 shrink-0"
               style={{ backgroundColor: staff?.avatarColor || '#4f46e5' }}
             >
               {staff?.initials || 'OS'}
             </span>
-            <div>
-              <div className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">
+            <div className="min-w-0">
+              <div className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight truncate">
                 {staff?.name || 'Staf Alih Daya'}
               </div>
-              <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium truncate">
                 {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono text-indigo-600 dark:text-cyan-400 font-bold">{staff?.nip || '-'}</span>
               </div>
             </div>
@@ -878,32 +878,34 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
       {/* ========================================================================= */}
       {!isLaporanMode && (
         <div className="rounded-t-3xl bg-slate-900/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-800 -mt-3 sm:-mt-4 relative z-10 p-4 sm:p-5 pb-24 shadow-2xl space-y-4 text-white">
-          {/* Header Profil Ringkas */}
-          <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className="w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-white text-sm shadow-md shadow-indigo-500/20 border border-white/20 shrink-0"
-                style={{ backgroundColor: staff?.avatarColor || '#4f46e5' }}
-              >
-                {staff?.initials || 'OS'}
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-sm font-bold text-white leading-tight truncate">
-                  {staff?.name || 'Staf Alih Daya'}
-                </h1>
-                <p className="text-xs text-slate-300 truncate mt-0.5">
-                  {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono text-cyan-400 font-semibold">{staff?.nip || '-'}</span>
-                </p>
-              </div>
+          {/* Header Profil Ringkas: Responsif Mobile (Nama di atas, Vendor/PT Yasmine di bawah) */}
+          <div className="flex items-start gap-3 pb-3 border-b border-slate-800/80">
+            <div
+              className="w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-white text-sm shadow-md shadow-indigo-500/20 border border-white/20 shrink-0 mt-0.5"
+              style={{ backgroundColor: staff?.avatarColor || '#4f46e5' }}
+            >
+              {staff?.initials || 'OS'}
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200 border border-slate-700">
-                {staff?.vendorName || 'Mitra Disdik'}
-              </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/60">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                {staff?.division ? staff.division.split(' ')[0] : 'Umum'}
-              </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2">
+                <div className="min-w-0">
+                  <h1 className="text-sm sm:text-base font-bold text-white leading-tight truncate" title={staff?.name || 'Staf Alih Daya'}>
+                    {staff?.name || 'Staf Alih Daya'}
+                  </h1>
+                  <p className="text-xs text-slate-300 truncate mt-0.5">
+                    {staff?.roleTitle || 'Tenaga Outsourcing'} · <span className="font-mono text-cyan-400 font-semibold">{staff?.nip || '-'}</span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                  <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200 border border-slate-700 max-w-full truncate">
+                    {staff?.vendorName || 'Mitra Disdik'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    {staff?.division ? staff.division.split(' ')[0] : 'Umum'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
