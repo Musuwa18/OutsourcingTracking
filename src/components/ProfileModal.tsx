@@ -824,7 +824,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     Autentikasi Cepat Biometrik (WebAuthn / Passkey)
                   </h3>
                   <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Daftarkan sensor sidik jari atau Face ID di smartphone Anda untuk masuk ke aplikasi OutsourceTrack secara instan tanpa perlu mengetik kata sandi lagi.
+                    Daftarkan sensor sidik jari atau Face ID di smartphone Anda untuk masuk ke aplikasi SIMITRA secara instan tanpa perlu mengetik kata sandi lagi.
                   </p>
                 </div>
               </div>

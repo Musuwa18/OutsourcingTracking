@@ -1,5 +1,5 @@
 /**
- * Date and Time Utilities for OutsourceTrack & KPI Pro
+ * Date and Time Utilities for SIMITRA & KPI Pro
  * Timezone: Asia/Makassar (WITA - UTC+8) for Hulu Sungai Tengah, Kalimantan Selatan
  */
 

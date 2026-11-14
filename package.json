@@ -1,6 +1,6 @@
 {
-  "name": "outsourcetrack-kpi-pro",
-  "description": "Platform Manajemen & Evaluasi Kinerja Tenaga Outsourcing Terpadu (PWA-Ready)",
+  "name": "simitra-kpi-pro",
+  "description": "Sistem Informasi Manajemen Mitra Kerja, PPPK & Magang Terpadu (PWA-Ready)",
   "private": true,
   "version": "1.0.0",
   "type": "module",

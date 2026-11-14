@@ -59,7 +59,7 @@ Agregasi bulanan menghitung rata-rata Minggu 1-4, menghasilkan predikat otomatis
 
 ## 4. HTTPS & Sensor Requirements (Mobile PWA)
 - Fitur `navigator.mediaDevices.getUserMedia` dan `navigator.geolocation` **wajib** dijalankan di atas protokol **HTTPS** (Secure Context) agar dapat beroperasi di smartphone Android/iOS.
-- Di lingkungan VPS, aplikasi disajikan di belakang Cloudflare Tunnel (`https://outsourcing.renlapdisdikhst.pro`) yang menyediakan SSL/TLS otomatis.
+- Di lingkungan VPS, aplikasi disajikan di belakang Cloudflare Tunnel (`https://simitra.renlapdisdikhst.pro`) yang menyediakan SSL/TLS otomatis.
 
 ## 5. Akun Sandbox / Test & Trial Pengembang
 - **Nama Akun**: `Musuwarahmi`

@@ -393,17 +393,17 @@ export const AuthView: React.FC<AuthViewProps> = ({
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-2xl glass-surface border border-white/60 dark:border-white/10 shadow-xs mb-1">
             <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center text-white font-extrabold text-xs shadow-md shadow-indigo-500/30">
-              OT
+              SM
             </div>
             <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight">
-              OutsourceTrack & KPI Pro
+              SIMITRA & KPI Pro
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-950 dark:text-white tracking-tight">
             Portal Autentikasi Terpadu
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-            Sistem Presensi WebRTC, Pelaporan Harian Anti-Duplikasi & Evaluasi Kinerja 4 Pilar
+            Sistem Informasi Manajemen Mitra Kerja, PPPK & Magang Disdik Kab. Hulu Sungai Tengah
           </p>
         </div>
 
@@ -447,6 +447,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
           {/* ===================== TAB 1: LOGIN ===================== */}
           {activeTab === 'login' && (
             <div className="space-y-5">
+              <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 text-[11px] text-blue-900 dark:text-blue-200 flex items-start gap-2">
+                <span className="font-bold shrink-0">ℹ️ Info:</span>
+                <span>Untuk login perdana di alamat <strong>simitra.renlapdisdikhst.pro</strong>, silakan masuk menggunakan NIP/Email dan Kata Sandi Anda.</span>
+              </div>
               <form onSubmit={handleLoginSubmit} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">

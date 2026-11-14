@@ -729,7 +729,7 @@ export const INITIAL_AUDIT_LOGS: SystemAuditLog[] = [
     actorName: 'Sistem Otomatis (Cron Job)',
     role: 'Administrator Sistem',
     action: 'Pencadangan Cloud Google Drive',
-    detail: 'Backup harian database dan arsip foto uploads ke Google Drive (gdrive:Backup_OutsourceTrack) berhasil 100%.',
+    detail: 'Backup harian database dan arsip foto uploads ke Google Drive (gdrive:Backup_SIMITRA) berhasil 100%.',
     ipAddress: '127.0.0.1',
     category: 'Sistem',
   },

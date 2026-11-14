@@ -1,5 +1,5 @@
 /**
- * API Service Client for OutsourceTrack & KPI Pro
+ * API Service Client for SIMITRA & KPI Pro
  * Menghubungkan frontend React ke backend Express REST API di Port 3010
  * Dinas Pendidikan Kabupaten Hulu Sungai Tengah
  */

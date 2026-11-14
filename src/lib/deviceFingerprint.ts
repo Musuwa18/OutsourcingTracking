@@ -1,6 +1,6 @@
 /**
  * Hardware Device Fingerprint Generator (Cross-Browser Anti-Multi User)
- * OutsourceTrack & KPI Pro Dinas Pendidikan Kab. Hulu Sungai Tengah
+ * SIMITRA & KPI Pro Dinas Pendidikan Kab. Hulu Sungai Tengah
  * 
  * Menggabungkan karakteristik perangkat keras fisik (GPU WebGL, resolusi layar fisik,
  * touch points, hardware concurrency, canvas geometri, dan audio stack)

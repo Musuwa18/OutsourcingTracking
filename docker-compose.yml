@@ -10,7 +10,7 @@ services:
       - "127.0.0.1:3010:80"
     environment:
       - NODE_ENV=production
-      - VITE_APP_URL=https://outsourcing.renlapdisdikhst.pro
+      - VITE_APP_URL=https://simitra.renlapdisdikhst.pro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s

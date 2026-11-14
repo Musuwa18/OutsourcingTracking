@@ -1,5 +1,5 @@
 /**
- * SQLite Database & Storage Engine for OutsourceTrack & KPI Pro
+ * SQLite Database & Storage Engine for SIMITRA & KPI Pro
  * Mendukung built-in node:sqlite (Node.js v22+) dengan fallback file-based JSON.
  * Disesuaikan khusus untuk Dinas Pendidikan Kabupaten Hulu Sungai Tengah.
  */

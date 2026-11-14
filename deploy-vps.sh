@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
-# Script Otomatis Deployment VPS - OutsourceTrack & KPI Pro
-# Domain: https://outsourcing.renlapdisdikhst.pro (Cloudflare Tunnel)
+# Script Otomatis Deployment VPS - SIMITRA & KPI Pro
+# Domain: https://simitra.renlapdisdikhst.pro (Cloudflare Tunnel)
 # ==============================================================================
 
 set -e
@@ -10,8 +10,8 @@ PORT=3010
 APP_NAME="outsource-track-kpi"
 
 echo "========================================================"
-echo "  🚀 OutsourceTrack & KPI Pro - VPS Deployment Tool"
-echo "  🌐 Domain : https://outsourcing.renlapdisdikhst.pro"
+echo "  🚀 SIMITRA & KPI Pro - VPS Deployment Tool"
+echo "  🌐 Domain : https://simitra.renlapdisdikhst.pro"
 echo "  📍 Port   : 127.0.0.1:${PORT}"
 echo "========================================================"
 
@@ -77,9 +77,9 @@ if curl -s http://127.0.0.1:${PORT}/health | grep -q "healthy\|OK"; then
     echo "========================================================"
     echo "Langkah selanjutnya:"
     echo "1. Pastikan Cloudflare Tunnel Anda mengarahkan:"
-    echo "   Subdomain: outsourcing.renlapdisdikhst.pro"
+    echo "   Subdomain: simitra.renlapdisdikhst.pro"
     echo "   Service  : http://localhost:${PORT}"
-    echo "2. Buka https://outsourcing.renlapdisdikhst.pro di HP Anda"
+    echo "2. Buka https://simitra.renlapdisdikhst.pro di HP Anda"
     echo "   untuk menguji Kamera WebRTC dan Presensi GPS!"
     echo "========================================================"
 else

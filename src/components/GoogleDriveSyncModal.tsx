@@ -28,7 +28,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
     setTimeout(() => {
       setSyncStep('Mengenkripsi log audit dan data evaluasi 4 pilar...');
       setTimeout(() => {
-        setSyncStep('Mengunggah ke folder: Google Drive / OutsourceTrack-Backups / 2026...');
+        setSyncStep('Mengunggah ke folder: Google Drive / SIMITRA-Backups / 2026...');
         setTimeout(() => {
           setSyncing(false);
           setSyncSuccess(true);
@@ -86,7 +86,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-slate-500">Folder Sinkronisasi:</span>
               <span className="font-mono text-indigo-600 dark:text-indigo-400">
-                My Drive/OutsourceTrack-Archive/
+                My Drive/SIMITRA-Archive/
               </span>
             </div>
             <div className="flex items-center justify-between">

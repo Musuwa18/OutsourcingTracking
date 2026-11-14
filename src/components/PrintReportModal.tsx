@@ -1152,7 +1152,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
                 {/* Footer Penomoran Baku F4 */}
                 <div className="pt-2 border-t border-slate-300 print:border-black mt-3 flex items-center justify-between text-[8pt] font-mono text-slate-600 print:text-black">
-                  <span>ID Dokumen: {documentId} • Sistem OutsourceTrack & KPI Pro</span>
+                  <span>ID Dokumen: {documentId} • Sistem SIMITRA & KPI Pro</span>
                   <span className="font-bold">Standar Baku F4 / Folio Landscape (330 mm × 215 mm)</span>
                 </div>
               </div>
@@ -1347,7 +1347,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
               {/* Footer Penomoran Baku F4 */}
               <div className="pt-2 border-t border-slate-200 mt-2 flex items-center justify-between text-[9px] text-slate-500 font-mono">
-                <span>ID Dokumen: {documentId} • Sistem OutsourceTrack & KPI Pro</span>
+                <span>ID Dokumen: {documentId} • Sistem SIMITRA & KPI Pro</span>
                 <span className="font-bold text-slate-700">Halaman 1 dari 1</span>
               </div>
             </div>
@@ -1486,7 +1486,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
               {/* Footer Penomoran Baku F4 */}
               <div className="pt-2 border-t border-slate-200 mt-2 flex items-center justify-between text-[9px] text-slate-500 font-mono">
-                <span>ID Dokumen: {documentId} • Sistem OutsourceTrack & KPI Pro</span>
+                <span>ID Dokumen: {documentId} • Sistem SIMITRA & KPI Pro</span>
                 <span className="font-bold text-slate-700">Halaman 1 dari 1</span>
               </div>
             </div>
@@ -1590,7 +1590,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
                 {/* Footer Penomoran Baku F4 Lembar 1 */}
                 <div className="pt-2 border-t border-slate-200 mt-2 flex items-center justify-between text-[9px] text-slate-500 font-mono">
-                  <span>ID Dokumen: {documentId} • Sistem OutsourceTrack &amp; KPI Pro</span>
+                  <span>ID Dokumen: {documentId} • Sistem SIMITRA &amp; KPI Pro</span>
                   <span className="font-bold text-slate-700">Halaman 1 dari 2 (Lembar Induk Evaluasi)</span>
                 </div>
               </div>
@@ -1829,7 +1829,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
                 {/* Footer Penomoran Baku F4 Hal 2 dari 2 */}
                 <div className="pt-1.5 border-t border-slate-200 mt-1 flex items-center justify-between text-[8.5pt] text-slate-500 font-mono">
-                  <span>ID Dokumen: {documentId} • Sistem OutsourceTrack &amp; KPI Pro</span>
+                  <span>ID Dokumen: {documentId} • Sistem SIMITRA &amp; KPI Pro</span>
                   <span className="font-bold text-slate-700">Halaman 2 dari 2 (Lampiran Grafik Radar &amp; Rincian Kompetensi)</span>
                 </div>
               </div>
@@ -1951,7 +1951,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
               {/* Footer Penomoran Baku F4 */}
               <div className="pt-2 border-t border-slate-200 mt-2 flex items-center justify-between text-[9px] text-slate-500 font-mono">
-                <span>ID Dokumen: {documentId} • Sistem OutsourceTrack & KPI Pro</span>
+                <span>ID Dokumen: {documentId} • Sistem SIMITRA & KPI Pro</span>
                 <span className="font-bold text-slate-700">Halaman 1 dari 1</span>
               </div>
             </div>
@@ -2095,7 +2095,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
               {/* Footer Penomoran Baku F4 */}
               <div className="pt-2 border-t border-slate-200 mt-2 flex items-center justify-between text-[9px] text-slate-500 font-mono">
-                <span>ID Dokumen: {documentId} • Sistem OutsourceTrack & KPI Pro</span>
+                <span>ID Dokumen: {documentId} • Sistem SIMITRA & KPI Pro</span>
                 <span className="font-bold text-slate-700">Halaman 1 dari 1</span>
               </div>
             </div>

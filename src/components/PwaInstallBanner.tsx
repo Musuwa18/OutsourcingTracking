@@ -51,7 +51,7 @@ export const PwaInstallBanner: React.FC = () => {
           </span>
 
           <h3 id="pwa-install-title" className="font-black text-base sm:text-lg text-slate-900 dark:text-white leading-snug">
-            Pasang OutsourceTrack di HP Anda
+            Pasang SIMITRA di HP Anda
           </h3>
           <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 leading-relaxed">
             Demi kelancaran presensi kamera WebRTC, akurasi GPS tanpa batas browser, dan notifikasi kehadiran tepat waktu, silakan pasang aplikasi ini di layar utama HP Anda.
@@ -74,7 +74,7 @@ export const PwaInstallBanner: React.FC = () => {
                   Gulir ke bawah dan pilih <strong>'Tambahkan ke Layar Utama' (Add to Home Screen)</strong>.
                 </li>
                 <li>
-                  Tekan <strong>Tambah (Add)</strong> di kanan atas, lalu buka OutsourceTrack dari layar utama HP Anda.
+                  Tekan <strong>Tambah (Add)</strong> di kanan atas, lalu buka SIMITRA dari layar utama HP Anda.
                 </li>
               </ol>
             </div>

@@ -277,7 +277,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer Info */}
       <div className="mt-auto p-4 border-t border-slate-200/80 dark:border-slate-800/80 text-[11px] text-slate-500 dark:text-slate-400">
-        <div className="font-semibold text-slate-700 dark:text-slate-300">OutsourceTrack Pro · Disdik HST</div>
+        <div className="font-semibold text-slate-700 dark:text-slate-300">SIMITRA Pro · Disdik HST</div>
         <div className="text-[10px] text-slate-400 dark:text-slate-500">v2.4 · Geofence & KPI Analytics</div>
       </div>
     </aside>

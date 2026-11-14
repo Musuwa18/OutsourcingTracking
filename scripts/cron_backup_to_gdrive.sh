@@ -11,7 +11,7 @@ UPLOADS_DIR="${APP_DIR}/uploads"
 BACKUP_DIR="/var/backups/outsourcing-tracking"
 STAGE_DIR="${BACKUP_DIR}/staging"
 LOG_FILE="/var/log/outsourcetrack_backup.log"
-GDRIVE_REMOTE="gdrive:Backup_OutsourceTrack"
+GDRIVE_REMOTE="gdrive:Backup_SIMITRA"
 RETENTION_LOCAL_DAYS=3
 RETENTION_GDRIVE_DAYS="30d"
 

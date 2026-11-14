@@ -60,7 +60,7 @@ export function exportAttendanceToCSV(
   });
 
   const csvContent = BOM + [headers.join(','), ...rows].join('\r\n');
-  const fileName = `Rekap_Presensi_OutsourceTrack_${new Date().toISOString().slice(0, 10)}.csv`;
+  const fileName = `Rekap_Presensi_SIMITRA_${new Date().toISOString().slice(0, 10)}.csv`;
   downloadFile(csvContent, fileName, 'text/csv;charset=utf-8;');
 }
 

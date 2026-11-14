@@ -117,12 +117,12 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Brand Zone */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 shrink">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-blue-700 flex items-center justify-center text-white font-extrabold text-sm shadow-md shadow-indigo-500/25 border border-white/30 shrink-0">
-            OT
+            SM
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-xs sm:text-sm font-bold tracking-tight text-slate-900 dark:text-white truncate">
-              <span className="sm:hidden font-extrabold text-xs">OutsourceTrack</span>
-              <span className="hidden sm:inline">OutsourceTrack & KPI Pro</span>
+              <span className="sm:hidden font-extrabold text-xs">SIMITRA</span>
+              <span className="hidden sm:inline">SIMITRA & KPI Pro</span>
             </span>
             <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight hidden sm:inline truncate font-medium">
               {institutionName || 'Dinas Pendidikan Kab. Hulu Sungai Tengah'}
@@ -330,7 +330,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <div>
                     <span className="font-semibold text-slate-800 dark:text-slate-200">WhatsApp Helpdesk:</span>{' '}
                     <a
-                      href={`https://wa.me/${((helpDeskConfig || DEFAULT_HELPDESK_CONFIG).whatsapp || '62811518515').replace(/\D/g, '').replace(/^0/, '62')}?text=Halo%20Admin%20IT%20Disdik%20HST,%20saya%20membutuhkan%20bantuan%20terkait%20aplikasi%20OutsourceTrack`}
+                      href={`https://wa.me/${((helpDeskConfig || DEFAULT_HELPDESK_CONFIG).whatsapp || '62811518515').replace(/\D/g, '').replace(/^0/, '62')}?text=Halo%20Admin%20IT%20Disdik%20HST,%20saya%20membutuhkan%20bantuan%20terkait%20aplikasi%20SIMITRA`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-mono text-indigo-600 dark:text-cyan-400 hover:underline font-bold"

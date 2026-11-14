@@ -1,7 +1,7 @@
 {
-  "name": "OutsourceTrack & KPI Pro",
-  "short_name": "OutsourceTrack",
-  "description": "Platform Manajemen & Evaluasi Kinerja Tenaga Outsourcing Terpadu Dinas Pendidikan Kab. Hulu Sungai Tengah",
+  "name": "SIMITRA & KPI Pro",
+  "short_name": "SIMITRA",
+  "description": "Sistem Informasi Manajemen Mitra Kerja & Tenaga Non-ASN Terpadu Dinas Pendidikan Kab. Hulu Sungai Tengah",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

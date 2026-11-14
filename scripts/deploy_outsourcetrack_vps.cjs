@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 console.log('================================================================');
-console.log('  🚀 DEPLOY PEMBARUAN OUTSOURCETRACK KE SERVER VPS');
+console.log('  🚀 DEPLOY PEMBARUAN SIMITRA KE SERVER VPS');
 console.log('================================================================');
 
 const remoteBashScript = `
@@ -74,8 +74,8 @@ try {
   }
 
   console.log('\n================================================================');
-  console.log('  🎉 DEPLOYMENT OUTSOURCETRACK BERHASIL!');
-  console.log('  🌐 Domain : https://outsourcing.renlapdisdikhst.pro');
+  console.log('  🎉 DEPLOYMENT SIMITRA BERHASIL!');
+  console.log('  🌐 Domain : https://simitra.renlapdisdikhst.pro');
   console.log('================================================================');
 } catch (err) {
   console.error('\n❌ Gagal saat deployment:', err.message);

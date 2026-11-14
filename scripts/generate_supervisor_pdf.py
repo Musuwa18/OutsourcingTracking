@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generator PDF Daftar Akun & Kredensial Supervisor / Atasan Langsung
-Aplikasi OutsourceTrack & KPI Pro Dinas Pendidikan Kabupaten Hulu Sungai Tengah
+Aplikasi SIMITRA & KPI Pro Dinas Pendidikan Kabupaten Hulu Sungai Tengah
 Standar Kertas Resmi: F4 / Folio Landscape (330 mm x 215 mm)
 """
 
@@ -63,7 +63,7 @@ class NumberedCanvas(canvas.Canvas):
         self.drawString(
             12 * mm,
             footer_y,
-            "Sistem Informasi OutsourceTrack & KPI Pro · Dinas Pendidikan Kab. Hulu Sungai Tengah — Dokumen Kredensial Kedinasan Rahasia"
+            "Sistem Informasi SIMITRA & KPI Pro · Dinas Pendidikan Kab. Hulu Sungai Tengah — Dokumen Kredensial Kedinasan Rahasia"
         )
 
         page_str = f"Halaman {self._pageNumber} dari {total_pages}"
@@ -234,7 +234,7 @@ def build_pdf():
         Paragraph("DINAS PENDIDIKAN", style_kop_dinas),
         Paragraph(
             "Jalan Sibli Imansyah No. 01 Barabai, Kabupaten Hulu Sungai Tengah, Kalimantan Selatan (Kode Pos 71315)<br/>"
-            "Portal Aplikasi: <u>https://outsourcing.renlapdisdikhst.pro</u> · Pos-el: <u>disdik@hstkab.go.id</u>",
+            "Portal Aplikasi: <u>https://simitra.renlapdisdikhst.pro</u> · Pos-el: <u>disdik@hstkab.go.id</u>",
             style_kop_alamat,
         ),
     ]
@@ -370,7 +370,7 @@ def build_pdf():
     info_box_data = [[
         Paragraph(
             "<b>PANDUAN &amp; KETENTUAN KEAMANAN AKUN ATASAN LANGSUNG:</b><br/>"
-            "1. <b>Alamat Akses Resmi:</b> Masuk melalui browser PC/Laptop/Smartphone di <b>https://outsourcing.renlapdisdikhst.pro</b>.<br/>"
+            "1. <b>Alamat Akses Resmi:</b> Masuk melalui browser PC/Laptop/Smartphone di <b>https://simitra.renlapdisdikhst.pro</b>.<br/>"
             "2. <b>Metode Login:</b> Dapat menggunakan <b>Alamat Email</b> atau <b>NIP</b> terdaftar beserta kata sandi default <b>Password123!</b>.<br/>"
             "3. <b>Kebebasan Akses Multi-Perangkat:</b> Berbeda dengan akun staf alih daya yang terikat 1 HP fisik (anti-titip absen), akun Supervisor dan Administrator diberikan fleksibilitas untuk login lintas komputer kantor, laptop kedinasan, maupun smartphone pribadi.<br/>"
             "4. <b>Kewenangan Supervisi:</b> Akun atasan berwenang memvalidasi presensi harian, menyetujui izin dinas luar / lembur, menerbitkan perintah penugasan lapangan (task dispatch), dan mengisi evaluasi 4 pilar kinerja berkala.<br/>"

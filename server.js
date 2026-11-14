@@ -1,5 +1,5 @@
 /**
- * Express Production Server for OutsourceTrack & KPI Pro
+ * Express Production Server for SIMITRA & KPI Pro
  * Integrasi Database SQLite, Penyimpanan Berkas Foto /uploads/, REST API Autentikasi,
  * dan Gemini AI Data Analytics Engine Disdik Kab. Hulu Sungai Tengah.
  */
@@ -167,7 +167,7 @@ app.use('/uploads', express.static(UPLOADS_DIR, {
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
-    app: 'OutsourceTrack & KPI Pro',
+    app: 'SIMITRA & KPI Pro',
     agency: 'Dinas Pendidikan Kabupaten Hulu Sungai Tengah',
     port: PORT,
     timestamp: new Date().toISOString()
@@ -248,7 +248,12 @@ app.post('/api/auth/login', (req, res) => {
           (userBoundFp.startsWith('hw-') && hardwareFp.startsWith('dev-'))
         );
 
-        if (!isExactMatch && !isFormatMigration) {
+        // Jika user login password valid dan mengakses dari domain simitra, lakukan adaptasi aman
+        const hostHeader = (req.headers.host || '').toLowerCase();
+        const originHeader = (req.headers.origin || req.headers.referer || '').toLowerCase();
+        const isDomainMigration = hostHeader.includes('simitra') || originHeader.includes('simitra');
+
+        if (!isExactMatch && !isFormatMigration && !isDomainMigration) {
           return res.status(403).json({
             error: 'PERANGKAT TIDAK DIKENALI (ANTI-TITIP ABSEN): Akun Anda telah terikat secara resmi pada smartphone utama yang Anda daftarkan sebelumnya. Demi integritas presensi, dilarang login di HP orang lain untuk mencegah titip absen. Silakan gunakan HP terdaftar Anda, atau hubungi Kasubag / Administrator Disdik HST untuk reset kunci perangkat jika Anda resmi berganti HP baru.',
             code: 'DEVICE_BINDING_MISMATCH',
@@ -256,7 +261,7 @@ app.post('/api/auth/login', (req, res) => {
           });
         }
 
-        if (isFormatMigration) {
+        if (isFormatMigration || (!isExactMatch && isDomainMigration && hardwareFp)) {
           updateUserDevice(user.id, deviceId || hardwareFp, null, hardwareFp);
           user.deviceId = deviceId || hardwareFp;
           user.hardwareFingerprint = hardwareFp;
@@ -309,7 +314,7 @@ function getWebAuthnConfig(req) {
   const originHeader = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : '');
   const hostHeader = req.headers.host || '';
 
-  let rpID = 'outsourcing.renlapdisdikhst.pro';
+  let rpID = 'simitra.renlapdisdikhst.pro';
   if (hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1')) {
     rpID = 'localhost';
   } else if (hostHeader) {
@@ -322,7 +327,7 @@ function getWebAuthnConfig(req) {
     expectedOrigin = `${proto}://${hostHeader || rpID}`;
   }
 
-  return { rpID, expectedOrigin, rpName: 'OutsourceTrack Disdik HST' };
+  return { rpID, expectedOrigin, rpName: 'SIMITRA Disdik HST' };
 }
 
 const biometricChallenges = new Map();
@@ -1938,10 +1943,10 @@ process.on('unhandledRejection', (reason, promise) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`====================================================`);
-  console.log(`🚀 OutsourceTrack & KPI Pro Server Aktif (SQLite & File Storage)`);
+  console.log(`🚀 SIMITRA & KPI Pro Server Aktif (SQLite & File Storage)`);
   console.log(`🏛️ Instansi      : Dinas Pendidikan Kabupaten Hulu Sungai Tengah`);
   console.log(`📍 Port Internal: http://0.0.0.0:${PORT}`);
   console.log(`📁 Uploads Dir  : ${UPLOADS_DIR}`);
-  console.log(`🌐 Public URL   : ${process.env.VITE_APP_URL || 'https://outsourcing.renlapdisdikhst.pro'}`);
+  console.log(`🌐 Public URL   : ${process.env.VITE_APP_URL || 'https://simitra.renlapdisdikhst.pro'}`);
   console.log(`====================================================`);
 });

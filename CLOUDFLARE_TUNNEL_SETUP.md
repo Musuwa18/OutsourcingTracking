@@ -1,7 +1,7 @@
 # Panduan Lengkap Integrasi Cloudflare Tunnel & VPS Deployment
-**Aplikasi: OutsourceTrack & KPI Pro**  
+**Aplikasi: SIMITRA & KPI Pro**  
 **Domain Utama: `renlapdisdikhst.pro`**  
-**Subdomain Target: `https://outsourcing.renlapdisdikhst.pro`** (atau `https://kpi.renlapdisdikhst.pro`)  
+**Subdomain Target: `https://simitra.renlapdisdikhst.pro`**  
 **Port Internal VPS: `3010`**
 
 ---
@@ -10,7 +10,7 @@
 Pada domain Anda (`renlapdisdikhst.pro`), Cloudflare Tunnel telah aktif dan melayani aplikasi SPJ serta SAMPAN-HST. Dengan memanfaatkan tunnel yang sama untuk aplikasi ini:
 1. **Kamera WebRTC & GPS Langsung Aktif di HP**: Browser modern (Chrome/Safari) mewajibkan koneksi **HTTPS** untuk membuka akses kamera selfie dan GPS. Cloudflare Tunnel otomatis menyediakan sertifikat SSL tanpa perlu konfigurasi Certbot.
 2. **Tanpa Buka Port Publik**: Port internal `3010` hanya mendengarkan di `127.0.0.1` VPS. Tidak ada port yang terbuka bebas ke internet.
-3. **PWA Terisolasi**: Subdomain `outsourcing.renlapdisdikhst.pro` memiliki penyimpanan `localStorage` dan ikon PWA mandiri sehingga tidak bercampur dengan SPJ atau SAMPAN.
+3. **PWA Terisolasi**: Subdomain `simitra.renlapdisdikhst.pro` memiliki penyimpanan `localStorage` dan ikon PWA mandiri sehingga tidak bercampur dengan SPJ atau SAMPAN.
 
 ---
 
@@ -22,9 +22,9 @@ Pilih salah satu metode sesuai cara Anda mengelola Cloudflare Tunnel:
 1. Buka dashboard Cloudflare: [https://one.dash.cloudflare.com/](https://one.dash.cloudflare.com/)
 2. Di menu sebelah kiri, pilih **Networks** &rarr; **Tunnels**.
 3. Klik nama tunnel Anda yang sedang aktif &rarr; klik tombol **Configure**.
-4. Masuk ke tab **Public Hostnames** &rarr; klik tombol **Add a public hostname**.
+4. Masuk ke tab **Public Hostnames** &rarr; klik tombol **Add a public hostname** (atau edit hostname lama jika cut-over).
 5. Isi konfigurasi berikut:
-   * **Subdomain**: `outsourcing` (atau `kpi`)
+   * **Subdomain**: `simitra`
    * **Domain**: `renlapdisdikhst.pro`
    * **Path**: *(kosongkan)*
    * **Type**: `HTTP`
@@ -39,11 +39,11 @@ Jika tunnel Anda dijalankan menggunakan file konfigurasi lokal di VPS (biasanya 
    ```bash
    sudo nano /etc/cloudflared/config.yml
    ```
-2. Tambahkan aturan routing ingress untuk subdomain `outsourcing.renlapdisdikhst.pro`:
+2. Tambahkan aturan routing ingress untuk subdomain `simitra.renlapdisdikhst.pro`:
    ```yaml
    ingress:
-     # Routing baru untuk OutsourceTrack & KPI Pro
-     - hostname: outsourcing.renlapdisdikhst.pro
+     # Routing untuk SIMITRA & KPI Pro
+     - hostname: simitra.renlapdisdikhst.pro
        service: http://localhost:3010
 
      # Routing yang sudah ada sebelumnya (contoh):
@@ -104,7 +104,7 @@ pm2 save
 ## 4. Langkah 3: Uji Coba dari Smartphone (Android / iOS)
 
 1. Buka browser HP Anda (Google Chrome di Android atau Safari di iPhone).
-2. Kunjungi tautan: **`https://outsourcing.renlapdisdikhst.pro`**
+2. Kunjungi tautan: **`https://simitra.renlapdisdikhst.pro`**
 3. **Uji Fitur Presensi Cerdas**:
    * Klik tombol **Presensi Cerdas (Clock In)** di beranda.
    * Saat browser meminta izin:
@@ -128,7 +128,7 @@ pm2 save
 Jika Anda ingin menampilkan aplikasi ini di halaman depan portal kedinasan `https://renlapdisdikhst.pro/` berdampingan dengan Kartu SPJ dan Kartu SAMPAN-HST, Anda dapat menyisipkan blok kode HTML berikut pada grid kartu aplikasi Anda:
 
 ```html
-<!-- CARD 3: APLIKASI OUTSOURCETRACK & KPI PRO -->
+<!-- CARD 3: APLIKASI SIMITRA & KPI PRO -->
 <div class="card-hover-effect rounded-2xl bg-slate-800/80 border border-slate-700/80 p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden backdrop-blur-sm group hover:border-indigo-500/50">
   <div class="absolute -right-12 -top-12 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-indigo-500/20 transition-all"></div>
   
@@ -141,16 +141,16 @@ Jika Anda ingin menampilkan aplikasi ini di halaman depan portal kedinasan `http
         </svg>
       </div>
       <span class="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
-        Kepegawaian & Kinerja
+        Kepegawaian & Mitra
       </span>
     </div>
 
     <h3 class="text-xl sm:text-2xl font-bold text-white mb-2 group-hover:text-indigo-300 transition-colors">
-      OutsourceTrack & KPI Pro
+      SIMITRA & KPI Pro
     </h3>
     
     <p class="text-slate-300 text-sm mb-6 leading-relaxed">
-      Sistem manajemen presensi cerdas WebRTC, anti-fake GPS, pelaporan tugas ber-watermark, dan penilaian kinerja berkala 4 pilar tenaga outsourcing Disdik HST.
+      Sistem manajemen presensi cerdas WebRTC, anti-fake GPS, pelaporan tugas ber-watermark, dan penilaian kinerja berkala mitra alih daya, PPPK, dan siswa magang Disdik HST.
     </p>
 
     <ul class="space-y-2 mb-8 text-xs sm:text-sm text-slate-300">
@@ -176,14 +176,14 @@ Jika Anda ingin menampilkan aplikasi ini di halaman depan portal kedinasan `http
   </div>
 
   <div>
-    <a href="https://outsourcing.renlapdisdikhst.pro" class="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all shadow-md shadow-indigo-600/30 group-hover:shadow-indigo-500/40">
-      <span>Buka OutsourceTrack & KPI Pro</span>
+    <a href="https://simitra.renlapdisdikhst.pro" class="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all shadow-md shadow-indigo-600/30 group-hover:shadow-indigo-500/40">
+      <span>Buka SIMITRA & KPI Pro</span>
       <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
       </svg>
     </a>
     <div class="mt-2.5 text-center">
-      <span class="text-[11px] text-slate-400">Jalur Cepat: <code class="text-indigo-300 font-mono">outsourcing.renlapdisdikhst.pro</code></span>
+      <span class="text-[11px] text-slate-400">Jalur Cepat: <code class="text-indigo-300 font-mono">simitra.renlapdisdikhst.pro</code></span>
     </div>
   </div>
 </div>
