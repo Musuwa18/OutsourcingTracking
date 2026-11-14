@@ -38,6 +38,7 @@ import {
   Sun,
   Moon,
   HelpCircle,
+  ExternalLink,
 } from 'lucide-react';
 import {
   UserRole,

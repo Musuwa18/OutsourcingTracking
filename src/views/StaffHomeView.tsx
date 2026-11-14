@@ -2092,10 +2092,10 @@ export const StaffHomeView: React.FC<StaffHomeViewProps> = ({
             ? {
                 id: selectedTaskForCheckin.id,
                 name: selectedTaskForCheckin.locationName,
+                address: selectedTaskForCheckin.title,
                 latitude: selectedTaskForCheckin.latitude,
                 longitude: selectedTaskForCheckin.longitude,
                 radiusMeters: selectedTaskForCheckin.radiusMeters,
-                description: selectedTaskForCheckin.title,
               }
             : safeOffice
         }
