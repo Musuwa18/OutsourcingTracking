@@ -61,6 +61,18 @@ Agregasi bulanan menghitung rata-rata Minggu 1-4, menghasilkan predikat otomatis
 - Fitur `navigator.mediaDevices.getUserMedia` dan `navigator.geolocation` **wajib** dijalankan di atas protokol **HTTPS** (Secure Context) agar dapat beroperasi di smartphone Android/iOS.
 - Di lingkungan VPS, aplikasi disajikan di belakang Cloudflare Tunnel (`https://simitra.renlapdisdikhst.pro`) yang menyediakan SSL/TLS otomatis.
 
+### A. Prosedur Migrasi Subdomain & Cloudflare Tunnel
+- **Locally Managed Tunnel**: Tunnel utama (`renlap-tunnel`) dikelola via berkas lokal `/etc/cloudflared/config.yml`. Pengeditan rute tidak dapat dilakukan melalui Web GUI Cloudflare (muncul keterangan *"Routes are managed by a local configuration file"*).
+- **Langkah Penambahan / Perubahan Hostname**:
+  1. Daftarkan DNS CNAME ke Cloudflare: `sudo cloudflared tunnel route dns renlap-tunnel <subdomain.domain.pro>`.
+  2. Perbarui aturan ingress pada `/etc/cloudflared/config.yml`.
+  3. Muat ulang daemon: `sudo systemctl restart cloudflared`.
+- **Prosedur Migrasi Domain dengan Proteksi Device Binding**:
+  - Saat domain berpindah FQDN, seluruh kunci perangkat lama wajib di-reset bersih:
+    `UPDATE users SET device_id = NULL, hardware_fingerprint = NULL, biometric_key = NULL;`
+    `DELETE FROM user_biometrics;`
+  - Hal ini menjamin auto-binding berjalan mulus pada login perdana tanpa penolakan "perangkat tidak cocok".
+
 ## 5. Akun Sandbox / Test & Trial Pengembang
 - **Nama Akun**: `Musuwarahmi`
 - **NIP / ID**: `19821218`
