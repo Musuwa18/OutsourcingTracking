@@ -139,8 +139,8 @@ export const DetailRiwayatModal: React.FC<DetailRiwayatModalProps> = ({
     : isViewingClockOut
     ? '[PRESENSI RESMI CLOCK OUT PULANG]'
     : isAttendance
-    ? '[STEMPEL RESMI PRESENSI OT-HST]'
-    : '[DOKUMENTASI TUGAS RESMI OT-HST]';
+    ? '[STEMPEL RESMI PRESENSI SIMITRA-HST]'
+    : '[DOKUMENTASI TUGAS RESMI SIMITRA-HST]';
 
   const currentWatermarkTime = isFieldCheckin
     ? `Jam: ${fieldRecord?.time || '-'} WITA`

@@ -392,9 +392,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
         {/* Header App Branding */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-2xl glass-surface border border-white/60 dark:border-white/10 shadow-xs mb-1">
-            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center text-white font-extrabold text-xs shadow-md shadow-indigo-500/30">
-              SM
-            </div>
+            <img 
+              src="/icons/simitra-icon.png" 
+              alt="Logo SIMITRA" 
+              className="w-8 h-8 rounded-xl object-contain drop-shadow-md shadow-indigo-500/30" 
+            />
             <span className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight">
               SIMITRA & KPI Pro
             </span>

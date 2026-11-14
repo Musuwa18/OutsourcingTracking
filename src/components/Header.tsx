@@ -116,9 +116,11 @@ export const Header: React.FC<HeaderProps> = ({
         
         {/* Brand Zone */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 shrink">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-blue-700 flex items-center justify-center text-white font-extrabold text-sm shadow-md shadow-indigo-500/25 border border-white/30 shrink-0">
-            SM
-          </div>
+          <img 
+            src="/icons/simitra-icon.png" 
+            alt="Logo SIMITRA" 
+            className="w-8 h-8 rounded-xl object-contain drop-shadow-sm shrink-0" 
+          />
           <div className="flex flex-col min-w-0">
             <span className="text-xs sm:text-sm font-bold tracking-tight text-slate-900 dark:text-white truncate">
               <span className="sm:hidden font-extrabold text-xs">SIMITRA</span>

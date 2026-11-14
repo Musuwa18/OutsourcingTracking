@@ -366,7 +366,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl text-white shadow-lg shrink-0 border-2 border-white/20"
               style={{ backgroundColor: currentUser.avatarColor || '#4f46e5' }}
             >
-              {currentUser.initials || 'OT'}
+              {currentUser.initials || 'SM'}
             </div>
             <div className="overflow-hidden">
               <h3 className="font-extrabold text-base sm:text-lg leading-tight truncate">

@@ -38,9 +38,11 @@ export const PwaInstallBanner: React.FC = () => {
         {/* Icon & App Badge */}
         <div className="flex flex-col items-center justify-center pt-2">
           <div className="relative mb-3.5">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-cyan-500 flex items-center justify-center shadow-xl shadow-indigo-500/30 text-white font-black text-2xl border-2 border-white/20">
-              OT
-            </div>
+            <img 
+              src="/icons/icon-192.png" 
+              alt="Logo SIMITRA" 
+              className="w-16 h-16 rounded-2xl object-cover shadow-xl shadow-indigo-500/30 border-2 border-white/20" 
+            />
             <div className="absolute -bottom-1.5 -right-1.5 p-1 rounded-full bg-emerald-500 text-white shadow-md border-2 border-white dark:border-slate-900">
               <Download className="w-3.5 h-3.5" />
             </div>
