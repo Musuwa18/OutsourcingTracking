@@ -930,6 +930,36 @@ export default function App() {
       }));
     setStaffList(activeStaff);
 
+    // Sinkronisasi otomatis supervisorMappings dengan atasan aktif dan penugasan riil dari database
+    const spvUsers = newUsers.filter((u: UserAccount) => u.role === 'supervisor');
+    setSupervisorMappings((prev) => {
+      const currentSpvIds = new Set(spvUsers.map((s: UserAccount) => s.id));
+      const updatedMappings: SupervisorMapping[] = spvUsers.map((spv: UserAccount) => {
+        const existing = prev.find((m) => m.supervisorId === spv.id || (spv.nip && m.supervisorId === spv.nip));
+        const staffDirectlyAssigned = activeStaff
+          .filter((s: StaffProfile) => s.supervisorId === spv.id || (spv.nip && s.supervisorId === spv.nip))
+          .map((s: StaffProfile) => s.id);
+        const mergedIds = Array.from(new Set([
+          ...(existing ? existing.assignedStaffIds : []),
+          ...staffDirectlyAssigned,
+        ]));
+        return {
+          supervisorId: spv.id,
+          supervisorName: spv.name,
+          supervisorRole: spv.roleTitle || 'Supervisor Operasional',
+          assignedStaffIds: mergedIds,
+        };
+      });
+
+      for (const m of prev) {
+        if (!currentSpvIds.has(m.supervisorId)) {
+          updatedMappings.push(m);
+        }
+      }
+      localStorage.setItem('ot_supervisor_mappings', JSON.stringify(updatedMappings));
+      return updatedMappings;
+    });
+
     addAuditLog('Pembaruan Data Pengguna', `Daftar akun pengguna diperbarui (${newUsers.length} total akun).`, 'Pengaturan');
   };
 

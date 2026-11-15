@@ -420,8 +420,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('outsourcing');
   const [newUserRoleTitle, setNewUserRoleTitle] = useState('');
+  const [newUserDivisionId, setNewUserDivisionId] = useState('');
+  const [newUserSupervisorId, setNewUserSupervisorId] = useState('');
+  const [newUserJobRole, setNewUserJobRole] = useState('Administrasi Perkantoran');
+  const [newUserLocationId, setNewUserLocationId] = useState(locations[0]?.id || '');
   const [newUserVendorName, setNewUserVendorName] = useState('');
   const [newUserSupervisedGroup, setNewUserSupervisedGroup] = useState('');
+  const [newUserDeviceLock, setNewUserDeviceLock] = useState(true);
   // ================= TAB: RBAC LOCAL STATE =================
   const [localPermissions, setLocalPermissions] = useState<Record<string, RolePermissions>>(rolePermissions);
 
@@ -432,9 +437,14 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     return found ? found.name : supId;
   };
 
-  const supervisorCandidates = users.filter(
-    (u) => u.role === 'supervisor' || u.role === 'admin' || u.role === 'coordinator'
-  );
+  const supervisorCandidates = useMemo(() => {
+    return users
+      .filter((u) => u.role === 'supervisor' || u.role === 'admin' || u.role === 'coordinator')
+      .sort((a, b) => {
+        const order: Record<string, number> = { supervisor: 1, admin: 2, coordinator: 3 };
+        return (order[a.role] || 99) - (order[b.role] || 99);
+      });
+  }, [users]);
 
 
   const allVendors = useMemo<Vendor[]>(() => {
@@ -711,8 +721,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     setIsSavingUserEdit(true);
     try {
       const selectedDiv = divisions.find((d) => d.id === editUserDivisionId);
+      const isDisdikInternal = editUserRole === 'supervisor' || editUserRole === 'admin';
       const isCoord = editUserRole === 'coordinator';
-      const finalVendor = isCoord ? (editUserSupervisedGroup || editUserVendorName) : editUserVendorName;
+      const finalVendor = isDisdikInternal
+        ? 'Dinas Pendidikan Kab. HST'
+        : isCoord
+        ? (editUserSupervisedGroup || editUserVendorName)
+        : editUserVendorName;
       const finalSupervisedGroups = isCoord ? [finalVendor] : undefined;
 
       const res = await apiUpdateUserProfile(targetUserForEdit.id, {
@@ -971,9 +986,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
     setIsCreatingUser(true);
     try {
-      const selectedDiv = divisions[0];
+      const selectedDiv = divisions.find((d) => d.id === newUserDivisionId) || divisions[0];
       const defaultVendor = allVendors[0]?.name || vendors[0]?.name || 'PT. YASMINE BUIH PERSADA';
-      const targetVendor = newUserRole === 'coordinator'
+
+      const isDisdikInternal = newUserRole === 'supervisor' || newUserRole === 'admin';
+      const targetVendor = isDisdikInternal
+        ? 'Dinas Pendidikan Kab. HST'
+        : newUserRole === 'coordinator'
         ? (newUserSupervisedGroup && newUserSupervisedGroup !== 'ALL' ? newUserSupervisedGroup : (newUserVendorName.trim() || defaultVendor))
         : (newUserVendorName.trim() || defaultVendor);
 
@@ -981,23 +1000,31 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         ? [targetVendor]
         : [targetVendor];
 
+      const finalRoleTitle = newUserRoleTitle.trim() || (
+        newUserRole === 'outsourcing' ? (newUserJobRole === '__CUSTOM__' ? 'Staf Lapangan Alih Daya' : newUserJobRole) :
+        newUserRole === 'coordinator' ? 'Pengawas Lapangan Mitra' :
+        newUserRole === 'supervisor' ? 'Pejabat Penilai Disdik' : 'Administrator Sistem'
+      );
+
+      const targetLocation = newUserRole === 'outsourcing'
+        ? (locations.find((l) => l.id === newUserLocationId) || locations[0])
+        : (locations.find((l) => l.isHeadquarters) || locations[0]);
+
       const created = await apiCreateUser({
         name: newUserName.trim(),
         nip: newUserNip.trim(),
         email: newUserEmail.trim(),
         role: newUserRole,
-        roleTitle: newUserRoleTitle.trim() || (
-          newUserRole === 'outsourcing' ? 'Staf Lapangan Alih Daya' :
-          newUserRole === 'coordinator' ? 'Pengawas Lapangan Mitra' :
-          newUserRole === 'supervisor' ? 'Pejabat Penilai' : 'Administrator Sistem'
-        ),
+        roleTitle: finalRoleTitle,
         divisionId: selectedDiv?.id || (newUserRole === 'coordinator' ? 'div-vendor' : 'div-umpeg'),
         divisionName: selectedDiv?.name || (newUserRole === 'coordinator' ? 'Pengawas Mitra Lapangan' : 'Sub Bagian Dinas'),
+        supervisorId: (newUserRole === 'outsourcing' || newUserRole === 'supervisor' || newUserRole === 'coordinator') ? (newUserSupervisorId || null) : null,
         vendorName: targetVendor,
         supervisedGroups: targetSupervisedGroups,
         supervisedVendor: targetSupervisedGroups[0],
         password: 'Password123!',
-        customLocation: locations.find((l) => l.id === newUserLocationId) || locations[0],
+        customLocation: targetLocation,
+        deviceId: null,
       });
       const newUser: UserAccount = {
         id: created.id,
@@ -1016,12 +1043,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         deviceBinding: null,
         lastLogin: 'Belum pernah login',
         avatarColor: created.avatarColor || '#6366f1',
-        initials: created.initials || 'OS',
+        initials: created.initials || (created.name ? created.name.slice(0, 2).toUpperCase() : 'US'),
+        customLocation: targetLocation,
       };
 
       onUpdateUsers([...users, newUser]);
       setNewUserModalOpen(false);
-      onShowToast(`Akun pengguna "${newUser.name}" berhasil dibuat dan tersimpan permanen di database.`, 'success');
+      onShowToast(`Akun pengguna "${newUser.name}" (${newUser.roleTitle}) berhasil dibuat dan tersimpan permanen di database.`, 'success');
 
       // Reset inputs
       setNewUserName('');
@@ -1996,8 +2024,14 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                 setNewUserEmail('');
                 setNewUserRole('outsourcing');
                 setNewUserRoleTitle('');
-                setNewUserVendorName(vendors[0]?.name || '');
+                setNewUserDivisionId(divisions[0]?.id || '');
+                const defaultSpv = supervisorCandidates.find((s) => s.role === 'supervisor') || supervisorCandidates[0];
+                setNewUserSupervisorId(defaultSpv?.id || '');
+                setNewUserJobRole(OUTSOURCING_JOB_ROLES[0] || 'Administrasi Perkantoran');
+                setNewUserVendorName(vendors[0]?.name || allVendors[0]?.name || '');
                 setNewUserSupervisedGroup(vendors[0]?.name || 'ALL');
+                setNewUserLocationId(locations[0]?.id || '');
+                setNewUserDeviceLock(true);
                 setNewUserModalOpen(true);
               }}
               className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs self-start sm:self-auto"
@@ -3870,60 +3904,72 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {editUserRole === 'coordinator' ? 'Kelompok / Mitra yang Diawasi *' : 'Perusahaan Penyedia (Vendor)'}
-                  </label>
-                  <select
-                    value={editUserRole === 'coordinator' ? editUserSupervisedGroup : editUserVendorName}
-                    onChange={(e) => {
-                      if (editUserRole === 'coordinator') {
-                        setEditUserSupervisedGroup(e.target.value);
-                        setEditUserVendorName(e.target.value);
-                      } else {
-                        setEditUserVendorName(e.target.value);
-                      }
-                    }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
-                  >
-                    <option value="">
-                      {editUserRole === 'coordinator' ? '-- Pilih Kelompok Binaan --' : '-- Pilih Vendor Rekanan --'}
-                    </option>
-                    {allVendors.filter((v) => !v.category || v.category === 'vendor').length > 0 && (
-                      <optgroup label="🏢 Perusahaan Vendor Rekanan">
-                        {allVendors
-                          .filter((v) => !v.category || v.category === 'vendor')
-                          .map((v) => (
-                            <option key={v.id || v.name} value={v.name}>
-                              {v.name}
-                            </option>
-                          ))}
-                      </optgroup>
-                    )}
-                    {allVendors.filter((v) => v.category === 'pppk_paruh_waktu').length > 0 && (
-                      <optgroup label="🏛️ Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)">
-                        {allVendors
-                          .filter((v) => v.category === 'pppk_paruh_waktu')
-                          .map((v) => (
-                            <option key={v.id || v.name} value={v.name}>
-                              {v.name}
-                            </option>
-                          ))}
-                      </optgroup>
-                    )}
-                    {allVendors.filter((v) => v.category === 'magang').length > 0 && (
-                      <optgroup label="🎓 Siswa / Mahasiswa Magang">
-                        {allVendors
-                          .filter((v) => v.category === 'magang')
-                          .map((v) => (
-                            <option key={v.id || v.name} value={v.name}>
-                              {v.name}
-                            </option>
-                          ))}
-                      </optgroup>
-                    )}
-                  </select>
-                </div>
+                {(editUserRole === 'supervisor' || editUserRole === 'admin') ? (
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Instansi Penampung
+                    </label>
+                    <div className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-xs flex items-center gap-1.5 h-[38px]">
+                      <Building2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      <span>Dinas Pendidikan Kab. HST</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      {editUserRole === 'coordinator' ? 'Kelompok / Mitra yang Diawasi *' : 'Perusahaan Penyedia (Vendor)'}
+                    </label>
+                    <select
+                      value={editUserRole === 'coordinator' ? editUserSupervisedGroup : editUserVendorName}
+                      onChange={(e) => {
+                        if (editUserRole === 'coordinator') {
+                          setEditUserSupervisedGroup(e.target.value);
+                          setEditUserVendorName(e.target.value);
+                        } else {
+                          setEditUserVendorName(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                    >
+                      <option value="">
+                        {editUserRole === 'coordinator' ? '-- Pilih Kelompok Binaan --' : '-- Pilih Vendor Rekanan --'}
+                      </option>
+                      {allVendors.filter((v) => !v.category || v.category === 'vendor').length > 0 && (
+                        <optgroup label="🏢 Perusahaan Vendor Rekanan">
+                          {allVendors
+                            .filter((v) => !v.category || v.category === 'vendor')
+                            .map((v) => (
+                              <option key={v.id || v.name} value={v.name}>
+                                {v.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      {allVendors.filter((v) => v.category === 'pppk_paruh_waktu').length > 0 && (
+                        <optgroup label="🏛️ Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)">
+                          {allVendors
+                            .filter((v) => v.category === 'pppk_paruh_waktu')
+                            .map((v) => (
+                              <option key={v.id || v.name} value={v.name}>
+                                {v.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      {allVendors.filter((v) => v.category === 'magang').length > 0 && (
+                        <optgroup label="🎓 Siswa / Mahasiswa Magang">
+                          {allVendors
+                            .filter((v) => v.category === 'magang')
+                            .map((v) => (
+                              <option key={v.id || v.name} value={v.name}>
+                                {v.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -3934,37 +3980,53 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                     onChange={(e) => setEditUserRole(e.target.value as any)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
                   >
-                    <option value="outsourcing">Tenaga Outsourcing</option>
-                    <option value="coordinator">Pengawas Lapangan</option>
-                    <option value="supervisor">Supervisor Operasional</option>
-                    <option value="admin">Super Admin</option>
+                    <option value="outsourcing">Tenaga Kerja Lapangan</option>
+                    <option value="coordinator">Pengawas Lapangan Mitra</option>
+                    <option value="supervisor">Supervisor Operasional Disdik</option>
+                    <option value="admin">Administrator Sistem</option>
                   </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Formasi / Jenis Pekerjaan Baku
-                  </label>
-                  <select
-                    value={OUTSOURCING_JOB_ROLES.includes(editUserRoleTitle as any) ? editUserRoleTitle : '__CUSTOM__'}
-                    onChange={(e) => {
-                      if (e.target.value !== '__CUSTOM__') {
-                        setEditUserRoleTitle(e.target.value);
-                      }
-                    }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
-                  >
-                    {OUTSOURCING_JOB_ROLES.map((job) => (
-                      <option key={job} value={job}>
-                        {job}
-                      </option>
-                    ))}
-                    <option value="__CUSTOM__">-- Kustom / Posisi Lain --</option>
-                  </select>
-                </div>
+              {editUserRole === 'outsourcing' ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Formasi / Jenis Pekerjaan Baku
+                    </label>
+                    <select
+                      value={OUTSOURCING_JOB_ROLES.includes(editUserRoleTitle as any) ? editUserRoleTitle : '__CUSTOM__'}
+                      onChange={(e) => {
+                        if (e.target.value !== '__CUSTOM__') {
+                          setEditUserRoleTitle(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                    >
+                      {OUTSOURCING_JOB_ROLES.map((job) => (
+                        <option key={job} value={job}>
+                          {job}
+                        </option>
+                      ))}
+                      <option value="__CUSTOM__">-- Kustom / Posisi Lain --</option>
+                    </select>
+                  </div>
 
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Status Akun Pegawai
+                    </label>
+                    <select
+                      value={editUserStatus}
+                      onChange={(e) => setEditUserStatus(e.target.value as 'Aktif' | 'Nonaktif')}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-medium"
+                    >
+                      <option value="Aktif">Aktif (Dapat Login & Presensi)</option>
+                      <option value="Nonaktif">Nonaktif (Akses Dinonaktifkan)</option>
+                    </select>
+                  </div>
+                </div>
+              ) : (
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Status Akun Pegawai
@@ -3978,17 +4040,20 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                     <option value="Nonaktif">Nonaktif (Akses Dinonaktifkan)</option>
                   </select>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Jabatan / Posisi Kerja Spesifik
+                  {editUserRole === 'supervisor' ? 'Jabatan Kedinasan Resmi / Spesifik' : 'Jabatan / Posisi Kerja Spesifik'}
                 </label>
                 <input
                   type="text"
                   value={editUserRoleTitle}
                   onChange={(e) => setEditUserRoleTitle(e.target.value)}
-                  placeholder="Contoh: Administrasi Perkantoran / Pramubakti"
+                  placeholder={editUserRole === 'supervisor' ? "Contoh: Kepala Sub Bagian Umum dan Kepegawaian" : "Contoh: Administrasi Perkantoran / Pramubakti"}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
@@ -4173,7 +4238,7 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       {/* ========================================================================= */}
       {newUserModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
@@ -4190,15 +4255,15 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreateUser} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleCreateUser} className="p-6 space-y-4 text-xs max-h-[85vh] overflow-y-auto">
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Nama Lengkap
+                  Nama Lengkap *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Danang Prasetyo"
+                  placeholder="Contoh: Danang Prasetyo, S.AP"
                   value={newUserName}
                   onChange={(e) => setNewUserName(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
@@ -4208,12 +4273,12 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    NIP / ID Karyawan
+                    NIP / ID Karyawan *
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="OS-2024-110"
+                    placeholder={newUserRole === 'outsourcing' ? 'OS-2024-110' : '19860620 201001 1 008'}
                     value={newUserNip}
                     onChange={(e) => setNewUserNip(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
@@ -4222,97 +4287,64 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Tingkat Peran (Role)
+                    Tingkat Peran (Role) *
                   </label>
                   <select
                     value={newUserRole}
                     onChange={(e) => {
                       const nextRole = e.target.value as UserRole;
                       setNewUserRole(nextRole);
-                      if (nextRole === 'coordinator') {
-                        const defaultGrp = allVendors[0]?.name || vendors[0]?.name || 'PT. YASMINE BUIH PERSADA';
+                      if (nextRole === 'outsourcing') {
+                        const defaultVen = allVendors[0]?.name || vendors[0]?.name || 'PT. YASMINE BUIH PERSADA';
+                        setNewUserVendorName(defaultVen);
+                        setNewUserDeviceLock(true);
+                        setNewUserJobRole(OUTSOURCING_JOB_ROLES[0]);
+                        setNewUserRoleTitle(OUTSOURCING_JOB_ROLES[0]);
+                        const defSpv = supervisorCandidates.find((s) => s.role === 'supervisor') || supervisorCandidates[0];
+                        setNewUserSupervisorId(defSpv?.id || '');
+                      } else if (nextRole === 'supervisor') {
+                        setNewUserVendorName('Dinas Pendidikan Kab. HST');
+                        setNewUserDeviceLock(false);
+                        setNewUserRoleTitle('');
+                        const sekdis = supervisorCandidates.find(
+                          (s) => s.roleTitle?.toLowerCase().includes('sekretaris') || s.name?.toLowerCase().includes('salihin')
+                        ) || supervisorCandidates[0];
+                        setNewUserSupervisorId(sekdis?.id || '');
+                      } else if (nextRole === 'coordinator') {
+                        const defaultGrp = allVendors.find((v) => !v.category || v.category === 'vendor')?.name || 'PT. YASMINE BUIH PERSADA';
                         setNewUserSupervisedGroup(defaultGrp);
                         setNewUserVendorName(defaultGrp);
+                        setNewUserRoleTitle('Pengawas Lapangan Mitra');
+                        setNewUserDeviceLock(false);
+                      } else if (nextRole === 'admin') {
+                        setNewUserVendorName('Dinas Pendidikan Kab. HST');
+                        setNewUserRoleTitle('Administrator Sistem');
+                        setNewUserDeviceLock(false);
                       }
                     }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-medium"
                   >
-                    <option value="outsourcing">Tenaga Kerja Lapangan</option>
+                    <option value="outsourcing">Tenaga Kerja Lapangan (Mitra / PPPK / Magang)</option>
+                    <option value="supervisor">Pejabat Penilai Disdik (Supervisor Operasional)</option>
                     <option value="coordinator">Pengawas Lapangan Mitra</option>
-                    <option value="supervisor">Pejabat Penilai Disdik</option>
                     <option value="admin">Administrator Sistem</option>
                   </select>
                 </div>
               </div>
 
-              {/* Group / Vendor Selector berdasarkan Peran */}
+              {/* FORM KHUSUS 1: TENAGA KERJA LAPANGAN (OUTSOURCING / PPPK / MAGANG) */}
               {newUserRole === 'outsourcing' && (
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Perusahaan Vendor / Kelompok Pegawai *
-                  </label>
-                  <select
-                    required
-                    value={newUserVendorName || vendors[0]?.name || ''}
-                    onChange={(e) => setNewUserVendorName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                  >
-                    {allVendors.filter((v) => !v.category || v.category === 'vendor').length > 0 && (
-                      <optgroup label="🏢 Perusahaan Vendor Rekanan">
-                        {allVendors
-                          .filter((v) => !v.category || v.category === 'vendor')
-                          .map((v) => (
-                            <option key={v.id} value={v.name}>
-                              {v.name}
-                            </option>
-                          ))}
-                      </optgroup>
-                    )}
-                    {allVendors.filter((v) => v.category === 'pppk_paruh_waktu').length > 0 && (
-                      <optgroup label="🏛️ Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)">
-                        {allVendors
-                          .filter((v) => v.category === 'pppk_paruh_waktu')
-                          .map((v) => (
-                            <option key={v.id} value={v.name}>
-                              {v.name}
-                            </option>
-                          ))}
-                      </optgroup>
-                    )}
-                    {allVendors.filter((v) => v.category === 'magang').length > 0 && (
-                      <optgroup label="🎓 Siswa / Mahasiswa Magang">
-                        {allVendors
-                          .filter((v) => v.category === 'magang')
-                          .map((v) => (
-                            <option key={v.id} value={v.name}>
-                              {v.name}
-                            </option>
-                          ))}
-                      </optgroup>
-                    )}
-                  </select>
-                </div>
-              )}
-
-              {newUserRole === 'coordinator' && (
-                <div className="space-y-3 p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60">
+                <div className="space-y-3.5 pt-1">
                   <div>
-                    <label className="block font-semibold text-amber-900 dark:text-amber-200 mb-1">
-                      Kelompok Pegawai yang Diawasi *
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Perusahaan Vendor / Kelompok Pegawai *
                     </label>
                     <select
                       required
-                      value={newUserSupervisedGroup}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setNewUserSupervisedGroup(val);
-                        if (val !== 'ALL' && (!newUserVendorName || newUserVendorName === 'ALL')) {
-                          setNewUserVendorName(val);
-                        }
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                      value={newUserVendorName || vendors[0]?.name || ''}
+                      onChange={(e) => setNewUserVendorName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                     >
-                      <option value="">-- Pilih Kelompok Pegawai yang Diawasi --</option>
                       {allVendors.filter((v) => !v.category || v.category === 'vendor').length > 0 && (
                         <optgroup label="🏢 Perusahaan Vendor Rekanan">
                           {allVendors
@@ -4347,82 +4379,439 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                         </optgroup>
                       )}
                     </select>
-                    <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1">
-                      Pengawas hanya dapat melihat presensi & menilai laporan pegawai dalam kelompok ini.
-                    </p>
                   </div>
 
-                  <div>
-                    <label className="block font-semibold text-amber-900 dark:text-amber-200 mb-1">
-                      Badan Usaha / Asal Instansi Pengawas *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: PT. YASMINE BUIH PERSADA"
-                      value={newUserVendorName}
-                      onChange={(e) => setNewUserVendorName(e.target.value)}
-                      list="vendor-suggestions"
-                      className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                    />
-                    <datalist id="vendor-suggestions">
-                      {vendors.map((v) => (
-                        <option key={v.id} value={v.name} />
-                      ))}
-                    </datalist>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Bidang / Sub Bagian Penugasan *
+                      </label>
+                      <select
+                        required
+                        value={newUserDivisionId}
+                        onChange={(e) => setNewUserDivisionId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                      >
+                        <option value="">-- Pilih Bidang --</option>
+                        {divisions.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name} ({d.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Atasan Langsung (Penilai KPI) *
+                      </label>
+                      <select
+                        required
+                        value={newUserSupervisorId}
+                        onChange={(e) => setNewUserSupervisorId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-medium"
+                      >
+                        <option value="">-- Pilih Pejabat Penilai --</option>
+                        {supervisorCandidates.map((sup) => (
+                          <option key={sup.id} value={sup.id}>
+                            {sup.name} ({sup.roleTitle})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Formasi Pekerjaan Baku *
+                      </label>
+                      <select
+                        value={newUserJobRole}
+                        onChange={(e) => {
+                          setNewUserJobRole(e.target.value);
+                          if (e.target.value !== '__CUSTOM__') {
+                            setNewUserRoleTitle(e.target.value);
+                          } else {
+                            setNewUserRoleTitle('');
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                      >
+                        {OUTSOURCING_JOB_ROLES.map((job) => (
+                          <option key={job} value={job}>
+                            {job}
+                          </option>
+                        ))}
+                        <option value="__CUSTOM__">-- Kustom / Posisi Lain --</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Jabatan / Posisi Spesifik
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: Petugas Kebersihan Area Kantor"
+                        value={newUserRoleTitle}
+                        onChange={(e) => setNewUserRoleTitle(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Email Korporat / Login *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="danang@disdikhst.go.id"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Titik Tugas (Radius Absen) *</span>
+                      </label>
+                      <select
+                        value={newUserLocationId}
+                        onChange={(e) => setNewUserLocationId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                      >
+                        {locations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.name} ({loc.radiusMeters}m)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 text-[11px] text-indigo-900 dark:text-indigo-200 flex items-start gap-2">
+                    <Smartphone className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold">Device Binding Aktif (1 HP):</span>
+                      <span className="text-indigo-700 dark:text-indigo-300 ml-1">
+                        Pengguna alih daya akan otomatis mengunci 1 HP pertamanya saat login perdana untuk mencegah kecurangan presensi.
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
 
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Email Korporat / Login
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="danang@disdikhst.go.id"
-                  value={newUserEmail}
-                  onChange={(e) => setNewUserEmail(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
+              {/* FORM KHUSUS 2: PEJABAT PENILAI DISDIK (SUPERVISOR OPERASIONAL) */}
+              {newUserRole === 'supervisor' && (
+                <div className="space-y-3.5 pt-1">
+                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 text-[11px] text-emerald-900 dark:text-emerald-200 flex items-start gap-2">
+                    <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">Pejabat Penilai Disdik (Internal Dinas Pendidikan Kab. HST)</span>
+                      <p className="text-[10px] text-emerald-700 dark:text-emerald-300 mt-0.5">
+                        Supervisor memiliki wewenang verifikasi kinerja harian, evaluasi KPI mingguan/bulanan, verifikasi lembur, dan persetujuan cuti bawahan.
+                      </p>
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Jabatan / Posisi Kerja
-                </label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Petugas Kebersihan Area Kantor"
-                  value={newUserRoleTitle}
-                  onChange={(e) => setNewUserRoleTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Pilih Lokasi Tempat Bekerja / Titik Tugas *</span>
-                </label>
-                <select
-                  value={newUserLocationId}
-                  onChange={(e) => setNewUserLocationId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-xs"
-                >
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name} (Radius Absen: {loc.radiusMeters} meter)
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Bidang / Sub Bagian yang Dinaungi *
+                      </label>
+                      <select
+                        required
+                        value={newUserDivisionId}
+                        onChange={(e) => setNewUserDivisionId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-medium"
+                      >
+                        <option value="">-- Pilih Bidang / Sub Bagian --</option>
+                        {divisions.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name} ({d.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Atasan Langsung Hirarki
+                      </label>
+                      <select
+                        value={newUserSupervisorId}
+                        onChange={(e) => setNewUserSupervisorId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-medium"
+                      >
+                        <option value="">-- Pilih Atasan Hirarki --</option>
+                        {supervisorCandidates.map((sup) => (
+                          <option key={sup.id} value={sup.id}>
+                            {sup.name} ({sup.roleTitle})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
-              <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 text-[11px] text-indigo-900 dark:text-indigo-200 flex items-start gap-2">
-                <Smartphone className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                <span>Device Binding Aktif: Pengguna akan otomatis mengunci 1 HP pertamanya saat login perdana.</span>
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Jabatan Kedinasan Resmi *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Contoh: Kepala Sub Bagian Umum dan Kepegawaian"
+                        value={newUserRoleTitle}
+                        onChange={(e) => setNewUserRoleTitle(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Email Resmi Kedinasan / Login *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="umpeg@disdikhst.go.id"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-slate-900 dark:text-white">Perangkat: Bebas (Multi-Device Aktif)</span>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Pejabat penilai otomatis berstatus Device Bebas sehingga dapat login dari PC/Laptop kantor untuk verifikasi & cetak laporan maupun dari smartphone.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* FORM KHUSUS 3: PENGAWAS LAPANGAN MITRA */}
+              {newUserRole === 'coordinator' && (
+                <div className="space-y-3.5 pt-1">
+                  <div className="p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-3">
+                    <div>
+                      <label className="block font-semibold text-amber-900 dark:text-amber-200 mb-1">
+                        Kelompok Pegawai yang Diawasi *
+                      </label>
+                      <select
+                        required
+                        value={newUserSupervisedGroup}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewUserSupervisedGroup(val);
+                          if (val !== 'ALL' && (!newUserVendorName || newUserVendorName === 'ALL')) {
+                            setNewUserVendorName(val);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                      >
+                        <option value="">-- Pilih Kelompok Pegawai yang Diawasi --</option>
+                        {allVendors.filter((v) => !v.category || v.category === 'vendor').length > 0 && (
+                          <optgroup label="🏢 Perusahaan Vendor Rekanan">
+                            {allVendors
+                              .filter((v) => !v.category || v.category === 'vendor')
+                              .map((v) => (
+                                <option key={v.id} value={v.name}>
+                                  {v.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        )}
+                        {allVendors.filter((v) => v.category === 'pppk_paruh_waktu').length > 0 && (
+                          <optgroup label="🏛️ Pegawai Pemerintah Perjanjian Kerja (PPPK Paruh Waktu)">
+                            {allVendors
+                              .filter((v) => v.category === 'pppk_paruh_waktu')
+                              .map((v) => (
+                                <option key={v.id} value={v.name}>
+                                  {v.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        )}
+                        {allVendors.filter((v) => v.category === 'magang').length > 0 && (
+                          <optgroup label="🎓 Siswa / Mahasiswa Magang">
+                            {allVendors
+                              .filter((v) => v.category === 'magang')
+                              .map((v) => (
+                                <option key={v.id} value={v.name}>
+                                  {v.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        )}
+                      </select>
+                      <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1">
+                        Pengawas hanya dapat memantau presensi & laporan staf dalam kelompok binaannya.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-amber-900 dark:text-amber-200 mb-1">
+                        Badan Usaha / Asal Instansi Pengawas *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Contoh: PT. YASMINE BUIH PERSADA"
+                        value={newUserVendorName}
+                        onChange={(e) => setNewUserVendorName(e.target.value)}
+                        list="vendor-suggestions"
+                        className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      />
+                      <datalist id="vendor-suggestions">
+                        {vendors.map((v) => (
+                          <option key={v.id} value={v.name} />
+                        ))}
+                      </datalist>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Bidang / Sub Bagian Terkait
+                      </label>
+                      <select
+                        value={newUserDivisionId}
+                        onChange={(e) => setNewUserDivisionId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                      >
+                        <option value="">-- Pilih Bidang Terkait --</option>
+                        {divisions.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name} ({d.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Atasan Penilai Disdik (Pembina)
+                      </label>
+                      <select
+                        value={newUserSupervisorId}
+                        onChange={(e) => setNewUserSupervisorId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-medium"
+                      >
+                        <option value="">-- Pilih Pejabat Disdik --</option>
+                        {supervisorCandidates.map((sup) => (
+                          <option key={sup.id} value={sup.id}>
+                            {sup.name} ({sup.roleTitle})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Email Login Pengawas *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="pengawas@mitra.com"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Jabatan / Posisi Pengawas
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Koordinator Lapangan Mitra"
+                        value={newUserRoleTitle}
+                        onChange={(e) => setNewUserRoleTitle(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* FORM KHUSUS 4: ADMINISTRATOR SISTEM */}
+              {newUserRole === 'admin' && (
+                <div className="space-y-3.5 pt-1">
+                  <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 text-[11px] text-purple-900 dark:text-purple-200 flex items-start gap-2">
+                    <Shield className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">Super Administrator Sistem SIMITRA</span>
+                      <p className="text-[10px] text-purple-700 dark:text-purple-300 mt-0.5">
+                        Memiliki hak penuh untuk konfigurasi parameter sistem, audit security, manajemen user, dan integrasi perangkat.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Unit Kerja / Sub Bagian *
+                      </label>
+                      <select
+                        required
+                        value={newUserDivisionId}
+                        onChange={(e) => setNewUserDivisionId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                      >
+                        {divisions.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name} ({d.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Email Login Admin *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="admin@disdikhst.go.id"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Jabatan Spesifik Admin
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Administrator Sistem Disdik HST"
+                      value={newUserRoleTitle}
+                      onChange={(e) => setNewUserRoleTitle(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
                 <button
