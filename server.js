@@ -248,20 +248,15 @@ app.post('/api/auth/login', (req, res) => {
           (userBoundFp.startsWith('hw-') && hardwareFp.startsWith('dev-'))
         );
 
-        // Jika user login password valid dan mengakses dari domain simitra, lakukan adaptasi aman
-        const hostHeader = (req.headers.host || '').toLowerCase();
-        const originHeader = (req.headers.origin || req.headers.referer || '').toLowerCase();
-        const isDomainMigration = hostHeader.includes('simitra') || originHeader.includes('simitra');
-
-        if (!isExactMatch && !isFormatMigration && !isDomainMigration) {
+        if (!isExactMatch && !isFormatMigration) {
           return res.status(403).json({
-            error: 'PERANGKAT TIDAK DIKENALI (ANTI-TITIP ABSEN): Akun Anda telah terikat secara resmi pada smartphone utama yang Anda daftarkan sebelumnya. Demi integritas presensi, dilarang login di HP orang lain untuk mencegah titip absen. Silakan gunakan HP terdaftar Anda, atau hubungi Kasubag / Administrator Disdik HST untuk reset kunci perangkat jika Anda resmi berganti HP baru.',
+            error: 'PERANGKAT TIDAK DIKENALI (ANTI-TITIP ABSEN): Akun Anda telah terikat secara resmi pada smartphone utama yang Anda daftarkan sebelumnya. Demi integritas presensi, dilarang login di HP atau komputer lain untuk mencegah titip absen. Silakan gunakan HP terdaftar Anda, atau hubungi Kasubag / Administrator Disdik HST untuk reset kunci perangkat jika Anda resmi berganti HP baru.',
             code: 'DEVICE_BINDING_MISMATCH',
             boundDeviceId: userBoundFp
           });
         }
 
-        if (isFormatMigration || (!isExactMatch && isDomainMigration && hardwareFp)) {
+        if (isFormatMigration) {
           updateUserDevice(user.id, deviceId || hardwareFp, null, hardwareFp);
           user.deviceId = deviceId || hardwareFp;
           user.hardwareFingerprint = hardwareFp;
