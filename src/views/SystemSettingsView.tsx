@@ -393,7 +393,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   const [userToDelete, setUserToDelete] = useState<UserAccount | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
-  const [newUserLocationId, setNewUserLocationId] = useState(locations[0]?.id || 'loc-disdik-hst');
   // ================= TAB: GEOFENCE STATE =================
   const [editingLocation, setEditingLocation] = useState<OfficeLocation | null>(null);
   const [isNewLocation, setIsNewLocation] = useState(false);
@@ -4051,9 +4050,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                   value={editUserRoleTitle}
                   onChange={(e) => setEditUserRoleTitle(e.target.value)}
                   placeholder={editUserRole === 'supervisor' ? "Contoh: Kepala Sub Bagian Umum dan Kepegawaian" : "Contoh: Administrasi Perkantoran / Pramubakti"}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
