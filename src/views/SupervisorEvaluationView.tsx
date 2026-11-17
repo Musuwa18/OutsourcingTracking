@@ -109,6 +109,8 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
   const [leaveNotesInputs, setLeaveNotesInputs] = useState<Record<string, string>>({});
   const [leaveFilterStatus, setLeaveFilterStatus] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
   const [reportFilterStatus, setReportFilterStatus] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REVISED'>('ALL');
+  const [reportSearchName, setReportSearchName] = useState('');
+  const [reportFilterDate, setReportFilterDate] = useState('');
   const [isProcessingReport, setIsProcessingReport] = useState<Record<string, boolean>>({});
   const [inspectingLeaveDoc, setInspectingLeaveDoc] = useState<string | null>(null);
   const [selectedLeaveDetail, setSelectedLeaveDetail] = useState<LeaveRequest | null>(null);
@@ -248,13 +250,35 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
   const filteredReportFeed = useMemo(() => {
     return displayedDailyReports.filter((r) => {
-      if (reportFilterStatus === 'ALL') return true;
-      if (reportFilterStatus === 'PENDING') return r.supervisorApproval === 'Pending' || !r.supervisorApproval;
-      if (reportFilterStatus === 'APPROVED') return r.supervisorApproval === 'Disetujui';
-      if (reportFilterStatus === 'REVISED') return r.supervisorApproval === 'Revisi';
+      // 1. Filter status persetujuan
+      if (reportFilterStatus === 'PENDING') {
+        if (r.supervisorApproval !== 'Pending' && r.supervisorApproval) return false;
+      } else if (reportFilterStatus === 'APPROVED') {
+        if (r.supervisorApproval !== 'Disetujui') return false;
+      } else if (reportFilterStatus === 'REVISED') {
+        if (r.supervisorApproval !== 'Revisi') return false;
+      }
+
+      // 2. Filter pemilahan tanggal
+      if (reportFilterDate && r.date !== reportFilterDate) {
+        return false;
+      }
+
+      // 3. Pencarian berdasarkan nama staf / NIP / judul tugas
+      if (reportSearchName.trim()) {
+        const query = reportSearchName.toLowerCase().trim();
+        const staff = staffList.find((s) => s.id === r.staffId);
+        const nameMatch = staff?.name?.toLowerCase().includes(query) || (r as any).staffName?.toLowerCase().includes(query);
+        const nipMatch = staff?.nip?.toLowerCase().includes(query);
+        const titleMatch = r.title?.toLowerCase().includes(query);
+        if (!nameMatch && !nipMatch && !titleMatch) {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [displayedDailyReports, reportFilterStatus]);
+  }, [displayedDailyReports, reportFilterStatus, reportFilterDate, reportSearchName, staffList]);
 
   const pendingReportCount = useMemo(
     () => displayedDailyReports.filter((r) => r.supervisorApproval === 'Pending' || !r.supervisorApproval).length,
@@ -1072,6 +1096,125 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
             </span>
           </div>
 
+          {/* Search by Name & Date Filter Toolbar */}
+          <div className="p-3.5 glass-card rounded-2xl border border-slate-200/80 dark:border-slate-800/80 space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+              {/* Search by Name / Keyword */}
+              <div className="sm:col-span-7 relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={reportSearchName}
+                  onChange={(e) => setReportSearchName(e.target.value)}
+                  placeholder="Cari nama staf pelapor, NIP, atau judul..."
+                  className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                />
+                {reportSearchName && (
+                  <button
+                    type="button"
+                    onClick={() => setReportSearchName('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md transition"
+                    title="Hapus pencarian nama"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Date Filter & Quick Date Helpers */}
+              <div className="sm:col-span-5 flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={reportFilterDate}
+                    onChange={(e) => setReportFilterDate(e.target.value)}
+                    className="w-full pl-9 pr-7 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-mono transition-all"
+                    title="Pilih tanggal spesifik laporan"
+                  />
+                  {reportFilterDate && (
+                    <button
+                      type="button"
+                      onClick={() => setReportFilterDate('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md transition"
+                      title="Reset tanggal"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setReportFilterDate(getTodayDateStr())}
+                  className={`px-2.5 py-2 text-xs rounded-xl border transition cursor-pointer whitespace-nowrap shrink-0 ${
+                    reportFilterDate === getTodayDateStr()
+                      ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-xs'
+                      : 'border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium'
+                  }`}
+                  title="Pilih tanggal hari ini"
+                >
+                  Hari Ini
+                </button>
+
+                {reportFilterDate && (
+                  <button
+                    type="button"
+                    onClick={() => setReportFilterDate('')}
+                    className="px-2 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition cursor-pointer whitespace-nowrap shrink-0"
+                    title="Tampilkan semua tanggal"
+                  >
+                    Semua
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Active Filter Chips */}
+            {(reportSearchName.trim() || reportFilterDate || reportFilterStatus !== 'ALL') && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/60 text-[11px]">
+                <span className="text-slate-400 flex items-center gap-1">
+                  <Filter className="w-3 h-3" /> Filter aktif:
+                </span>
+                {reportSearchName.trim() && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80">
+                    Nama: <strong>"{reportSearchName.trim()}"</strong>
+                    <button type="button" onClick={() => setReportSearchName('')} className="hover:text-indigo-900 cursor-pointer">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+                {reportFilterDate && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 font-mono">
+                    Tanggal: <strong>{reportFilterDate}</strong>
+                    <button type="button" onClick={() => setReportFilterDate('')} className="hover:text-emerald-900 cursor-pointer">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+                {reportFilterStatus !== 'ALL' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80">
+                    Status: <strong>{reportFilterStatus === 'PENDING' ? 'Menunggu Review' : reportFilterStatus === 'APPROVED' ? 'Disetujui' : 'Perlu Revisi'}</strong>
+                    <button type="button" onClick={() => setReportFilterStatus('ALL')} className="hover:text-amber-900 cursor-pointer">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportSearchName('');
+                    setReportFilterDate('');
+                    setReportFilterStatus('ALL');
+                  }}
+                  className="ml-auto text-rose-600 dark:text-rose-400 hover:underline font-semibold cursor-pointer text-[11px]"
+                >
+                  Reset Semua Filter
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Status Filter Pills */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 dark:border-slate-800 pb-2">
             <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
@@ -1140,8 +1283,28 @@ export const SupervisorEvaluationView: React.FC<SupervisorEvaluationViewProps> =
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredReportFeed.length === 0 ? (
-              <div className="col-span-full p-12 text-center glass-card rounded-2xl text-xs text-slate-500">
-                Tidak ada laporan dengan status yang dipilih.
+              <div className="col-span-full p-12 text-center glass-card rounded-2xl space-y-3">
+                <FileText className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
+                <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Tidak ada laporan yang cocok dengan kriteria filter saat ini.
+                </div>
+                <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                  Coba sesuaikan kata kunci nama, pilih tanggal lain, atau reset filter status verifikasi.
+                </p>
+                {(reportSearchName.trim() || reportFilterDate || reportFilterStatus !== 'ALL') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReportSearchName('');
+                      setReportFilterDate('');
+                      setReportFilterStatus('ALL');
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold shadow-xs hover:bg-indigo-700 transition cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Reset Filter</span>
+                  </button>
+                )}
               </div>
             ) : (
               filteredReportFeed.map((report) => {
