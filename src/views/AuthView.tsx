@@ -335,11 +335,15 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     try {
       setLoading(true);
-      const selectedDiv = activeDivisions.find((d) => d.id === osDivisionId);
+      const selectedDiv = regRole === 'coordinator'
+        ? { id: 'div-vendor', name: osVendor.trim() || 'Mitra Penyedia Jasa' }
+        : activeDivisions.find((d) => d.id === osDivisionId);
       const selectedLoc = activeLocations.find((l) => l.id === osLocationId);
 
-      if (!selectedDiv || !selectedLoc) {
-        const warningMsg = 'Harap pilih Sub Bagian, Formasi Tugas, Lokasi Kerja, dan Mitra Vendor Anda dengan benar!';
+      if (!selectedDiv || !selectedLoc || !osVendor.trim()) {
+        const warningMsg = regRole === 'coordinator'
+          ? 'Harap lengkapi lokasi kerja dan kelompok vendor yang diawasi!'
+          : 'Harap pilih Sub Bagian, Formasi Tugas, Lokasi Kerja, dan Mitra Vendor Anda dengan benar!';
         setErrorMessage(warningMsg);
         onShowToast(warningMsg, 'warning');
         return;
@@ -581,28 +585,30 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   </>
                 )}
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  Pilih Sub Bagian / Divisi Penempatan *
-                </label>
-                <select
-                  value={osDivisionId}
-                  onChange={(e) => setOsDivisionId(e.target.value)}
-                  className={`w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium cursor-pointer transition-colors ${
-                    hasAttemptedSubmit && !osDivisionId ? 'border-red-500 ring-1 ring-red-500' : ''
-                  }`}
-                  required
-                >
-                  <option value="" disabled selected className="text-slate-400 bg-white dark:bg-slate-900">
-                    -- Pilih Sub Bagian / Divisi Penempatan --
-                  </option>
-                  {activeDivisions.map((d) => (
-                    <option key={d.id} value={d.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                      {d.name} ({d.code})
+              {regRole === 'outsourcing' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    Pilih Sub Bagian / Divisi Penempatan *
+                  </label>
+                  <select
+                    value={osDivisionId}
+                    onChange={(e) => setOsDivisionId(e.target.value)}
+                    className={`w-full px-3 py-2.5 text-xs rounded-xl glass-input text-slate-900 dark:text-white font-medium cursor-pointer transition-colors ${
+                      hasAttemptedSubmit && !osDivisionId ? 'border-red-500 ring-1 ring-red-500' : ''
+                    }`}
+                    required
+                  >
+                    <option value="" disabled selected className="text-slate-400 bg-white dark:bg-slate-900">
+                      -- Pilih Sub Bagian / Divisi Penempatan --
                     </option>
-                  ))}
-                </select>
-              </div>
+                    {activeDivisions.map((d) => (
+                      <option key={d.id} value={d.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                        {d.name} ({d.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {regRole === 'outsourcing' ? (
                 <div>

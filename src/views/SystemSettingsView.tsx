@@ -730,9 +730,9 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
       const finalSupervisedGroups = isCoord ? [finalVendor] : undefined;
 
       const res = await apiUpdateUserProfile(targetUserForEdit.id, {
-        divisionId: editUserDivisionId,
-        divisionName: selectedDiv?.name || targetUserForEdit.divisionName,
-        supervisorId: editUserSupervisorId,
+        divisionId: isCoord ? 'div-vendor' : editUserDivisionId,
+        divisionName: isCoord ? finalVendor : (selectedDiv?.name || targetUserForEdit.divisionName),
+        supervisorId: isCoord ? null : editUserSupervisorId,
         vendorName: finalVendor,
         supervisedGroups: finalSupervisedGroups,
         roleTitle: editUserRoleTitle.trim() || targetUserForEdit.roleTitle,
@@ -745,9 +745,9 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
           if (u.id === targetUserForEdit.id) {
             return {
               ...u,
-              divisionId: editUserDivisionId,
-              divisionName: selectedDiv?.name || u.divisionName,
-              supervisorId: editUserSupervisorId,
+              divisionId: isCoord ? 'div-vendor' : editUserDivisionId,
+              divisionName: isCoord ? finalVendor : (selectedDiv?.name || u.divisionName),
+              supervisorId: isCoord ? null : editUserSupervisorId,
               pendingSupervisorId: null,
               supervisorRequestStatus: 'APPROVED' as const,
               vendorName: finalVendor,
@@ -1015,9 +1015,9 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
         email: newUserEmail.trim(),
         role: newUserRole,
         roleTitle: finalRoleTitle,
-        divisionId: selectedDiv?.id || (newUserRole === 'coordinator' ? 'div-vendor' : 'div-umpeg'),
-        divisionName: selectedDiv?.name || (newUserRole === 'coordinator' ? 'Pengawas Mitra Lapangan' : 'Sub Bagian Dinas'),
-        supervisorId: (newUserRole === 'outsourcing' || newUserRole === 'supervisor' || newUserRole === 'coordinator') ? (newUserSupervisorId || null) : null,
+        divisionId: newUserRole === 'coordinator' ? 'div-vendor' : (selectedDiv?.id || 'div-umpeg'),
+        divisionName: newUserRole === 'coordinator' ? targetVendor : (selectedDiv?.name || 'Sub Bagian Dinas'),
+        supervisorId: newUserRole === 'coordinator' ? null : ((newUserRole === 'outsourcing' || newUserRole === 'supervisor') ? (newUserSupervisorId || null) : null),
         vendorName: targetVendor,
         supervisedGroups: targetSupervisedGroups,
         supervisedVendor: targetSupervisedGroups[0],
@@ -3840,67 +3840,69 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveUserEdit} className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Bidang / Sub Bagian Penugasan
-                  </label>
-                  <select
-                    value={editUserDivisionId}
-                    onChange={(e) => setEditUserDivisionId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
-                  >
-                    <option value="">-- Pilih Bidang --</option>
-                    {divisions.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name} ({d.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {editUserRole !== 'coordinator' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Bidang / Sub Bagian Penugasan
+                    </label>
+                    <select
+                      value={editUserDivisionId}
+                      onChange={(e) => setEditUserDivisionId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                    >
+                      <option value="">-- Pilih Bidang --</option>
+                      {divisions.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Atasan Langsung (Penilai KPI)
-                  </label>
-                  {targetUserForEdit?.supervisorRequestStatus === 'PENDING' && (
-                    <div className="mb-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
-                      <div>
-                        <span className="font-bold">Pengajuan Pergantian:</span> ke{' '}
-                        <strong>{getSupervisorName(targetUserForEdit.pendingSupervisorId)}</strong>
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Atasan Langsung (Penilai KPI)
+                    </label>
+                    {targetUserForEdit?.supervisorRequestStatus === 'PENDING' && (
+                      <div className="mb-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+                        <div>
+                          <span className="font-bold">Pengajuan Pergantian:</span> ke{' '}
+                          <strong>{getSupervisorName(targetUserForEdit.pendingSupervisorId)}</strong>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveSupervisorRequest(targetUserForEdit.id)}
+                            className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] cursor-pointer"
+                          >
+                            Setujui
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectSupervisorRequest(targetUserForEdit.id)}
+                            className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] cursor-pointer"
+                          >
+                            Tolak
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleApproveSupervisorRequest(targetUserForEdit.id)}
-                          className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] cursor-pointer"
-                        >
-                          Setujui
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRejectSupervisorRequest(targetUserForEdit.id)}
-                          className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] cursor-pointer"
-                        >
-                          Tolak
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <select
-                    value={editUserSupervisorId}
-                    onChange={(e) => setEditUserSupervisorId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
-                  >
-                    <option value="">-- Belum Ditetapkan --</option>
-                    {supervisorCandidates.map((sup) => (
-                      <option key={sup.id} value={sup.id}>
-                        {sup.name} ({sup.roleTitle})
-                      </option>
-                    ))}
-                  </select>
+                    )}
+                    <select
+                      value={editUserSupervisorId}
+                      onChange={(e) => setEditUserSupervisorId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
+                    >
+                      <option value="">-- Belum Ditetapkan --</option>
+                      {supervisorCandidates.map((sup) => (
+                        <option key={sup.id} value={sup.id}>
+                          {sup.name} ({sup.roleTitle})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 {(editUserRole === 'supervisor' || editUserRole === 'admin') ? (
@@ -4675,44 +4677,6 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                           <option key={v.id} value={v.name} />
                         ))}
                       </datalist>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Bidang / Sub Bagian Terkait
-                      </label>
-                      <select
-                        value={newUserDivisionId}
-                        onChange={(e) => setNewUserDivisionId(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer"
-                      >
-                        <option value="">-- Pilih Bidang Terkait --</option>
-                        {divisions.map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.name} ({d.code})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Atasan Penilai Disdik (Pembina)
-                      </label>
-                      <select
-                        value={newUserSupervisorId}
-                        onChange={(e) => setNewUserSupervisorId(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer font-medium"
-                      >
-                        <option value="">-- Pilih Pejabat Disdik --</option>
-                        {supervisorCandidates.map((sup) => (
-                          <option key={sup.id} value={sup.id}>
-                            {sup.name} ({sup.roleTitle})
-                          </option>
-                        ))}
-                      </select>
                     </div>
                   </div>
 
